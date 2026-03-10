@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: ghoomo-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ghoomo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ghoomo-network
+
+  # Backend API Server
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: ghoomo-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      NODE_ENV: development
+      DB_USER: postgres
+      DB_PASSWORD: password
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ghoomo
+      JWT_SECRET: dev-secret-key
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../backend:/app
+      - /app/node_modules
+    command: npm run dev
+    networks:
+      - ghoomo-network
+
+  # Optional: Redis for caching
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: ghoomo-redis
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - ghoomo-network
+
+volumes:
+  postgres_data:
+
+networks:
+  ghoomo-network:
+    driver: bridge
