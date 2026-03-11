@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Ghoomo",
+    "slug": "ghoomo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ghoomo.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Ghoomo needs your location to find nearby rides.",
+        "NSLocationAlwaysUsageDescription": "Ghoomo needs your location to track your ride.",
+        "UIBackgroundModes": [
+          "location"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.ghoomo.app",
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {},
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Ghoomo to use your location.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#6C63FF"
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {}
+  }
+}
