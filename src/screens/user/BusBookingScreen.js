@@ -11,7 +11,7 @@ import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 import Badge from "../../components/common/Badge";
 import QRDisplay from "../../components/common/QRDisplay";
-import { BUS_ROUTES, COLORS, SPACING } from "../../constants";
+import { COLORS, SPACING } from "../../constants";
 import { sendLocalNotification } from "../../services/notifications";
 import {
   BUS_WAITLIST_LIMIT,
@@ -29,7 +29,7 @@ export default function BusBookingScreen({ navigation }) {
   const user = useSelector((state) => state.auth.user);
   const busBookings = useSelector((state) => state.booking.busBookings);
   const liveRoutes = useSelector((state) => state.busRoutes.routes);
-  const routes = liveRoutes.length ? liveRoutes : BUS_ROUTES;
+  const routes = liveRoutes;
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [step, setStep] = useState("routes");
   const [lastBooking, setLastBooking] = useState(null);
@@ -44,6 +44,18 @@ export default function BusBookingScreen({ navigation }) {
     dispatch(fetchBusRoutes()).catch(() => {});
   }, [dispatch]);
 
+  useEffect(() => {
+    if (!selectedRoute && routes.length > 0) {
+      setSelectedRoute(routes[0]);
+    }
+  }, [routes, selectedRoute]);
+
+  useEffect(() => {
+    if (step !== "routes" && !selectedRoute) {
+      setStep("routes");
+    }
+  }, [selectedRoute, step]);
+
   const userBusBookings = useMemo(
     () => busBookings.filter((booking) => booking.userId === user?.id && booking.status !== "cancelled"),
     [busBookings, user?.id]
@@ -52,6 +64,14 @@ export default function BusBookingScreen({ navigation }) {
     userBusBookings.find((booking) => booking.routeId === routeId && booking.status !== "cancelled");
 
   const getOccupancy = (route) => getRouteOccupancy(route, busBookings);
+
+  const sortedRoutes = useMemo(() => {
+    return [...routes].sort((a, b) => {
+      const aw = getBookingWindow(a, now);
+      const bw = getBookingWindow(b, now);
+      return aw.departure.getTime() - bw.departure.getTime();
+    });
+  }, [routes, now, busBookings]);
 
   const handleBook = () => {
     if (!selectedRoute) return;
@@ -100,7 +120,6 @@ export default function BusBookingScreen({ navigation }) {
         waitlistPosition: null,
         isWaiting: false,
         routeName: selectedRoute.name,
-        fare: selectedRoute.fare,
       });
     } else if (occupancy.waitlistRemaining > 0) {
       const bookingId = createBusBookingId();
@@ -129,7 +148,6 @@ export default function BusBookingScreen({ navigation }) {
         waitlistPosition: nextPosition,
         isWaiting: true,
         routeName: selectedRoute.name,
-        fare: selectedRoute.fare,
       });
     } else {
       Alert.alert("Bus Full", "This route is full and the waiting list is also full right now.");
@@ -142,6 +160,10 @@ export default function BusBookingScreen({ navigation }) {
   const handleCancel = (booking) => {
     const route = routes.find((item) => item.id === booking.routeId);
     const bookingWindow = route ? getBookingWindow(route, now) : null;
+    if (booking.verified) {
+      Alert.alert("Cancellation Locked", "This ticket has already been verified by the driver and cannot be cancelled.");
+      return;
+    }
     if (route && bookingWindow && !bookingWindow.canCancel) {
       Alert.alert("Cancellation Closed", "You can cancel only up to 5 minutes before departure.");
       return;
@@ -195,6 +217,7 @@ export default function BusBookingScreen({ navigation }) {
           </LinearGradient>
           <View style={styles.qrSection}>
             <Text style={styles.qrTitle}>Your Boarding QR Code</Text>
+            <Text style={styles.bookingIdText}>Booking ID: {lastBooking.id}</Text>
             <Text style={styles.qrSub}>
               {lastBooking.isWaiting
                 ? "You are on the waiting list. Confirmation will happen automatically if a seat opens."
@@ -205,8 +228,8 @@ export default function BusBookingScreen({ navigation }) {
               size={200}
               label={
                 lastBooking.isWaiting
-                  ? `WL ${lastBooking.waitlistPosition} • ₹${lastBooking.fare}`
-                  : `Seat ${lastBooking.seatNumber} • ₹${lastBooking.fare}`
+                  ? `WL ${lastBooking.waitlistPosition}`
+                  : `Seat ${lastBooking.seatNumber}`
               }
             />
           </View>
@@ -256,11 +279,12 @@ export default function BusBookingScreen({ navigation }) {
                     <View style={styles.busIcon}>
                       <Ionicons name="bus" size={22} color={COLORS.white} />
                     </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.myBookingRoute}>{route?.name}</Text>
-                      <Text style={styles.myBookingMeta}>
-                        {booking.isWaiting ? `WL ${booking.waitlistPosition}` : `Seat ${booking.seatNumber}`} • ₹{route?.fare}
-                      </Text>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.myBookingRoute}>{route?.name}</Text>
+                    <Text style={styles.myBookingMeta}>
+                      {booking.isWaiting ? `WL ${booking.waitlistPosition}` : `Seat ${booking.seatNumber}`}
+                    </Text>
+                    <Text style={styles.bookingIdMeta}>Booking ID: {booking.id}</Text>
                       {route ? (
                         <Text style={styles.routeWindowText}>
                           Cancel till {formatShortTime(getBookingWindow(route, now).cancelClosesAt)}
@@ -274,13 +298,29 @@ export default function BusBookingScreen({ navigation }) {
                   </View>
                   <QRDisplay data={qrData} size={130} />
                   <TouchableOpacity
-                    style={[styles.cancelBtn, bookingWindow && !bookingWindow.canCancel && styles.cancelBtnDisabled]}
+                    style={[
+                      styles.cancelBtn,
+                      (bookingWindow && !bookingWindow.canCancel) || booking.verified ? styles.cancelBtnDisabled : null,
+                    ]}
                     onPress={() => handleCancel(booking)}
-                    disabled={Boolean(bookingWindow && !bookingWindow.canCancel)}
+                    disabled={Boolean((bookingWindow && !bookingWindow.canCancel) || booking.verified)}
                   >
-                    <Ionicons name="close-circle" size={16} color={bookingWindow && !bookingWindow.canCancel ? COLORS.gray : COLORS.error} />
-                    <Text style={[styles.cancelBtnText, bookingWindow && !bookingWindow.canCancel && styles.cancelBtnTextDisabled]}>
-                      {bookingWindow && !bookingWindow.canCancel ? "Cancellation closed" : "Cancel Booking"}
+                    <Ionicons
+                      name="close-circle"
+                      size={16}
+                      color={(bookingWindow && !bookingWindow.canCancel) || booking.verified ? COLORS.gray : COLORS.error}
+                    />
+                    <Text
+                      style={[
+                        styles.cancelBtnText,
+                        (bookingWindow && !bookingWindow.canCancel) || booking.verified ? styles.cancelBtnTextDisabled : null,
+                      ]}
+                    >
+                      {booking.verified
+                        ? "Verified • Cannot cancel"
+                        : bookingWindow && !bookingWindow.canCancel
+                          ? "Cancellation closed"
+                          : "Cancel Booking"}
                     </Text>
                   </TouchableOpacity>
                 </Card>
@@ -326,7 +366,7 @@ export default function BusBookingScreen({ navigation }) {
               </View>
               <View style={styles.routeStopRow}>
                 {selectedRoute.stops.map((stop, index) => (
-                  <React.Fragment key={stop}>
+                  <React.Fragment key={`${stop}-${index}`}>
                     <Text style={styles.stopText}>{stop}</Text>
                     {index < selectedRoute.stops.length - 1 ? (
                       <Ionicons name="arrow-forward" size={12} color={COLORS.primary} />
@@ -336,7 +376,6 @@ export default function BusBookingScreen({ navigation }) {
               </View>
               <View style={styles.routeMetaRow}>
                 <Text style={styles.routeMeta}><Ionicons name="time" size={12} /> {selectedRoute.departureTime}</Text>
-                <Text style={styles.routeMeta}>₹{selectedRoute.fare} per seat</Text>
                 <Text style={styles.routeMeta}>{occupancy.availableSeatCount} live seats left</Text>
               </View>
             </Card>
@@ -371,23 +410,31 @@ export default function BusBookingScreen({ navigation }) {
                         style={[
                           styles.cancelBtn,
                           styles.routeCancelBtn,
-                          bookingWindow && !bookingWindow.canCancel && styles.cancelBtnDisabled,
+                          (bookingWindow && !bookingWindow.canCancel) || existingRouteBooking.verified
+                            ? styles.cancelBtnDisabled
+                            : null,
                         ]}
                         onPress={() => handleCancel(existingRouteBooking)}
-                        disabled={Boolean(bookingWindow && !bookingWindow.canCancel)}
+                        disabled={Boolean((bookingWindow && !bookingWindow.canCancel) || existingRouteBooking.verified)}
                       >
                         <Ionicons
                           name="close-circle"
                           size={16}
-                          color={bookingWindow && !bookingWindow.canCancel ? COLORS.gray : COLORS.error}
+                          color={(bookingWindow && !bookingWindow.canCancel) || existingRouteBooking.verified ? COLORS.gray : COLORS.error}
                         />
                         <Text
                           style={[
                             styles.cancelBtnText,
-                            bookingWindow && !bookingWindow.canCancel && styles.cancelBtnTextDisabled,
+                            (bookingWindow && !bookingWindow.canCancel) || existingRouteBooking.verified
+                              ? styles.cancelBtnTextDisabled
+                              : null,
                           ]}
                         >
-                          {bookingWindow && !bookingWindow.canCancel ? "Cancellation closed" : "Cancel Ticket"}
+                          {existingRouteBooking.verified
+                            ? "Verified • Cannot cancel"
+                            : bookingWindow && !bookingWindow.canCancel
+                              ? "Cancellation closed"
+                              : "Cancel Ticket"}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -433,7 +480,7 @@ export default function BusBookingScreen({ navigation }) {
             <View style={styles.selectedSeatInfo}>
               <Text style={styles.selectedSeatText}>
                 {occupancy.availableSeatCount > 0
-                  ? `Seat will be assigned automatically • ₹${selectedRoute.fare}`
+                  ? "Seat will be assigned automatically"
                   : "Waitlist booking will be created automatically"}
               </Text>
             </View>
@@ -459,92 +506,100 @@ export default function BusBookingScreen({ navigation }) {
       />
       <ScrollView style={styles.scroll} contentContainerStyle={{ padding: SPACING.md }}>
         <Text style={styles.pageTitle}>Available Routes</Text>
-        {routes.map((route) => {
-          const occupancy = getOccupancy(route);
-          const bookingWindow = getBookingWindow(route, now);
-          const demand = getDemandLabel(occupancy.occupancyRatio);
-          const existingRouteBooking = getUserRouteBooking(route.id);
+        {sortedRoutes.length === 0 ? (
+          <Card style={styles.emptyState}>
+            <Ionicons name="bus" size={42} color={COLORS.border} />
+            <Text style={styles.emptyText}>No bus routes are available yet.</Text>
+            <Text style={styles.emptySub}>Please check again later or contact your admin.</Text>
+          </Card>
+        ) : (
+          sortedRoutes.map((route) => {
+            const occupancy = getOccupancy(route);
+            const bookingWindow = getBookingWindow(route, now);
+            const demand = getDemandLabel(occupancy.occupancyRatio);
+            const existingRouteBooking = getUserRouteBooking(route.id);
 
-          return (
-            <TouchableOpacity
-              key={route.id}
-              onPress={() => {
-                setSelectedRoute(route);
-                setStep("seats");
-              }}
-              activeOpacity={0.85}
-            >
-              <Card elevated style={styles.routeCard}>
-                <View style={styles.routeHeader}>
-                  <LinearGradient colors={[COLORS.success, "#059669"]} style={styles.busIconGrad}>
-                    <Ionicons name="bus" size={22} color={COLORS.white} />
-                  </LinearGradient>
-                  <View style={styles.routeHeaderInfo}>
-                    <Text style={styles.routeName}>{route.name}</Text>
-                    <Text style={styles.routeSub}>{route.from} to {route.to}</Text>
+            return (
+              <TouchableOpacity
+                key={route.id}
+                onPress={() => {
+                  setSelectedRoute(route);
+                  setStep("seats");
+                }}
+                activeOpacity={0.85}
+              >
+                <Card elevated style={styles.routeCard}>
+                  <View style={styles.routeHeader}>
+                    <LinearGradient colors={[COLORS.success, "#059669"]} style={styles.busIconGrad}>
+                      <Ionicons name="bus" size={22} color={COLORS.white} />
+                    </LinearGradient>
+                    <View style={styles.routeHeaderInfo}>
+                      <Text style={styles.routeName}>{route.name}</Text>
+                      <Text style={styles.routeSub}>{route.from} to {route.to}</Text>
+                    </View>
+                    <Badge
+                      color={
+                        existingRouteBooking
+                          ? existingRouteBooking.isWaiting
+                            ? COLORS.warning
+                            : COLORS.success
+                          : demand.color
+                      }
+                      label={
+                        existingRouteBooking
+                          ? existingRouteBooking.isWaiting
+                            ? `WL ${existingRouteBooking.waitlistPosition}`
+                            : `Seat ${existingRouteBooking.seatNumber}`
+                          : demand.label
+                      }
+                    />
                   </View>
-                  <Badge
-                    color={
-                      existingRouteBooking
+                  <View style={styles.routeDetails}>
+                    <View style={styles.routeDetail}>
+                      <Ionicons name="time" size={14} color={COLORS.primary} />
+                      <Text style={styles.routeDetailText}>Dep: {route.departureTime}</Text>
+                    </View>
+                    <View style={styles.routeDetail}>
+                      <Ionicons name="flash" size={14} color={COLORS.warning} />
+                      <Text style={styles.routeDetailText}>
+                        {bookingWindow.canBook
+                          ? `Open now (${formatRelativeMinutes(bookingWindow.departure, now)} left)`
+                          : `Opens ${formatShortTime(bookingWindow.opensAt)}`}
+                      </Text>
+                    </View>
+                    <View style={styles.routeDetail}>
+                      <Ionicons name="people" size={14} color={COLORS.success} />
+                      <Text style={styles.routeDetailText}>
+                        {occupancy.availableSeatCount} seats • {occupancy.waitlistRemaining}/{BUS_WAITLIST_LIMIT} WL left
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.capacityBar}>
+                    <View
+                      style={[
+                        styles.capacityFill,
+                        {
+                          width: `${occupancy.occupancyRatio * 100}%`,
+                          backgroundColor: demand.color,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.capacityRow}>
+                    <Text style={styles.capacityText}>
+                      {existingRouteBooking
                         ? existingRouteBooking.isWaiting
-                          ? COLORS.warning
-                          : COLORS.success
-                        : demand.color
-                    }
-                    label={
-                      existingRouteBooking
-                        ? existingRouteBooking.isWaiting
-                          ? `WL ${existingRouteBooking.waitlistPosition}`
-                          : `Seat ${existingRouteBooking.seatNumber}`
-                        : demand.label
-                    }
-                  />
-                </View>
-                <View style={styles.routeDetails}>
-                  <View style={styles.routeDetail}>
-                    <Ionicons name="time" size={14} color={COLORS.primary} />
-                    <Text style={styles.routeDetailText}>Dep: {route.departureTime}</Text>
-                  </View>
-                  <View style={styles.routeDetail}>
-                    <Ionicons name="flash" size={14} color={COLORS.warning} />
-                    <Text style={styles.routeDetailText}>
-                      {bookingWindow.canBook
-                        ? `Open now (${formatRelativeMinutes(bookingWindow.departure, now)} left)`
-                        : `Opens ${formatShortTime(bookingWindow.opensAt)}`}
+                          ? "You already have a waitlist booking on this route"
+                          : "You already have an active booking on this route"
+                        : "Direct booking with automatic seat assignment"}
                     </Text>
+                    <Text style={styles.waitingText}>Cancel till {formatShortTime(bookingWindow.cancelClosesAt)}</Text>
                   </View>
-                  <View style={styles.routeDetail}>
-                    <Ionicons name="people" size={14} color={COLORS.success} />
-                    <Text style={styles.routeDetailText}>
-                      {occupancy.availableSeatCount} seats • {occupancy.waitlistRemaining}/{BUS_WAITLIST_LIMIT} WL left
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.capacityBar}>
-                  <View
-                    style={[
-                      styles.capacityFill,
-                      {
-                        width: `${occupancy.occupancyRatio * 100}%`,
-                        backgroundColor: demand.color,
-                      },
-                    ]}
-                  />
-                </View>
-                <View style={styles.capacityRow}>
-                  <Text style={styles.capacityText}>
-                    {existingRouteBooking
-                      ? existingRouteBooking.isWaiting
-                        ? "You already have a waitlist booking on this route"
-                        : "You already have an active booking on this route"
-                      : "Direct booking with automatic seat assignment"}
-                  </Text>
-                  <Text style={styles.waitingText}>Cancel till {formatShortTime(bookingWindow.cancelClosesAt)}</Text>
-                </View>
-              </Card>
-            </TouchableOpacity>
-          );
-        })}
+                </Card>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -605,13 +660,16 @@ const styles = StyleSheet.create({
   cancelBtnDisabled: { opacity: 0.55 },
   cancelBtnText: { fontSize: 13, color: COLORS.error, fontWeight: "600" },
   cancelBtnTextDisabled: { color: COLORS.grayDark },
-  emptyState: { alignItems: "center", paddingTop: 60 },
+  emptyState: { alignItems: "center", paddingVertical: 60 },
   emptyText: { fontSize: 16, color: COLORS.textSecondary, marginTop: 12, fontWeight: "600" },
+  emptySub: { fontSize: 12, color: COLORS.grayDark, marginTop: 6 },
   successScroll: { paddingBottom: 40 },
   successBanner: { padding: SPACING.xl, alignItems: "center", paddingVertical: 40 },
   successTitle: { fontSize: 24, fontWeight: "900", color: COLORS.white, marginTop: 12, textAlign: "center" },
   successSub: { fontSize: 14, color: "rgba(255,255,255,0.85)", marginTop: 6, textAlign: "center" },
   qrSection: { padding: SPACING.lg, alignItems: "center" },
   qrTitle: { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 6 },
+  bookingIdText: { fontSize: 13, fontWeight: "700", color: COLORS.textSecondary, marginBottom: 4 },
   qrSub: { fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.md, textAlign: "center" },
+  bookingIdMeta: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
 });

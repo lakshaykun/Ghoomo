@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,6 @@ import {
   Dimensions,
   ActivityIndicator,
   RefreshControl,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  TextInput,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,49 +15,15 @@ import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { logoutUser } from "../../store/slices/authSlice";
 import { fetchAdminDashboard } from "../../store/slices/adminSlice";
-import { createBusRoute, fetchBusRoutes } from "../../store/slices/busRoutesSlice";
+import { fetchBusRoutes } from "../../store/slices/busRoutesSlice";
 import Card from "../../components/common/Card";
 import Badge from "../../components/common/Badge";
-import Button from "../../components/common/Button";
-import { BOOKING_STATUS, BUS_ROUTES, COLORS, SPACING } from "../../constants";
-import { sendLocalNotification } from "../../services/notifications";
+import { BOOKING_STATUS, COLORS, SPACING } from "../../constants";
 
 const { width } = Dimensions.get("window");
 
 function formatCurrency(value) {
   return `₹${Number(value || 0).toLocaleString("en-IN")}`;
-}
-
-function formatBusTimeInput(value) {
-  const raw = String(value || "").toUpperCase().replace(/[^0-9APM]/g, "");
-  const digits = raw.replace(/[^0-9]/g, "").slice(0, 4);
-  const meridiemSeed = raw.replace(/[0-9]/g, "");
-  let formatted = "";
-
-  if (digits.length > 0) {
-    formatted += digits.slice(0, 2);
-  }
-  if (digits.length > 2) {
-    formatted += `:${digits.slice(2, 4)}`;
-  }
-
-  if (meridiemSeed.startsWith("AM")) {
-    formatted += `${formatted ? " " : ""}AM`;
-  } else if (meridiemSeed.startsWith("PM")) {
-    formatted += `${formatted ? " " : ""}PM`;
-  } else if (meridiemSeed === "A" || meridiemSeed === "P") {
-    formatted += `${formatted ? " " : ""}${meridiemSeed}`;
-  }
-
-  return formatted.trim();
-}
-
-function isValidBusTime(value) {
-  const match = String(value || "").trim().match(/^(\d{2}):(\d{2})\s?(AM|PM)$/i);
-  if (!match) return false;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  return hours >= 1 && hours <= 12 && minutes >= 0 && minutes <= 59;
 }
 
 function normalizeSessionBusBooking(booking, routesById) {
@@ -73,7 +35,6 @@ function normalizeSessionBusBooking(booking, routesById) {
     detail: booking.isWaiting
       ? `Waitlist #${booking.waitlistPosition || "-"}`
       : `Seat ${booking.seatNumber || "-"} • ${route.from || ""} to ${route.to || ""}`,
-    fare: Number(route.fare || 0),
     status: booking.status,
     createdAt: booking.createdAt,
     userName: booking.userName || "Passenger",
@@ -126,10 +87,6 @@ function buildLocalDashboard({ bookingHistory, busBookings, authUser, routesById
   const rideRevenue = bookingHistory
     .filter((booking) => booking.type !== "bus" && !booking.routeId)
     .reduce((sum, booking) => sum + Number(booking.fare || 0), 0);
-  const busRevenue = confirmedBusBookings.reduce((sum, booking) => {
-    const route = routesById[booking.routeId];
-    return sum + Number(route?.fare || 0);
-  }, 0);
 
   return {
     stats: {
@@ -140,7 +97,7 @@ function buildLocalDashboard({ bookingHistory, busBookings, authUser, routesById
       completedRides: bookingHistory.filter((booking) => booking.status === BOOKING_STATUS.COMPLETED).length,
       activeDrivers: 0,
       driversOnTrip: 0,
-      totalRevenue: rideRevenue + busRevenue,
+      totalRevenue: rideRevenue,
       busBookings: confirmedBusBookings.length,
       waitingList: waitingList.length,
     },
@@ -152,169 +109,11 @@ function buildLocalDashboard({ bookingHistory, busBookings, authUser, routesById
   };
 }
 
-const INITIAL_ROUTE_FORM = {
-  name: "",
-  from: "",
-  to: "",
-  departureTime: "",
-  returnTime: "",
-  totalSeats: "",
-  fare: "",
-  stops: "",
-};
-
-const AdminFormInput = memo(function AdminFormInput({
-  label,
-  multiline = false,
-  containerStyle,
-  style,
-  ...props
-}) {
-  return (
-    <View style={[styles.formInputContainer, containerStyle]}>
-      <Text style={styles.formInputLabel}>{label}</Text>
-      <TextInput
-        style={[styles.formInput, multiline && styles.formInputMultiline, style]}
-        placeholderTextColor={COLORS.gray}
-        autoCorrect={false}
-        autoCapitalize="none"
-        blurOnSubmit={!multiline}
-        multiline={multiline}
-        {...props}
-      />
-    </View>
-  );
-});
-
-const AddRouteForm = memo(function AddRouteForm({ creatingRoute, onSubmit }) {
-  const [routeForm, setRouteForm] = useState(INITIAL_ROUTE_FORM);
-
-  const updateRouteForm = useCallback((key, value) => {
-    setRouteForm((current) => ({ ...current, [key]: value }));
-  }, []);
-
-  const handleSubmit = useCallback(async () => {
-    if (
-      !routeForm.name ||
-      !routeForm.from ||
-      !routeForm.to ||
-      !routeForm.departureTime ||
-      !routeForm.returnTime ||
-      !routeForm.totalSeats ||
-      !routeForm.fare ||
-      !routeForm.stops
-    ) {
-      Alert.alert("Missing Details", "Fill all route fields before creating the bus route.");
-      return;
-    }
-
-    if (!isValidBusTime(routeForm.departureTime) || !isValidBusTime(routeForm.returnTime)) {
-      Alert.alert("Invalid Time", "Use the time format hh:mm AM/PM, for example 07:45 AM.");
-      return;
-    }
-
-    const created = await onSubmit({
-      ...routeForm,
-      totalSeats: Number(routeForm.totalSeats),
-      fare: Number(routeForm.fare),
-      stops: routeForm.stops
-        .split(",")
-        .map((stop) => stop.trim())
-        .filter(Boolean),
-    });
-
-    if (created) {
-      setRouteForm(INITIAL_ROUTE_FORM);
-    }
-  }, [onSubmit, routeForm]);
-
-  return (
-    <Card elevated style={styles.routeFormCard}>
-      <Text style={styles.formTitle}>Add College Bus Route</Text>
-      <AdminFormInput
-        label="Route Name"
-        placeholder="Route D - Campus to Metro"
-        value={routeForm.name}
-        onChangeText={(value) => updateRouteForm("name", value)}
-        returnKeyType="next"
-      />
-      <AdminFormInput
-        label="From"
-        placeholder="Pickup location"
-        value={routeForm.from}
-        onChangeText={(value) => updateRouteForm("from", value)}
-        returnKeyType="next"
-      />
-      <AdminFormInput
-        label="To"
-        placeholder="Drop location"
-        value={routeForm.to}
-        onChangeText={(value) => updateRouteForm("to", value)}
-        returnKeyType="next"
-      />
-      <View style={styles.formRow}>
-        <View style={styles.formField}>
-          <AdminFormInput
-            label="Departure"
-            placeholder="07:45 AM"
-            value={routeForm.departureTime}
-            onChangeText={(value) => updateRouteForm("departureTime", formatBusTimeInput(value))}
-            autoCapitalize="characters"
-            maxLength={8}
-            returnKeyType="next"
-          />
-        </View>
-        <View style={styles.formField}>
-          <AdminFormInput
-            label="Return"
-            placeholder="05:15 PM"
-            value={routeForm.returnTime}
-            onChangeText={(value) => updateRouteForm("returnTime", formatBusTimeInput(value))}
-            autoCapitalize="characters"
-            maxLength={8}
-            returnKeyType="next"
-          />
-        </View>
-      </View>
-      <View style={styles.formRow}>
-        <View style={styles.formField}>
-          <AdminFormInput
-            label="Total Seats"
-            placeholder="40"
-            keyboardType="number-pad"
-            value={routeForm.totalSeats}
-            onChangeText={(value) => updateRouteForm("totalSeats", value)}
-            returnKeyType="next"
-          />
-        </View>
-        <View style={styles.formField}>
-          <AdminFormInput
-            label="Fare"
-            placeholder="25"
-            keyboardType="number-pad"
-            value={routeForm.fare}
-            onChangeText={(value) => updateRouteForm("fare", value)}
-            returnKeyType="next"
-          />
-        </View>
-      </View>
-      <AdminFormInput
-        label="Stops"
-        placeholder="Campus Gate, Library, Market, Metro Station"
-        value={routeForm.stops}
-        onChangeText={(value) => updateRouteForm("stops", value)}
-        multiline
-      />
-      <Button title="Add Route" onPress={handleSubmit} loading={creatingRoute} variant="success" />
-    </Card>
-  );
-});
-
-export default function AdminDashboardScreen() {
+export default function AdminDashboardScreen({ navigation }) {
   const dispatch = useDispatch();
   const authUser = useSelector((state) => state.auth.user);
   const { dashboard, loading, error } = useSelector((state) => state.admin);
-  const { routes: liveRoutes, creating: creatingRoute } = useSelector((state) => state.busRoutes);
+  const { routes: liveRoutes } = useSelector((state) => state.busRoutes);
   const bookingHistory = useSelector((state) => state.booking.bookingHistory);
   const busBookings = useSelector((state) => state.booking.busBookings);
   const [activeTab, setActiveTab] = useState("overview");
@@ -337,38 +136,8 @@ export default function AdminDashboardScreen() {
     }
   };
 
-  const handleCreateRoute = useCallback(async (routeForm) => {
-    try {
-      await dispatch(
-        createBusRoute({
-          ...routeForm,
-          totalSeats: Number(routeForm.totalSeats),
-          fare: Number(routeForm.fare),
-          stops: Array.isArray(routeForm.stops)
-            ? routeForm.stops
-            : String(routeForm.stops || "")
-                .split(",")
-                .map((stop) => stop.trim())
-                .filter(Boolean),
-        })
-      );
-      Alert.alert("Route Added", "The new college bus route is now available across the app.");
-      await sendLocalNotification({
-        key: `admin-route-${routeForm.name}-${routeForm.departureTime}`,
-        title: "Bus route added",
-        body: `${routeForm.name} is now available for admins, riders, and bus drivers.`,
-        data: { routeName: routeForm.name, type: "admin" },
-      });
-      dispatch(fetchAdminDashboard()).catch(() => {});
-      return true;
-    } catch (createError) {
-      Alert.alert("Unable to Add Route", createError.message || "Please check all route fields and try again.");
-      return false;
-    }
-  }, [dispatch]);
-
   const routeCatalog = useMemo(
-    () => (liveRoutes.length ? liveRoutes : dashboard?.routes?.length ? dashboard.routes : BUS_ROUTES),
+    () => (liveRoutes.length ? liveRoutes : dashboard?.routes?.length ? dashboard.routes : []),
     [dashboard?.routes, liveRoutes]
   );
   const routesById = useMemo(
@@ -419,25 +188,17 @@ export default function AdminDashboardScreen() {
     () => busBookings.filter((booking) => booking.isWaiting && booking.status !== BOOKING_STATUS.CANCELLED),
     [busBookings]
   );
-  const sessionBusRevenue = useMemo(
-    () =>
-      sessionConfirmedBusBookings.reduce((sum, booking) => {
-        const route = routesById[booking.routeId];
-        return sum + Number(route?.fare || 0);
-      }, 0),
-    [routesById, sessionConfirmedBusBookings]
-  );
   const stats = useMemo(
     () => ({
       totalRides: effectiveDashboard?.stats?.totalRides || 0,
       activeDrivers: effectiveDashboard?.stats?.activeDrivers || 0,
       driversOnTrip: effectiveDashboard?.stats?.driversOnTrip || 0,
-      totalRevenue: Number(effectiveDashboard?.stats?.totalRevenue || 0) + (dashboard ? sessionBusRevenue : 0),
+      totalRevenue: Number(effectiveDashboard?.stats?.totalRevenue || 0),
       busBookings: Math.max(effectiveDashboard?.stats?.busBookings || 0, sessionConfirmedBusBookings.length),
       waitingList: Math.max(effectiveDashboard?.stats?.waitingList || 0, sessionWaitingList.length),
       totalUsers: effectiveDashboard?.stats?.totalUsers || 0,
     }),
-    [dashboard, effectiveDashboard?.stats, sessionBusRevenue, sessionConfirmedBusBookings.length, sessionWaitingList.length]
+    [effectiveDashboard?.stats, sessionConfirmedBusBookings.length, sessionWaitingList.length]
   );
   const statCards = useMemo(() => [
     {
@@ -472,16 +233,8 @@ export default function AdminDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <KeyboardAvoidingView
-        style={styles.keyboardWrap}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
-      >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="always"
-        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-        removeClippedSubviews={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <LinearGradient colors={["#1A1A2E", "#16213E"]} style={styles.header}>
@@ -565,7 +318,9 @@ export default function AdminDashboardScreen() {
                       </Text>
                     </View>
                     <View style={styles.bookingRight}>
-                      <Text style={styles.bookingFare}>{formatCurrency(booking.fare)}</Text>
+                      {booking.type === "bus" ? null : (
+                        <Text style={styles.bookingFare}>{formatCurrency(booking.fare)}</Text>
+                      )}
                       <Badge status={booking.status} />
                     </View>
                   </Card>
@@ -646,8 +401,15 @@ export default function AdminDashboardScreen() {
 
           {activeTab === "routes" ? (
             <>
-              <Text style={styles.sectionTitle}>Bus Routes</Text>
-              <AddRouteForm creatingRoute={creatingRoute} onSubmit={handleCreateRoute} />
+              <View style={styles.routesHeader}>
+                <Text style={[styles.sectionTitle, styles.routesTitle]}>Bus Routes</Text>
+                <TouchableOpacity
+                  style={styles.addRouteTopBtn}
+                  onPress={() => navigation.navigate("AdminAddRoute")}
+                >
+                  <Ionicons name="add" size={22} color={COLORS.white} />
+                </TouchableOpacity>
+              </View>
               {mergedRoutes.map((route) => (
                 <Card key={route.id} elevated style={styles.routeCard}>
                   <View style={styles.routeHeader}>
@@ -672,10 +434,6 @@ export default function AdminDashboardScreen() {
                         {route.departureTime} / {route.returnTime}
                       </Text>
                     </View>
-                    <View style={styles.routeDetail}>
-                      <Ionicons name="cash" size={14} color={COLORS.success} />
-                      <Text style={styles.routeDetailText}>{formatCurrency(route.fare)} per seat</Text>
-                    </View>
                   </View>
                   <View style={styles.routeStats}>
                     <Text style={styles.routeStat}>Booked: {route.bookedSeats}</Text>
@@ -687,8 +445,8 @@ export default function AdminDashboardScreen() {
                   </View>
                   <Text style={styles.stopsTitle}>Stops</Text>
                   <View style={styles.stopsRow}>
-                    {route.stops.map((stop) => (
-                      <Text key={stop} style={styles.stop}>
+                    {route.stops.map((stop, index) => (
+                      <Text key={`${stop}-${index}`} style={styles.stop}>
                         {stop}
                       </Text>
                     ))}
@@ -701,14 +459,12 @@ export default function AdminDashboardScreen() {
 
         <View style={styles.footerSpace} />
       </ScrollView>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  keyboardWrap: { flex: 1 },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xl },
   headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   headerCopy: { flex: 1, paddingRight: SPACING.md },
@@ -751,6 +507,16 @@ const styles = StyleSheet.create({
   tabTextActive: { color: COLORS.primary, fontWeight: "700" },
   content: { paddingHorizontal: SPACING.md },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm, marginTop: SPACING.sm },
+  routesHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.sm, marginBottom: SPACING.sm },
+  routesTitle: { marginTop: 0, marginBottom: 0 },
+  addRouteTopBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   stateCard: { alignItems: "center", paddingVertical: SPACING.lg, gap: SPACING.sm },
   stateText: { fontSize: 14, color: COLORS.textSecondary, textAlign: "center" },
   errorCard: { marginBottom: SPACING.sm, backgroundColor: "#FFF7ED", borderColor: "#FDBA74" },
@@ -793,27 +559,6 @@ const styles = StyleSheet.create({
   personRight: { alignItems: "flex-end", gap: 4 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingText: { fontSize: 13, fontWeight: "700", color: COLORS.text },
-  routeFormCard: { marginBottom: SPACING.md },
-  formTitle: { fontSize: 15, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm },
-  formInputContainer: { marginBottom: SPACING.md },
-  formInputLabel: { fontSize: 13, fontWeight: "600", color: COLORS.text, marginBottom: 6, letterSpacing: 0.3 },
-  formInput: {
-    minHeight: 52,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.inputBg,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: COLORS.text,
-  },
-  formInputMultiline: {
-    minHeight: 96,
-    textAlignVertical: "top",
-  },
-  formRow: { flexDirection: "row", gap: 12 },
-  formField: { flex: 1 },
   routeCard: { marginBottom: SPACING.sm },
   routeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 },
   routeName: { flex: 1, fontSize: 15, fontWeight: "800", color: COLORS.text },

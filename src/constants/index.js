@@ -1,27 +1,29 @@
 
 export const COLORS = {
-  primary: '#6C63FF',
-  primaryDark: '#5A52D5',
-  primaryLight: '#8B84FF',
-  secondary: '#FF6584',
-  accent: '#43E97B',
-  accentOrange: '#FF6B35',
-  background: '#F8F9FE',
+  primary: '#1D4ED8',
+  primaryDark: '#1E3A8A',
+  primaryLight: '#DBEAFE',
+  secondary: '#F97360',
+  accent: '#14B8A6',
+  accentOrange: '#F59E0B',
+  background: '#F4F7FB',
+  surface: '#EDF4FF',
   white: '#FFFFFF',
-  black: '#1A1A2E',
-  gray: '#9CA3AF',
-  grayLight: '#F3F4F6',
-  grayDark: '#6B7280',
-  text: '#1A1A2E',
-  textSecondary: '#6B7280',
-  success: '#10B981',
+  black: '#0F172A',
+  gray: '#94A3B8',
+  grayLight: '#F8FAFC',
+  grayDark: '#64748B',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  success: '#0F9D76',
   warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
-  shadow: 'rgba(108, 99, 255, 0.15)',
+  error: '#DC2626',
+  info: '#0EA5E9',
+  shadow: 'rgba(15, 23, 42, 0.08)',
   cardBg: '#FFFFFF',
-  inputBg: '#F3F4F6',
-  border: '#E5E7EB',
+  inputBg: '#F8FAFC',
+  border: '#D9E2EC',
+  borderStrong: '#BFCCDA',
 };
 
 export const SPACING = {
@@ -31,6 +33,31 @@ export const SPACING = {
   lg: 24,
   xl: 32,
   xxl: 48,
+};
+
+export const RADIUS = {
+  sm: 10,
+  md: 16,
+  lg: 22,
+  xl: 30,
+  pill: 999,
+};
+
+export const SHADOWS = {
+  card: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  soft: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 5,
+  },
 };
 
 export const RIDE_TYPES = {
@@ -48,47 +75,6 @@ export const FARES = {
   autoShare: { base: 22, perKm: 9, label: 'Auto Share', icon: 'car-sport', color: '#43E97B' },
 };
 
-export const BUS_ROUTES = [
-  {
-    id: 'b1',
-    name: 'Route A - Campus to City',
-    from: 'Main Campus Gate',
-    to: 'City Bus Stand',
-    departureTime: '08:00 AM',
-    returnTime: '05:30 PM',
-    totalSeats: 40,
-    waitingSeats: 10,
-    fare: 15,
-    bookedSeats: [1,2,5,8,10,12,15,18,20,21,22,25,28,30],
-    stops: ['Campus Gate', 'Library', 'Boys Hostel', 'NH Highway', 'City Bus Stand'],
-  },
-  {
-    id: 'b2',
-    name: 'Route B - Campus to Railway',
-    from: 'Main Campus Gate',
-    to: 'Railway Station',
-    departureTime: '07:30 AM',
-    returnTime: '06:00 PM',
-    totalSeats: 35,
-    waitingSeats: 10,
-    fare: 20,
-    bookedSeats: [1,3,4,7,9,11,14,16,19,23,26],
-    stops: ['Campus Gate', 'Admin Block', 'Market Area', 'Railway Station'],
-  },
-  {
-    id: 'b3',
-    name: 'Route C - North Campus Shuttle',
-    from: 'North Campus',
-    to: 'Main Campus',
-    departureTime: '09:00 AM',
-    returnTime: '04:00 PM',
-    totalSeats: 30,
-    waitingSeats: 10,
-    fare: 10,
-    bookedSeats: [2,6,13,17,24,27],
-    stops: ['North Campus', 'Science Block', 'Sports Complex', 'Main Campus'],
-  },
-];
 
 export const USER_ROLES = {
   USER: 'user',
@@ -104,12 +90,3 @@ export const BOOKING_STATUS = {
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
 };
-
-export const MOCK_USERS = [
-  { id: 'u1', name: 'Rahul Sharma', email: 'rahul@ghoomo.com', phone: '9876543210', role: 'user', password: '123456' },
-  { id: 'u2', name: 'Priya Singh', email: 'priya@ghoomo.com', phone: '9876543211', role: 'user', password: '123456' },
-  { id: 'd1', name: 'Ramesh Kumar', email: 'driver@ghoomo.com', phone: '9876543212', role: 'driver', password: '123456', vehicleType: 'cab', vehicleNo: 'PB-01-AB-1234', rating: 4.8 },
-  { id: 'd2', name: 'Suresh Yadav', email: 'driver2@ghoomo.com', phone: '9876543213', role: 'driver', password: '123456', vehicleType: 'auto', vehicleNo: 'PB-02-CD-5678', rating: 4.6 },
-  { id: 'bd1', name: 'Mohan Lal', email: 'busdriver@ghoomo.com', phone: '9876543214', role: 'driver', password: '123456', vehicleType: 'bus', busRoute: 'b1', rating: 4.9 },
-  { id: 'a1', name: 'Admin User', email: 'admin@ghoomo.com', phone: '9876543215', role: 'admin', password: 'admin123' },
-];

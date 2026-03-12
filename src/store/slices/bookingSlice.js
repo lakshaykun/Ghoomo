@@ -132,6 +132,10 @@ const bookingSlice = createSlice({
     cancelBusBooking: (state, action) => {
       const { bookingId } = action.payload;
       const cancelledBooking = state.busBookings.find((booking) => booking.id === bookingId);
+      if (cancelledBooking?.verified) {
+        state.error = "Verified tickets cannot be cancelled.";
+        return;
+      }
       state.busBookings = state.busBookings.filter(b => b.id !== bookingId);
       const histIdx = state.bookingHistory.findIndex(b => b.id === bookingId);
       if (histIdx !== -1) {

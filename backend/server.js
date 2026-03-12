@@ -31,44 +31,7 @@ const USER_ROLES = {
   ADMIN: "admin",
 };
 
-const DEFAULT_BUS_ROUTES = [
-  {
-    id: "b1",
-    name: "Route A - Campus to City",
-    from: "Main Campus Gate",
-    to: "City Bus Stand",
-    departureTime: "08:00 AM",
-    returnTime: "05:30 PM",
-    totalSeats: 40,
-    waitingSeats: 10,
-    fare: 15,
-    stops: ["Campus Gate", "Library", "Boys Hostel", "NH Highway", "City Bus Stand"],
-  },
-  {
-    id: "b2",
-    name: "Route B - Campus to Railway",
-    from: "Main Campus Gate",
-    to: "Railway Station",
-    departureTime: "07:30 AM",
-    returnTime: "06:00 PM",
-    totalSeats: 35,
-    waitingSeats: 10,
-    fare: 20,
-    stops: ["Campus Gate", "Admin Block", "Market Area", "Railway Station"],
-  },
-  {
-    id: "b3",
-    name: "Route C - North Campus Shuttle",
-    from: "North Campus",
-    to: "Main Campus",
-    departureTime: "09:00 AM",
-    returnTime: "04:00 PM",
-    totalSeats: 30,
-    waitingSeats: 10,
-    fare: 10,
-    stops: ["North Campus", "Science Block", "Sports Complex", "Main Campus"],
-  },
-];
+const DEFAULT_BUS_ROUTES = [];
 
 const DEFAULT_STORE = {
   users: [],
@@ -83,7 +46,7 @@ let storage;
 function readStore() {
   const store = storage.readStore();
   if (!Array.isArray(store.busRoutes)) {
-    store.busRoutes = DEFAULT_BUS_ROUTES.map((route) => ({ ...route }));
+    store.busRoutes = [];
   }
   if (!Array.isArray(store.busBookings)) {
     store.busBookings = [];
@@ -105,14 +68,16 @@ async function writeStore(data) {
 }
 
 function getBusRoutes(store) {
-  return (store.busRoutes || DEFAULT_BUS_ROUTES).map((route) => ({
-    ...route,
-    bookedSeats: Array.isArray(route.bookedSeats) ? route.bookedSeats : [],
-    waitingSeats: Number(route.waitingSeats || 10),
-    totalSeats: Number(route.totalSeats || 0),
-    fare: Number(route.fare || 0),
-    stops: Array.isArray(route.stops) ? route.stops : [],
-  }));
+  return (store.busRoutes || []).map((route) => {
+    const { fare, ...rest } = route || {};
+    return {
+      ...rest,
+      bookedSeats: Array.isArray(route.bookedSeats) ? route.bookedSeats : [],
+      waitingSeats: Number(route.waitingSeats || 10),
+      totalSeats: Number(route.totalSeats || 0),
+      stops: Array.isArray(route.stops) ? route.stops : [],
+    };
+  });
 }
 
 function sendJson(res, statusCode, payload) {
@@ -539,6 +504,11 @@ function buildDriverDashboard(store, driverId) {
     })
     .map((ride) => refreshRideDriverSnapshot(store, ride))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const completedRides = store.rides
+    .filter((ride) => ride.driver?.id === driverId && (ride.status === BOOKING_STATUS.COMPLETED || ride.status === BOOKING_STATUS.CANCELLED))
+    .map((ride) => refreshRideDriverSnapshot(store, ride))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 20);
   const activeRide =
     assignedRides.find((ride) => ride.status === BOOKING_STATUS.IN_PROGRESS) ||
     assignedRides.find((ride) => ride.status === BOOKING_STATUS.ACCEPTED) ||
@@ -557,6 +527,7 @@ function buildDriverDashboard(store, driverId) {
     assignedRides: assignedRides.filter(
       (ride) => ride.status !== BOOKING_STATUS.COMPLETED && ride.status !== BOOKING_STATUS.CANCELLED
     ).map(sanitizeRideForDriver),
+    completedRides: completedRides.map(sanitizeRideForDriver),
     stats: {
       ridesToday: ridesToday.length,
       todayEarnings,
@@ -584,12 +555,7 @@ function buildAdminDashboard(store) {
   const waitingBusBookings = busBookings.filter(
     (booking) => booking.isWaiting && booking.status !== BOOKING_STATUS.CANCELLED
   );
-  const totalRevenue =
-    completedRides.reduce((sum, ride) => sum + Number(ride.fare || 0), 0) +
-    confirmedBusBookings.reduce((sum, booking) => {
-      const route = busRoutes.find((entry) => entry.id === booking.routeId);
-      return sum + Number(route?.fare || 0);
-    }, 0);
+  const totalRevenue = completedRides.reduce((sum, ride) => sum + Number(ride.fare || 0), 0);
   const recentBookings = [...store.rides, ...busBookings]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 10)
@@ -603,7 +569,6 @@ function buildAdminDashboard(store) {
           detail: booking.isWaiting
             ? `Waitlist #${booking.waitlistPosition || "-"}`
             : `Seat ${booking.seatNumber || "-"} • ${route?.from || ""} to ${route?.to || ""}`,
-          fare: Number(route?.fare || 0),
           status: booking.status,
           createdAt: booking.createdAt,
           userName: booking.userName || "Passenger",
@@ -688,7 +653,6 @@ function validateBusRoutePayload(body) {
   const departureTime = normalizeText(body.departureTime);
   const returnTime = normalizeText(body.returnTime);
   const totalSeats = Number(body.totalSeats);
-  const fare = Number(body.fare);
   const stops = Array.isArray(body.stops)
     ? body.stops.map(normalizeText).filter(Boolean)
     : String(body.stops || "")
@@ -696,10 +660,10 @@ function validateBusRoutePayload(body) {
         .map(normalizeText)
         .filter(Boolean);
 
-  if (!name || !from || !to || !departureTime || !returnTime || !totalSeats || !fare || stops.length < 2) {
+  if (!name || !from || !to || !departureTime || !returnTime || !totalSeats || stops.length < 2) {
     return {
       error:
-        "Route name, source, destination, departure time, return time, total seats, fare, and at least two stops are required.",
+        "Route name, source, destination, departure time, return time, total seats, and at least two stops are required.",
     };
   }
 
@@ -719,7 +683,6 @@ function validateBusRoutePayload(body) {
       returnTime,
       totalSeats,
       waitingSeats: 10,
-      fare,
       bookedSeats: [],
       stops,
     },

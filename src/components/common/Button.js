@@ -2,7 +2,7 @@
 import React from "react";
 import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { COLORS, SPACING } from "../../constants";
+import { COLORS, RADIUS, SHADOWS } from "../../constants";
 
 export default function Button({ title, onPress, variant = "primary", size = "md", loading = false, disabled = false, icon, style }) {
   const isOutline = variant === "outline";
@@ -38,15 +38,15 @@ export default function Button({ title, onPress, variant = "primary", size = "md
   }
 
   const gradients = {
-    primary: [COLORS.primary, COLORS.primaryDark],
-    danger: [COLORS.error, "#C0392B"],
-    success: [COLORS.success, "#059669"],
+    primary: [COLORS.primary, "#2563EB"],
+    danger: [COLORS.error, "#B91C1C"],
+    success: [COLORS.success, "#0B7A5D"],
     warning: [COLORS.warning, "#D97706"],
   };
   const grad = gradients[variant] || gradients.primary;
 
   return (
-    <TouchableOpacity onPress={onPress} disabled={disabled || loading} style={[styles.shadow, style]} activeOpacity={0.85}>
+    <TouchableOpacity onPress={onPress} disabled={disabled || loading} style={[styles.shadow, style]} activeOpacity={0.9}>
       <LinearGradient colors={disabled ? [COLORS.gray, COLORS.grayDark] : grad} style={[styles.base, styles[size], styles.gradient]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
         {loading ? (
           <ActivityIndicator color={COLORS.white} size="small" />
@@ -62,19 +62,19 @@ export default function Button({ title, onPress, variant = "primary", size = "md
 }
 
 const styles = StyleSheet.create({
-  base: { borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  gradient: {},
-  shadow: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
-  sm: { paddingVertical: 10, paddingHorizontal: 18 },
-  md: { paddingVertical: 14, paddingHorizontal: 24 },
-  lg: { paddingVertical: 18, paddingHorizontal: 32 },
-  outline: { borderWidth: 2, borderColor: COLORS.primary, backgroundColor: "transparent" },
+  base: { borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
+  gradient: { minHeight: 52 },
+  shadow: { ...SHADOWS.soft },
+  sm: { paddingVertical: 10, paddingHorizontal: 18, minHeight: 42 },
+  md: { paddingVertical: 14, paddingHorizontal: 24, minHeight: 52 },
+  lg: { paddingVertical: 18, paddingHorizontal: 32, minHeight: 58 },
+  outline: { borderWidth: 1.5, borderColor: COLORS.borderStrong, backgroundColor: COLORS.white },
   ghost: { backgroundColor: "transparent" },
   disabled: { opacity: 0.5 },
-  text: { fontSize: 15, fontWeight: "700", letterSpacing: 0.3 },
+  text: { fontSize: 15, fontWeight: "700", letterSpacing: 0.2 },
   primaryText: { color: COLORS.white },
-  outlineText: { color: COLORS.primary },
-  ghostText: { color: COLORS.primary },
+  outlineText: { color: COLORS.text },
+  ghostText: { color: COLORS.primary, fontWeight: "700" },
   row: { flexDirection: "row", alignItems: "center" },
   iconWrap: { marginRight: 8 },
 });

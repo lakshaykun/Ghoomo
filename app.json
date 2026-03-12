@@ -46,6 +46,11 @@
       ],
       "expo-font"
     ],
-    "extra": {}
+    "extra": {
+      "eas": {
+        "projectId": ""
+      },
+      "projectId": ""
+    }
   }
 }

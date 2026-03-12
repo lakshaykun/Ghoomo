@@ -1,10 +1,10 @@
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, TextInput, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS, SPACING } from "../../constants";
+import { COLORS, RADIUS, SHADOWS, SPACING } from "../../constants";
 
-export default function Input({
+function Input({
   label,
   placeholder,
   value,
@@ -23,25 +23,43 @@ export default function Input({
   const [secure, setSecure] = useState(secureTextEntry || false);
   const [focused, setFocused] = useState(false);
 
+  useEffect(() => {
+    setSecure(Boolean(secureTextEntry));
+  }, [secureTextEntry]);
+
+  const handleFocus = (event) => {
+    setFocused(true);
+    if (textInputProps.onFocus) {
+      textInputProps.onFocus(event);
+    }
+  };
+
+  const handleBlur = (event) => {
+    setFocused(false);
+    if (textInputProps.onBlur) {
+      textInputProps.onBlur(event);
+    }
+  };
+
   return (
     <View style={[styles.container, style]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[styles.inputWrap, focused && styles.focused, error && styles.errorBorder, !editable && styles.disabled]}>
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
         <TextInput
+          {...textInputProps}
           ref={inputRef}
           style={[styles.input, leftIcon && styles.inputWithLeft, (secureTextEntry || rightIcon) && styles.inputWithRight, multiline && styles.multiline]}
           placeholder={placeholder}
           placeholderTextColor={COLORS.gray}
-          value={value}
+          value={value ?? ""}
           onChangeText={onChangeText}
           secureTextEntry={secure}
           keyboardType={keyboardType || "default"}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           multiline={multiline}
           editable={editable}
-          {...textInputProps}
         />
         {secureTextEntry && (
           <TouchableOpacity onPress={() => setSecure(!secure)} style={styles.rightIcon}>
@@ -55,18 +73,31 @@ export default function Input({
   );
 }
 
+export default React.memo(Input);
+
 const styles = StyleSheet.create({
   container: { marginBottom: SPACING.md },
-  label: { fontSize: 13, fontWeight: "600", color: COLORS.text, marginBottom: 6, letterSpacing: 0.3 },
-  inputWrap: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.inputBg, borderRadius: 12, borderWidth: 1.5, borderColor: "transparent" },
-  focused: { borderColor: COLORS.primary, backgroundColor: COLORS.white, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 3 },
+  label: { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 8, letterSpacing: 0.2 },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.inputBg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  focused: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.soft,
+  },
   errorBorder: { borderColor: COLORS.error },
   disabled: { opacity: 0.6 },
-  input: { flex: 1, paddingVertical: 14, paddingHorizontal: 16, fontSize: 15, color: COLORS.text },
+  input: { flex: 1, paddingVertical: 15, paddingHorizontal: 16, fontSize: 15, color: COLORS.text },
   inputWithLeft: { paddingLeft: 8 },
   inputWithRight: { paddingRight: 8 },
-  multiline: { minHeight: 80, textAlignVertical: "top" },
+  multiline: { minHeight: 96, textAlignVertical: "top" },
   leftIcon: { paddingLeft: 14 },
   rightIcon: { paddingRight: 14 },
-  error: { fontSize: 12, color: COLORS.error, marginTop: 4, marginLeft: 4 },
+  error: { fontSize: 12, color: COLORS.error, marginTop: 6, marginLeft: 4, fontWeight: "600" },
 });

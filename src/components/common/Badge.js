@@ -1,16 +1,16 @@
 
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { COLORS } from "../../constants";
+import { COLORS, RADIUS } from "../../constants";
 
 const statusConfig = {
-  pending: { bg: "#FEF3C7", text: "#92400E", label: "Pending" },
-  accepted: { bg: "#DBEAFE", text: "#1E40AF", label: "Accepted" },
-  in_progress: { bg: "#D1FAE5", text: "#065F46", label: "In Progress" },
-  completed: { bg: "#D1FAE5", text: "#065F46", label: "Completed" },
-  cancelled: { bg: "#FEE2E2", text: "#991B1B", label: "Cancelled" },
-  waiting: { bg: "#F3E8FF", text: "#6B21A8", label: "Waiting" },
-  arrived: { bg: "#DBEAFE", text: "#1E40AF", label: "Arrived" },
+  pending: { bg: "#FFF4DB", text: "#9A6700", label: "Pending" },
+  accepted: { bg: "#E4EEFF", text: "#1D4ED8", label: "Accepted" },
+  in_progress: { bg: "#E3F8F2", text: "#0F7660", label: "In Progress" },
+  completed: { bg: "#E3F8F2", text: "#0F7660", label: "Completed" },
+  cancelled: { bg: "#FDE8E8", text: "#B91C1C", label: "Cancelled" },
+  waiting: { bg: "#FCEED8", text: "#B45309", label: "Waiting" },
+  arrived: { bg: "#E4EEFF", text: "#1D4ED8", label: "Arrived" },
   default: { bg: COLORS.grayLight, text: COLORS.grayDark, label: "" },
 };
 
@@ -28,6 +28,6 @@ export default function Badge({ status, label, color }) {
 }
 
 const styles = StyleSheet.create({
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  text: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.pill, alignSelf: "flex-start" },
+  text: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
 });

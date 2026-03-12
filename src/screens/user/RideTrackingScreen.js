@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -97,6 +97,27 @@ export default function RideTrackingScreen({ navigation }) {
     );
   };
 
+  const driverPhone =
+    booking?.driver?.phone ||
+    booking?.driver?.phoneNumber ||
+    booking?.driver?.mobile ||
+    booking?.driver?.mobileNumber ||
+    null;
+
+  const handleCallDriver = () => {
+    if (!driverPhone) return;
+    Linking.openURL(`tel:${driverPhone}`).catch(() => {
+      Alert.alert("Call Failed", "Unable to open the phone dialer on this device.");
+    });
+  };
+
+  const handleSmsDriver = () => {
+    if (!driverPhone) return;
+    Linking.openURL(`sms:${driverPhone}`).catch(() => {
+      Alert.alert("SMS Failed", "Unable to open the messaging app on this device.");
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.mapArea}>
@@ -154,14 +175,16 @@ export default function RideTrackingScreen({ navigation }) {
                 </View>
                 <Text style={styles.vehicleNo}>{booking.driver.vehicleNo}</Text>
               </View>
-              <View style={styles.driverActions}>
-                <TouchableOpacity style={styles.callBtn}>
-                  <Ionicons name="call" size={20} color={COLORS.success} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.msgBtn}>
-                  <Ionicons name="chatbubble" size={20} color={COLORS.primary} />
-                </TouchableOpacity>
-              </View>
+              {driverPhone ? (
+                <View style={styles.driverActions}>
+                  <TouchableOpacity style={styles.callBtn} onPress={handleCallDriver}>
+                    <Ionicons name="call" size={20} color={COLORS.success} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.msgBtn} onPress={handleSmsDriver}>
+                    <Ionicons name="chatbubble" size={20} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
           </Card>
         )}

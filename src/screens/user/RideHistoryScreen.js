@@ -46,7 +46,9 @@ export default function RideHistoryScreen({ navigation }) {
             {item.routeId && <Text style={styles.route}>Bus Route • Seat {item.seatNumber}</Text>}
             <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Text>
           </View>
-          <Text style={styles.fare}>₹{item.fare}</Text>
+          {rideType === "bus" || item.routeId ? null : (
+            <Text style={styles.fare}>₹{item.fare}</Text>
+          )}
         </View>
       </Card>
     );

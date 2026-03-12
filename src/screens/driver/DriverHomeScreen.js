@@ -8,9 +8,9 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   TextInput,
+  KeyboardAvoidingView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -142,6 +142,7 @@ export default function DriverHomeScreen() {
 
   const activeRide = dashboard?.activeRide || null;
   const assignedRides = dashboard?.assignedRides || [];
+  const completedRides = dashboard?.completedRides || [];
   const stats = dashboard?.stats || { todayEarnings: 0, ridesToday: 0, rating: user?.rating || 0 };
   const isOnline = Boolean(dashboard?.online ?? user?.online);
 
@@ -202,7 +203,7 @@ export default function DriverHomeScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        keyboardDismissMode="interactive"
       >
         <LinearGradient colors={isOnline ? [COLORS.success, "#059669"] : [COLORS.grayDark, "#374151"]} style={styles.header}>
           <View style={styles.headerTop}>
@@ -440,6 +441,37 @@ export default function DriverHomeScreen() {
           )}
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.historyHeader}>
+            <Text style={styles.sectionTitle}>Trip History</Text>
+            <Text style={styles.historyMeta}>Last {completedRides.length} trips</Text>
+          </View>
+          {completedRides.length === 0 ? (
+            <Card style={styles.noRequests}>
+              <Text style={styles.noRequestsText}>No completed trips yet.</Text>
+            </Card>
+          ) : (
+            completedRides.map((ride) => (
+              <Card key={ride.id} elevated style={styles.historyCard}>
+                <View style={styles.historyRow}>
+                  <View>
+                    <Text style={styles.historyTitle}>{ride.pickup?.name} → {ride.drop?.name}</Text>
+                    <Text style={styles.historySub}>
+                      {new Date(ride.updatedAt || ride.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      {" • "}
+                      {ride.distance} km • {ride.durationMinutes} min
+                    </Text>
+                  </View>
+                  <View style={styles.historyRight}>
+                    <Text style={styles.historyFare}>₹{ride.fare}</Text>
+                    <Badge status={ride.status} />
+                  </View>
+                </View>
+              </Card>
+            ))
+          )}
+        </View>
+
         <View style={{ height: SPACING.xxl }} />
       </ScrollView>
       </KeyboardAvoidingView>
@@ -516,4 +548,12 @@ const styles = StyleSheet.create({
   pendingActionRow: { marginTop: 12 },
   fareWrap: { alignItems: "flex-end", gap: 8 },
   reqFare: { fontSize: 18, fontWeight: "900", color: COLORS.text },
+  historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  historyMeta: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "600" },
+  historyCard: { marginBottom: SPACING.sm },
+  historyRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  historyTitle: { fontSize: 13, fontWeight: "700", color: COLORS.text, maxWidth: 210 },
+  historySub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4 },
+  historyRight: { alignItems: "flex-end", gap: 6 },
+  historyFare: { fontSize: 14, fontWeight: "800", color: COLORS.text },
 });

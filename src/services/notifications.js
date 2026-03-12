@@ -51,11 +51,15 @@ export async function initializeNotifications() {
 }
 
 function getExpoProjectId() {
-  return (
-    Constants.easConfig?.projectId ||
-    Constants.expoConfig?.extra?.eas?.projectId ||
-    null
-  );
+  const candidates = [
+    Constants.easConfig?.projectId,
+    Constants.expoConfig?.extra?.eas?.projectId,
+    Constants.expoConfig?.extra?.projectId,
+    Constants.expoConfig?.projectId,
+    process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+    process.env.EXPO_PUBLIC_PROJECT_ID,
+  ];
+  return candidates.find((value) => typeof value === "string" && value.trim().length > 0) || null;
 }
 
 export async function registerPushTokenForUser(userId) {

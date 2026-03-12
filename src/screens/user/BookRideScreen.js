@@ -9,9 +9,9 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
-  Keyboard,
+  KeyboardAvoidingView,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -19,7 +19,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { createRideBooking, fetchRideQuote } from "../../store/slices/bookingSlice";
 import Header from "../../components/common/Header";
-import Input from "../../components/common/Input";
 import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 import { COLORS, SPACING, FARES } from "../../constants";
@@ -31,6 +30,40 @@ const RIDE_OPTIONS = [
   { type: "cab", label: "Cab", icon: "car", color: "#6C63FF", desc: "AC cab, premium ride", shareable: true },
 ];
 
+function SimpleField({
+  label,
+  leftIcon,
+  rightIcon,
+  value,
+  onChangeText,
+  placeholder,
+  autoCorrect,
+  autoCapitalize,
+  returnKeyType,
+  inputRef,
+}) {
+  return (
+    <View style={styles.field}>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      <View style={styles.inputWrap}>
+        {leftIcon ? <View style={styles.iconLeft}>{leftIcon}</View> : null}
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.gray}
+          value={value ?? ""}
+          onChangeText={onChangeText}
+          autoCorrect={autoCorrect}
+          autoCapitalize={autoCapitalize}
+          returnKeyType={returnKeyType}
+        />
+        {rightIcon ? <View style={styles.iconRight}>{rightIcon}</View> : null}
+      </View>
+    </View>
+  );
+}
+
 export default function BookRideScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const scrollRef = useRef(null);
@@ -38,7 +71,6 @@ export default function BookRideScreen({ navigation, route }) {
   const user = useSelector(s => s.auth.user);
   const { currentQuote, loading, error } = useSelector(s => s.booking);
   const { rideType: initType = "cab" } = route.params || {};
-  const [selectedType, setSelectedType] = useState(initType);
   const [pickupInput, setPickupInput] = useState("");
   const [dropInput, setDropInput] = useState("");
   const [pickupPlace, setPickupPlace] = useState(null);
@@ -50,7 +82,8 @@ export default function BookRideScreen({ navigation, route }) {
   const [currentCoords, setCurrentCoords] = useState(null);
   const [sharedSeatsWanted, setSharedSeatsWanted] = useState(1);
 
-  const currentRide = RIDE_OPTIONS.find(r => r.type === selectedType);
+  const selectedType = initType;
+  const currentRide = RIDE_OPTIONS.find(r => r.type === selectedType) || RIDE_OPTIONS[2];
   const fareKey = isShare && currentRide?.shareable ? selectedType + "Share" : selectedType;
   const fareInfo = FARES[fareKey] || FARES[selectedType];
   const estimate = currentQuote?.estimate;
@@ -168,14 +201,12 @@ export default function BookRideScreen({ navigation, route }) {
   };
 
   const applyPlace = (type, place) => {
-    Keyboard.dismiss();
     if (type === "pickup") {
       setPickupPlace(place);
       setPickupInput(place.name);
       setPickupResults([]);
       setTimeout(() => {
         dropInputRef.current?.focus?.();
-        scrollRef.current?.scrollTo?.({ y: 340, animated: true });
       }, 150);
       return;
     }
@@ -200,49 +231,34 @@ export default function BookRideScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <Header title="Book a Ride" onBack={() => navigation.goBack()} />
+      <Header title={`${currentRide.label} Booking`} subtitle="Step 2 of 2" onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView
         style={styles.contentWrap}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-        contentContainerStyle={styles.scrollContent}
-      >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          contentContainerStyle={styles.scrollContent}
+        >
 
-        {/* Ride Type Selector */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose Vehicle</Text>
-          {RIDE_OPTIONS.map(opt => (
-            <TouchableOpacity
-              key={opt.type}
-              style={[styles.rideCard, selectedType === opt.type && styles.rideCardActive]}
-              onPress={() => { setSelectedType(opt.type); if (!opt.shareable) setIsShare(false); }}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.rideIcon, { backgroundColor: opt.color + "20" }]}>
-                <Ionicons name={opt.icon} size={26} color={opt.color} />
-              </View>
-              <View style={styles.rideInfo}>
-                <Text style={styles.rideLabel}>{opt.label}</Text>
-                <Text style={styles.rideDesc}>{opt.desc}</Text>
-              </View>
-              <View style={styles.rideFareCol}>
-                <Text style={styles.rideFare}>₹{Math.round(FARES[opt.type].base + FARES[opt.type].perKm * Math.max(estDist, 1))}</Text>
-                <Text style={styles.rideEta}>~{estTime} min</Text>
-              </View>
-              {selectedType === opt.type && (
-                <View style={styles.checkMark}>
-                  <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />
-                </View>
-              )}
+          <Card elevated style={styles.vehicleSummaryCard}>
+            <View style={[styles.vehicleIcon, { backgroundColor: currentRide.color + "18" }]}>
+              <Ionicons name={currentRide.icon} size={28} color={currentRide.color} />
+            </View>
+            <View style={styles.vehicleSummaryInfo}>
+              <Text style={styles.vehicleSummaryTitle}>{currentRide.label}</Text>
+              <Text style={styles.vehicleSummaryText}>{currentRide.desc}</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate("RideTypeSelection")} style={styles.changeVehicleBtn}>
+              <Text style={styles.changeVehicleText}>Change</Text>
             </TouchableOpacity>
-          ))}
+          </Card>
         </View>
 
         {/* Share Toggle */}
@@ -290,12 +306,11 @@ export default function BookRideScreen({ navigation, route }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Locations</Text>
           <Card elevated>
-            <Input
+            <SimpleField
               label="Pickup Location"
               placeholder="Search pickup point"
               value={pickupInput}
               onChangeText={(value) => { setPickupInput(value); setPickupPlace(null); }}
-              onFocus={() => setDropResults([])}
               autoCorrect={false}
               autoCapitalize="words"
               returnKeyType="search"
@@ -315,18 +330,12 @@ export default function BookRideScreen({ navigation, route }) {
               </TouchableOpacity>
             ))}
             <View style={styles.swapLine} />
-            <Input
+            <SimpleField
               label="Drop Location"
               placeholder="Search destination"
               value={dropInput}
               onChangeText={(value) => { setDropInput(value); setDropPlace(null); }}
               inputRef={dropInputRef}
-              onFocus={() => {
-                setPickupResults([]);
-                setTimeout(() => {
-                  scrollRef.current?.scrollTo?.({ y: 340, animated: true });
-                }, 50);
-              }}
               autoCorrect={false}
               autoCapitalize="words"
               returnKeyType="search"
@@ -392,7 +401,7 @@ export default function BookRideScreen({ navigation, route }) {
           </Card>
         </View>
 
-      </ScrollView>
+        </ScrollView>
       </KeyboardAvoidingView>
 
       <View style={styles.bookBtnWrap}>
@@ -415,16 +424,28 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 140 },
   section: { paddingHorizontal: SPACING.md, marginTop: SPACING.md },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm },
-  rideCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.white, borderRadius: 14, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 2, borderColor: COLORS.border },
-  rideCardActive: { borderColor: COLORS.primary, backgroundColor: "#F5F3FF" },
-  rideIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  rideInfo: { flex: 1, marginLeft: 12 },
-  rideLabel: { fontSize: 15, fontWeight: "700", color: COLORS.text },
-  rideDesc: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  rideFareCol: { alignItems: "flex-end" },
-  rideFare: { fontSize: 16, fontWeight: "800", color: COLORS.text },
-  rideEta: { fontSize: 11, color: COLORS.textSecondary },
-  checkMark: { position: "absolute", top: 8, right: 8 },
+  field: { marginBottom: SPACING.md },
+  fieldLabel: { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 8, letterSpacing: 0.2 },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  input: { flex: 1, fontSize: 15, color: COLORS.text },
+  iconLeft: { marginRight: 10 },
+  iconRight: { marginLeft: 10 },
+  vehicleSummaryCard: { flexDirection: "row", alignItems: "center" },
+  vehicleIcon: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  vehicleSummaryInfo: { flex: 1, marginLeft: 14 },
+  vehicleSummaryTitle: { fontSize: 16, fontWeight: "800", color: COLORS.text },
+  vehicleSummaryText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 3 },
+  changeVehicleBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  changeVehicleText: { fontSize: 12, fontWeight: "800", color: COLORS.primary },
   shareCard: {},
   shareRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   shareLeft: { flexDirection: "row", alignItems: "center", flex: 1 },

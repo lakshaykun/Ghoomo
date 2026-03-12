@@ -1,15 +1,12 @@
 
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { registerUser } from "../../store/slices/authSlice";
 import { fetchBusRoutes } from "../../store/slices/busRoutesSlice";
 import Button from "../../components/common/Button";
-import Input from "../../components/common/Input";
-import Header from "../../components/common/Header";
-import { BUS_ROUTES, COLORS, SPACING } from "../../constants";
+import { COLORS, SPACING } from "../../constants";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const ROLE_OPTIONS = [
@@ -25,11 +22,51 @@ const DRIVER_TYPES = [
   { key: "bus", label: "Bus" },
 ];
 
+function SimpleField({
+  label,
+  leftIcon,
+  value,
+  onChangeText,
+  placeholder,
+  secureTextEntry,
+  keyboardType,
+  autoCapitalize,
+  autoCorrect,
+  textContentType,
+  maxLength,
+  inputMode,
+  editable = true,
+}) {
+  return (
+    <View style={styles.field}>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
+      <View style={[styles.inputWrap, !editable && styles.inputDisabled]}>
+        {leftIcon ? <View style={styles.icon}>{leftIcon}</View> : null}
+        <TextInput
+          style={styles.input}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.gray}
+          value={value ?? ""}
+          onChangeText={onChangeText}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
+          textContentType={textContentType}
+          maxLength={maxLength}
+          inputMode={inputMode}
+          editable={editable}
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function RegisterScreen({ navigation }) {
   const dispatch = useDispatch();
   const { loading, error } = useSelector(s => s.auth);
   const liveRoutes = useSelector((state) => state.busRoutes.routes);
-  const availableRoutes = liveRoutes.length ? liveRoutes : BUS_ROUTES;
+  const availableRoutes = liveRoutes;
   const [form, setForm] = useState({
     role: "user",
     name: "",
@@ -72,6 +109,10 @@ export default function RegisterScreen({ navigation }) {
         Alert.alert("Error", "Bus drivers must select a route");
         return;
       }
+      if (form.vehicleType === "bus" && availableRoutes.length === 0) {
+        Alert.alert("Routes Unavailable", "Bus routes are not available right now. Please try again later.");
+        return;
+      }
     }
 
     if (form.role === "admin" && (!form.employeeId || !form.organization)) {
@@ -98,14 +139,24 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <LinearGradient colors={[COLORS.accent, "#22C55E"]} style={styles.topBg}>
-            <Header title="Create Account" onBack={() => navigation.goBack()} transparent />
-            <Text style={styles.sub}>Choose your role and fill the important account details</Text>
-          </LinearGradient>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.hero}>
+            <View style={styles.bgOrb} pointerEvents="none" />
+            <View style={styles.bgOrbAlt} pointerEvents="none" />
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.9}>
+              <Ionicons name="arrow-back" size={18} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.heroTitle}>Create account</Text>
+            <Text style={styles.heroSub}>Set up your profile to start booking rides and bus seats.</Text>
+          </View>
           <View style={styles.formCard}>
-            <Text style={styles.sectionTitle}>Register As</Text>
+            <Text style={styles.sectionTitle}>Choose Role</Text>
             <View style={styles.roleGrid}>
               {ROLE_OPTIONS.map((option) => (
                 <TouchableOpacity
@@ -124,11 +175,56 @@ export default function RegisterScreen({ navigation }) {
             </View>
 
             <Text style={styles.sectionTitle}>Basic Details</Text>
-            <Input label="Full Name" placeholder="Your full name" value={form.name} onChangeText={v => update("name", v)} leftIcon={<Ionicons name="person" size={20} color={COLORS.gray} />} />
-            <Input label="Email" placeholder="you@example.com" value={form.email} onChangeText={v => update("email", v)} keyboardType="email-address" leftIcon={<Ionicons name="mail" size={20} color={COLORS.gray} />} />
-            <Input label="Phone" placeholder="10-digit mobile number" value={form.phone} onChangeText={v => update("phone", v)} keyboardType="phone-pad" leftIcon={<Ionicons name="call" size={20} color={COLORS.gray} />} />
-            <Input label="City" placeholder="Your city" value={form.city} onChangeText={v => update("city", v)} leftIcon={<Ionicons name="business" size={20} color={COLORS.gray} />} />
-            <Input label="Emergency Contact" placeholder="Emergency mobile number" value={form.emergencyContact} onChangeText={v => update("emergencyContact", v)} keyboardType="phone-pad" leftIcon={<Ionicons name="medkit" size={20} color={COLORS.gray} />} />
+            <SimpleField
+              label="Full Name"
+              placeholder="Your full name"
+              value={form.name}
+              onChangeText={v => update("name", v)}
+              autoCapitalize="words"
+              textContentType="name"
+              leftIcon={<Ionicons name="person" size={20} color={COLORS.gray} />}
+            />
+            <SimpleField
+              label="Email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChangeText={v => update("email", v)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+              leftIcon={<Ionicons name="mail" size={20} color={COLORS.gray} />}
+            />
+            <SimpleField
+              label="Phone"
+              placeholder="10-digit mobile number"
+              value={form.phone}
+              onChangeText={v => update("phone", String(v || "").replace(/[^0-9]/g, ""))}
+              keyboardType="number-pad"
+              inputMode="numeric"
+              maxLength={10}
+              textContentType="telephoneNumber"
+              leftIcon={<Ionicons name="call" size={20} color={COLORS.gray} />}
+            />
+            <SimpleField
+              label="City"
+              placeholder="Your city"
+              value={form.city}
+              onChangeText={v => update("city", v)}
+              autoCapitalize="words"
+              leftIcon={<Ionicons name="business" size={20} color={COLORS.gray} />}
+            />
+            <SimpleField
+              label="Emergency Contact"
+              placeholder="Emergency mobile number"
+              value={form.emergencyContact}
+              onChangeText={v => update("emergencyContact", String(v || "").replace(/[^0-9]/g, ""))}
+              keyboardType="number-pad"
+              inputMode="numeric"
+              maxLength={10}
+              textContentType="telephoneNumber"
+              leftIcon={<Ionicons name="medkit" size={20} color={COLORS.gray} />}
+            />
 
             {form.role === "driver" ? (
               <>
@@ -145,23 +241,46 @@ export default function RegisterScreen({ navigation }) {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Input label="Vehicle Number" placeholder="PB-01-AB-1234" value={form.vehicleNo} onChangeText={v => update("vehicleNo", v)} leftIcon={<Ionicons name="car-sport" size={20} color={COLORS.gray} />} />
-                <Input label="License Number" placeholder="Driver license number" value={form.licenseNumber} onChangeText={v => update("licenseNumber", v)} leftIcon={<Ionicons name="card" size={20} color={COLORS.gray} />} />
+                <SimpleField
+                  label="Vehicle Number"
+                  placeholder="PB-01-AB-1234"
+                  value={form.vehicleNo}
+                  onChangeText={v => update("vehicleNo", String(v || "").toUpperCase())}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  leftIcon={<Ionicons name="car-sport" size={20} color={COLORS.gray} />}
+                />
+                <SimpleField
+                  label="License Number"
+                  placeholder="Driver license number"
+                  value={form.licenseNumber}
+                  onChangeText={v => update("licenseNumber", String(v || "").toUpperCase())}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  leftIcon={<Ionicons name="card" size={20} color={COLORS.gray} />}
+                />
                 {form.vehicleType === "bus" ? (
                   <>
                     <Text style={styles.inlineLabel}>Bus Route</Text>
-                    <View style={styles.optionRow}>
-                      {availableRoutes.map((route) => (
-                        <TouchableOpacity
-                          key={route.id}
-                          style={[styles.routeChoice, form.busRoute === route.id && styles.routeChoiceActive]}
-                          onPress={() => update("busRoute", route.id)}
-                        >
-                          <Text style={styles.routeChoiceTitle}>{route.name}</Text>
-                          <Text style={styles.routeChoiceText}>{route.from} -> {route.to}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                    {availableRoutes.length === 0 ? (
+                      <View style={styles.routeEmpty}>
+                        <Ionicons name="alert-circle" size={18} color={COLORS.warning} />
+                        <Text style={styles.routeEmptyText}>No bus routes are available yet. Please contact an admin.</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.optionRow}>
+                        {availableRoutes.map((route) => (
+                          <TouchableOpacity
+                            key={route.id}
+                            style={[styles.routeChoice, form.busRoute === route.id && styles.routeChoiceActive]}
+                            onPress={() => update("busRoute", route.id)}
+                          >
+                            <Text style={styles.routeChoiceTitle}>{route.name}</Text>
+                            <Text style={styles.routeChoiceText}>{route.from} -> {route.to}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
                   </>
                 ) : null}
               </>
@@ -170,30 +289,116 @@ export default function RegisterScreen({ navigation }) {
             {form.role === "admin" ? (
               <>
                 <Text style={styles.sectionTitle}>Admin Details</Text>
-                <Input label="Employee ID" placeholder="Official employee ID" value={form.employeeId} onChangeText={v => update("employeeId", v)} leftIcon={<Ionicons name="id-card" size={20} color={COLORS.gray} />} />
-                <Input label="Organization" placeholder="Company or institution name" value={form.organization} onChangeText={v => update("organization", v)} leftIcon={<Ionicons name="briefcase" size={20} color={COLORS.gray} />} />
+                <SimpleField
+                  label="Employee ID"
+                  placeholder="Official employee ID"
+                  value={form.employeeId}
+                  onChangeText={v => update("employeeId", String(v || "").toUpperCase())}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  leftIcon={<Ionicons name="id-card" size={20} color={COLORS.gray} />}
+                />
+                <SimpleField
+                  label="Organization"
+                  placeholder="Company or institution name"
+                  value={form.organization}
+                  onChangeText={v => update("organization", v)}
+                  autoCapitalize="words"
+                  leftIcon={<Ionicons name="briefcase" size={20} color={COLORS.gray} />}
+                />
               </>
             ) : null}
 
             <Text style={styles.sectionTitle}>Security</Text>
-            <Input label="Password" placeholder="Create a password" value={form.password} onChangeText={v => update("password", v)} secureTextEntry leftIcon={<Ionicons name="lock-closed" size={20} color={COLORS.gray} />} />
-            <Input label="Confirm Password" placeholder="Re-enter password" value={form.confirm} onChangeText={v => update("confirm", v)} secureTextEntry leftIcon={<Ionicons name="lock-closed" size={20} color={COLORS.gray} />} />
+            <SimpleField
+              label="Password"
+              placeholder="Create a password"
+              value={form.password}
+              onChangeText={v => update("password", v)}
+              secureTextEntry
+              textContentType="newPassword"
+              autoCapitalize="none"
+              leftIcon={<Ionicons name="lock-closed" size={20} color={COLORS.gray} />}
+            />
+            <SimpleField
+              label="Confirm Password"
+              placeholder="Re-enter password"
+              value={form.confirm}
+              onChangeText={v => update("confirm", v)}
+              secureTextEntry
+              textContentType="newPassword"
+              autoCapitalize="none"
+              leftIcon={<Ionicons name="lock-closed" size={20} color={COLORS.gray} />}
+            />
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Button title={`Create ${form.role.charAt(0).toUpperCase() + form.role.slice(1)} Account`} onPress={handleRegister} loading={loading} variant="success" style={{ marginTop: 8 }} />
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.accent },
-  scroll: { flexGrow: 1 },
-  topBg: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl + 20 },
-  sub: { fontSize: 15, color: "rgba(255,255,255,0.85)", marginBottom: SPACING.md, paddingHorizontal: 4 },
-  formCard: { backgroundColor: COLORS.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: SPACING.lg, marginTop: -24, flex: 1 },
+  safe: { flex: 1, backgroundColor: COLORS.grayLight },
+  scroll: { flexGrow: 1, paddingBottom: SPACING.xxl },
+  hero: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.xl + 4, paddingBottom: SPACING.md, overflow: "hidden" },
+  bgOrb: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "#DBEAFE",
+    top: -70,
+    right: -60,
+  },
+  bgOrbAlt: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: "#F1F5F9",
+    bottom: -40,
+    left: -30,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.md,
+  },
+  heroTitle: { fontSize: 26, fontWeight: "900", color: COLORS.text },
+  heroSub: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6, maxWidth: 320 },
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: SPACING.lg,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   sectionTitle: { fontSize: 15, fontWeight: "800", color: COLORS.text, marginBottom: 12, marginTop: 6 },
+  field: { marginBottom: SPACING.md },
+  label: { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 8, letterSpacing: 0.2 },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  inputDisabled: { opacity: 0.7 },
+  icon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 15, color: COLORS.text },
   roleGrid: { gap: 10, marginBottom: SPACING.md },
   roleCard: { borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, padding: 14, backgroundColor: COLORS.white },
   roleCardActive: { borderColor: COLORS.primary, backgroundColor: "#EEF2FF" },
@@ -211,5 +416,7 @@ const styles = StyleSheet.create({
   routeChoiceActive: { borderColor: COLORS.primary, backgroundColor: "#EEF2FF" },
   routeChoiceTitle: { fontSize: 13, fontWeight: "800", color: COLORS.text },
   routeChoiceText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4 },
+  routeEmpty: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF7ED", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#FED7AA" },
+  routeEmptyText: { flex: 1, fontSize: 12, color: "#9A3412", fontWeight: "600" },
   error: { color: COLORS.error, fontSize: 13, textAlign: "center", marginBottom: 8, fontWeight: "500" },
 });

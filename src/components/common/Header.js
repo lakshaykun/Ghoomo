@@ -3,7 +3,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS, SPACING } from "../../constants";
+import { COLORS, RADIUS, SHADOWS, SPACING } from "../../constants";
 
 export default function Header({ title, subtitle, onBack, rightComponent, transparent = false }) {
   return (
@@ -29,11 +29,32 @@ export default function Header({ title, subtitle, onBack, rightComponent, transp
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: COLORS.white },
   transparent: { backgroundColor: "transparent" },
-  container: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.md, paddingVertical: 12 },
+  container: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
+    paddingTop: 8,
+    paddingBottom: 14,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
   left: { flexDirection: "row", alignItems: "center", flex: 1 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.grayLight, alignItems: "center", justifyContent: "center", marginRight: SPACING.sm },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.soft,
+  },
   titleWrap: { flex: 1 },
-  title: { fontSize: 18, fontWeight: "700", color: COLORS.text },
-  subtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
+  title: { fontSize: 20, fontWeight: "800", color: COLORS.text },
+  subtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   right: {},
 });

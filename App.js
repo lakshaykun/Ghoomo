@@ -6,12 +6,15 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { enableScreens } from "react-native-screens";
 import { store } from "./src/store";
 import RootNavigator from "./src/navigation/RootNavigator";
 import { initializeNotifications } from "./src/services/notifications";
 import "./src/services/backgroundLocation";
 import { hydrateAuthSession } from "./src/store/slices/authSlice";
 import { COLORS } from "./src/constants";
+
+enableScreens(false);
 
 function AppBootstrap() {
   const dispatch = useDispatch();

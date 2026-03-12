@@ -5,12 +5,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { COLORS, SPACING, FARES } from "../../constants";
+import { COLORS, FARES, RADIUS, SHADOWS, SPACING } from "../../constants";
 import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import { fetchSharedRides, joinSharedRideRequest, stopSharedRideRequest } from "../../store/slices/sharedRidesSlice";
 
 const { width } = Dimensions.get("window");
+const isTablet = width >= 768;
+const serviceCardWidth = isTablet
+  ? (width - SPACING.md * 2 - 36) / 4
+  : (width - SPACING.md * 2 - 12) / 2;
 
 const SERVICES = [
   { id: "bike", label: "Bike", icon: "bicycle", color: "#FF6B35", gradient: ["#FF6B35", "#FF8C60"], screen: "BookRide", params: { rideType: "bike" } },
@@ -58,14 +62,15 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <LinearGradient colors={[COLORS.primary, COLORS.primaryDark]} style={styles.header}>
+        <LinearGradient colors={["#EEF4FF", "#F8FAFC"]} style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>{greeting},</Text>
-              <Text style={styles.userName}>{user?.name?.split(" ")[0]} 👋</Text>
+              <Text style={styles.greeting}>{greeting}</Text>
+              <Text style={styles.userName}>{user?.name?.split(" ")[0]}</Text>
+              <Text style={styles.headerSub}>Book rides, buses, and campus travel from one place.</Text>
             </View>
             <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate("Profile")}>
               <View style={styles.avatar}>
@@ -73,9 +78,10 @@ export default function HomeScreen({ navigation }) {
               </View>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate("BookRide", { rideType: "cab" })} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate("RideTypeSelection")} activeOpacity={0.9}>
             <Ionicons name="search" size={18} color={COLORS.gray} />
             <Text style={styles.searchText}>Where do you want to go?</Text>
+            <Ionicons name="arrow-forward" size={16} color={COLORS.grayDark} />
           </TouchableOpacity>
         </LinearGradient>
 
@@ -95,7 +101,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Book a Ride</Text>
           <View style={styles.servicesGrid}>
             {SERVICES.map(s => (
-              <TouchableOpacity key={s.id} style={styles.serviceCard} onPress={() => navigation.navigate(s.screen, s.params)} activeOpacity={0.85}>
+              <TouchableOpacity key={s.id} style={[styles.serviceCard, { width: serviceCardWidth }]} onPress={() => navigation.navigate(s.screen, s.params)} activeOpacity={0.9}>
                 <LinearGradient colors={s.gradient} style={styles.serviceGradient}>
                   <Ionicons name={s.icon} size={28} color={COLORS.white} />
                 </LinearGradient>
@@ -113,7 +119,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {[
-              { icon: "time", label: "History", screen: "RideHistory", color: COLORS.primary },
+              { icon: "time", label: "History", screen: "History", color: COLORS.primary },
               { icon: "wallet", label: "Wallet", screen: "Profile", color: "#10B981" },
               { icon: "star", label: "Favorites", screen: "Profile", color: "#F59E0B" },
               { icon: "help-circle", label: "Support", screen: "Profile", color: "#EF4444" },
@@ -130,7 +136,7 @@ export default function HomeScreen({ navigation }) {
 
         {/* Promo Banner */}
         <View style={styles.section}>
-          <LinearGradient colors={["#FF6584", "#FF8C60"]} style={styles.promoBanner}>
+          <LinearGradient colors={["#1D4ED8", "#0EA5E9"]} style={styles.promoBanner}>
             <View>
               <Text style={styles.promoTitle}>Share & Save!</Text>
               <Text style={styles.promoSub}>Share cab/auto rides and save up to 40%</Text>
@@ -196,28 +202,67 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xl },
   headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: SPACING.md },
-  greeting: { fontSize: 14, color: "rgba(255,255,255,0.8)" },
-  userName: { fontSize: 22, fontWeight: "800", color: COLORS.white },
+  greeting: { fontSize: 14, color: COLORS.textSecondary, fontWeight: "700" },
+  userName: { fontSize: 28, fontWeight: "900", color: COLORS.text },
+  headerSub: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6, maxWidth: 260, lineHeight: 20 },
   profileBtn: {},
-  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.5)" },
-  avatarText: { fontSize: 18, fontWeight: "800", color: COLORS.white },
-  searchBar: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.white, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
-  searchText: { fontSize: 15, color: COLORS.gray },
-  activeAlert: { margin: SPACING.md, borderRadius: 14, overflow: "hidden" },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.soft,
+  },
+  avatarText: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.soft,
+  },
+  searchText: { flex: 1, fontSize: 15, color: COLORS.grayDark, fontWeight: "500" },
+  activeAlert: { margin: SPACING.md, borderRadius: RADIUS.md, overflow: "hidden" },
   alertGrad: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
-  alertText: { flex: 1, color: COLORS.white, fontWeight: "600", fontSize: 14 },
+  alertText: { flex: 1, color: COLORS.white, fontWeight: "700", fontSize: 14 },
   section: { paddingHorizontal: SPACING.md, marginTop: SPACING.lg },
   sectionTitle: { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.md },
   servicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  serviceCard: { width: (width - SPACING.md * 2 - 36) / 4, alignItems: "center" },
-  serviceGradient: { width: 64, height: 64, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
-  serviceLabel: { fontSize: 12, fontWeight: "700", color: COLORS.text, textAlign: "center" },
-  serviceFare: { fontSize: 10, color: COLORS.textSecondary, marginTop: 2 },
-  quickRow: { flexDirection: "row", justifyContent: "space-between" },
-  quickBtn: { alignItems: "center", flex: 1 },
-  quickIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  serviceCard: {
+    alignItems: "flex-start",
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.soft,
+  },
+  serviceGradient: { width: 62, height: 62, borderRadius: 18, alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  serviceLabel: { fontSize: 14, fontWeight: "800", color: COLORS.text, textAlign: "left" },
+  serviceFare: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4, fontWeight: "600" },
+  quickRow: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  quickBtn: {
+    alignItems: "center",
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.soft,
+  },
+  quickIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   quickLabel: { fontSize: 12, fontWeight: "600", color: COLORS.text },
-  promoBanner: { borderRadius: 18, padding: SPACING.lg, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  promoBanner: { borderRadius: RADIUS.lg, padding: SPACING.lg, flexDirection: "row", justifyContent: "space-between", alignItems: "center", ...SHADOWS.soft },
   promoTitle: { fontSize: 20, fontWeight: "800", color: COLORS.white, marginBottom: 4 },
   promoSub: { fontSize: 13, color: "rgba(255,255,255,0.85)", maxWidth: 180 },
   sharedCard: { marginBottom: SPACING.sm },

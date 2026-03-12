@@ -7,6 +7,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { COLORS } from "../constants";
 
 import HomeScreen from "../screens/user/HomeScreen";
+import RideTypeSelectionScreen from "../screens/user/RideTypeSelectionScreen";
 import BookRideScreen from "../screens/user/BookRideScreen";
 import BusBookingScreen from "../screens/user/BusBookingScreen";
 import RideTrackingScreen from "../screens/user/RideTrackingScreen";
@@ -20,6 +21,7 @@ function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="UserHome" component={HomeScreen} />
+      <Stack.Screen name="RideTypeSelection" component={RideTypeSelectionScreen} />
       <Stack.Screen name="BookRide" component={BookRideScreen} />
       <Stack.Screen name="BusBooking" component={BusBookingScreen} />
       <Stack.Screen name="RideTracking" component={RideTrackingScreen} />
