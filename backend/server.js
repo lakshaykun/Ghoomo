@@ -194,12 +194,13 @@ function buildId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     headers: {
       "User-Agent": "ghoomo-app/1.0 (contact: local-dev)",
       Accept: "application/json",
     },
+    ...options,
   });
 
   if (!response.ok) {
@@ -307,19 +308,118 @@ async function reverseGeocode(lat, lon) {
   };
 }
 
-async function getRoute(start, end) {
-  const data = await fetchJson(
-    `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`
-  );
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
+const ROUTE_CACHE_MAX = 500;
+const ROUTE_TIMEOUT_MS = 4000;
+const routeCache = new Map();
 
-  const route = data.routes?.[0];
-  if (!route) throw new Error("No route found");
+function roundCoord(value, precision = 4) {
+  const factor = 10 ** precision;
+  return Math.round(Number(value) * factor) / factor;
+}
 
+function getRouteCacheKey(start, end) {
+  return [
+    roundCoord(start.latitude),
+    roundCoord(start.longitude),
+    roundCoord(end.latitude),
+    roundCoord(end.longitude),
+  ].join("|");
+}
+
+function haversineDistanceKm(a, b) {
+  const toRad = (value) => (value * Math.PI) / 180;
+  const r = 6371;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(h));
+}
+
+function buildFallbackRoute(start, end) {
+  const distanceKm = Number(haversineDistanceKm(start, end).toFixed(1));
   return {
-    distanceKm: Number((route.distance / 1000).toFixed(1)),
-    durationMinutes: Math.max(1, Math.round(route.duration / 60)),
-    geometry: route.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
+    distanceKm,
+    durationMinutes: Math.max(1, Math.round(distanceKm * 3 + 2)),
+    geometry: [
+      { latitude: Number(start.latitude), longitude: Number(start.longitude) },
+      { latitude: Number(end.latitude), longitude: Number(end.longitude) },
+    ],
   };
+}
+
+function pruneRouteCache() {
+  const now = Date.now();
+  for (const [key, entry] of routeCache.entries()) {
+    if (entry?.data && now - entry.timestamp >= ROUTE_CACHE_TTL_MS) {
+      routeCache.delete(key);
+    }
+  }
+  while (routeCache.size > ROUTE_CACHE_MAX) {
+    const oldestKey = routeCache.keys().next().value;
+    if (!oldestKey) break;
+    routeCache.delete(oldestKey);
+  }
+}
+
+async function getRoute(start, end) {
+  const cacheKey = getRouteCacheKey(start, end);
+  const cached = routeCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached?.data && now - cached.timestamp < ROUTE_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  if (cached?.promise) {
+    return cached.promise;
+  }
+
+  const promise = (async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
+    try {
+      const data = await fetchJson(
+        `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`,
+        { signal: controller.signal }
+      );
+
+      const route = data.routes?.[0];
+      if (!route) throw new Error("No route found");
+
+      const routeData = {
+        distanceKm: Number((route.distance / 1000).toFixed(1)),
+        durationMinutes: Math.max(1, Math.round(route.duration / 60)),
+        geometry: route.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
+      };
+
+      routeCache.set(cacheKey, { timestamp: Date.now(), data: routeData });
+      pruneRouteCache();
+      return routeData;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        const fallback = buildFallbackRoute(start, end);
+        routeCache.set(cacheKey, { timestamp: Date.now(), data: fallback });
+        pruneRouteCache();
+        return fallback;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  })();
+
+  routeCache.set(cacheKey, { timestamp: now, promise });
+
+  try {
+    return await promise;
+  } catch (error) {
+    routeCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 function calculateFare(rideType, isShare, distanceKm) {

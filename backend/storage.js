@@ -35,6 +35,15 @@ async function createStorage({ seedStore }) {
   let cache = null;
   let pgClient = null;
   let usingPostgres = false;
+  let writePromise = null;
+  let pendingWrite = false;
+
+  const cloneData = (value) => {
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  };
 
   if (databaseUrl) {
     const { Client } = require("pg");
@@ -68,8 +77,8 @@ async function createStorage({ seedStore }) {
     cache = loadFileStore(seedStore);
   }
 
-  const persist = async (store) => {
-    cache = JSON.parse(JSON.stringify(store));
+  const persist = async () => {
+    if (!cache) return;
     if (usingPostgres) {
       await pgClient.query(
         `INSERT INTO app_state (key, data, updated_at) VALUES ($1, $2::jsonb, NOW())
@@ -78,16 +87,27 @@ async function createStorage({ seedStore }) {
       );
       return;
     }
-    saveFileStore(cache, seedStore);
+    await fs.promises.writeFile(DATA_PATH, JSON.stringify(cache, null, 2));
   };
 
   return {
     mode: usingPostgres ? "postgres" : "file",
     readStore() {
-      return JSON.parse(JSON.stringify(cache));
+      return cloneData(cache);
     },
     async writeStore(store) {
-      await persist(store);
+      cache = cloneData(store);
+      pendingWrite = true;
+      if (!writePromise) {
+        writePromise = (async () => {
+          while (pendingWrite) {
+            pendingWrite = false;
+            await persist();
+          }
+          writePromise = null;
+        })();
+      }
+      await writePromise;
     },
   };
 }
