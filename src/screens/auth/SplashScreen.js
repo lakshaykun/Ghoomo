@@ -21,9 +21,10 @@ export default function SplashScreen({ navigation }) {
       Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
 
+    // Keep splash snappy; auth hydration happens in background.
     const timer = setTimeout(() => {
       navigation.replace("Login");
-    }, 2500);
+    }, 800);
     return () => clearTimeout(timer);
   }, []);
 

@@ -14,6 +14,7 @@ import { api } from "../../services/api";
 const STATUS_STEPS = [
   { key: BOOKING_STATUS.PENDING, label: "Waiting For Driver", icon: "time", color: "#F59E0B" },
   { key: BOOKING_STATUS.ACCEPTED, label: "Driver Assigned", icon: "person", color: "#3B82F6" },
+  { key: BOOKING_STATUS.ARRIVED, label: "Driver Arrived", icon: "pin", color: "#0EA5E9" },
   { key: BOOKING_STATUS.IN_PROGRESS, label: "Ride in Progress", icon: "navigate", color: "#10B981" },
   { key: BOOKING_STATUS.COMPLETED, label: "Completed", icon: "checkmark-circle", color: "#10B981" },
 ];
@@ -141,6 +142,8 @@ export default function RideTrackingScreen({ navigation }) {
                 ? `${booking.requestedDrivers?.length || 0} nearby drivers can accept this ride request`
                 : booking.status === BOOKING_STATUS.ACCEPTED
                 ? `${booking.driver?.name} will reach you in about ${booking.driver?.etaMinutes} min`
+                : booking.status === BOOKING_STATUS.ARRIVED
+                  ? "Your driver has reached pickup. Share OTP to start the trip"
                 : booking.status === BOOKING_STATUS.IN_PROGRESS
                   ? "Trip is live and synced with the backend"
                   : "Trip completed"}
@@ -205,6 +208,18 @@ export default function RideTrackingScreen({ navigation }) {
             <Text style={styles.fareVal}>₹{booking.fare}</Text>
           </View>
           <View style={styles.fareRow}>
+            <Text style={styles.fareLabel}>Payment</Text>
+            <Text style={styles.tripMeta}>{String(booking.paymentMethod || "cash").toUpperCase()}</Text>
+          </View>
+          {booking.scheduledAt ? (
+            <View style={styles.fareRow}>
+              <Text style={styles.fareLabel}>Scheduled</Text>
+              <Text style={styles.tripMeta}>
+                {new Date(booking.scheduledAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Distance / ETA</Text>
             <Text style={styles.tripMeta}>{booking.distance} km • {booking.durationMinutes} min</Text>
           </View>
@@ -233,8 +248,8 @@ export default function RideTrackingScreen({ navigation }) {
         ) : null}
 
         <View style={styles.actionsRow}>
-          {booking.status === BOOKING_STATUS.ACCEPTED ? <Button title="Share OTP" onPress={handleShareOtp} variant="success" style={{ flex: 1 }} /> : null}
-          {(booking.status === BOOKING_STATUS.PENDING || booking.status === BOOKING_STATUS.ACCEPTED) ? (
+          {(booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) ? <Button title="Share OTP" onPress={handleShareOtp} variant="success" style={{ flex: 1 }} /> : null}
+          {(booking.status === BOOKING_STATUS.PENDING || booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) ? (
             <Button title="Cancel Ride" onPress={handleCancel} variant="danger" variant2="outline" style={{ flex: 1 }} />
           ) : null}
         </View>

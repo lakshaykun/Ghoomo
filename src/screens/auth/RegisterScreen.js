@@ -1,13 +1,14 @@
 
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput, ActivityIndicator } from "react-native";
+import { Ionicons, AntDesign } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
-import { registerUser } from "../../store/slices/authSlice";
+import { registerUser, googleSignIn } from "../../store/slices/authSlice";
 import { fetchBusRoutes } from "../../store/slices/busRoutesSlice";
 import Button from "../../components/common/Button";
 import { COLORS, SPACING } from "../../constants";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useGoogleAuthRequest } from "../../services/firebaseAuth";
 
 const ROLE_OPTIONS = [
   { key: "user", label: "User", icon: "person", help: "Book rides and buses" },
@@ -67,6 +68,10 @@ export default function RegisterScreen({ navigation }) {
   const { loading, error } = useSelector(s => s.auth);
   const liveRoutes = useSelector((state) => state.busRoutes.routes);
   const availableRoutes = liveRoutes;
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showGoogleSignUpModal, setShowGoogleSignUpModal] = useState(false);
+  const [selectedRoleForGoogle, setSelectedRoleForGoogle] = useState("user");
+  const { promptAsync } = useGoogleAuthRequest();
   const [form, setForm] = useState({
     role: "user",
     name: "",
@@ -89,6 +94,23 @@ export default function RegisterScreen({ navigation }) {
   useEffect(() => {
     dispatch(fetchBusRoutes()).catch(() => {});
   }, [dispatch]);
+
+  const handleGoogleSignUp = async () => {
+    if (!promptAsync) {
+      Alert.alert("Error", "Google sign-up is not available at the moment");
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      dispatch(googleSignIn(promptAsync, selectedRoleForGoogle));
+      setShowGoogleSignUpModal(false);
+    } catch (err) {
+      Alert.alert("Error", err.message || "Google sign-up failed");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleRegister = () => {
     if (!form.name || !form.email || !form.phone || !form.city || !form.emergencyContact || !form.password) {
@@ -156,6 +178,29 @@ export default function RegisterScreen({ navigation }) {
             <Text style={styles.heroSub}>Set up your profile to start booking rides and bus seats.</Text>
           </View>
           <View style={styles.formCard}>
+            <Text style={styles.sectionTitle}>Quick Sign Up</Text>
+            <TouchableOpacity
+              style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+              onPress={() => setShowGoogleSignUpModal(true)}
+              disabled={googleLoading}
+              activeOpacity={0.8}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={COLORS.text} size="small" />
+              ) : (
+                <>
+                  <AntDesign name="google" size={20} color="#EA4335" />
+                  <Text style={styles.googleButtonText}>Sign up with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>Or fill details below</Text>
+              <View style={styles.divider} />
+            </View>
+
             <Text style={styles.sectionTitle}>Choose Role</Text>
             <View style={styles.roleGrid}>
               {ROLE_OPTIONS.map((option) => (
@@ -335,6 +380,74 @@ export default function RegisterScreen({ navigation }) {
           </View>
         </ScrollView>
       </View>
+
+      {showGoogleSignUpModal && (
+        <View style={styles.modalOverlay} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => !googleLoading && setShowGoogleSignUpModal(false)}
+            disabled={googleLoading}
+          />
+          <View style={styles.modalContent} pointerEvents="auto">
+            <ScrollView
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={styles.modalScrollContent}
+              scrollEnabled={true}
+            >
+              <TouchableOpacity
+                style={styles.modalClose}
+                onPress={() => !googleLoading && setShowGoogleSignUpModal(false)}
+                disabled={googleLoading}
+              >
+                <Ionicons name="close" size={24} color={COLORS.text} />
+              </TouchableOpacity>
+
+              <Text style={styles.modalTitle}>Select Your Role</Text>
+              <Text style={styles.modalSubtitle}>Choose how you want to use Ghoomo</Text>
+
+              <View style={styles.roleSelectGrid}>
+                {ROLE_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[
+                      styles.roleSelectCard,
+                      selectedRoleForGoogle === option.key && styles.roleSelectCardActive,
+                    ]}
+                    onPress={() => !googleLoading && setSelectedRoleForGoogle(option.key)}
+                    disabled={googleLoading}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.roleSelectIcon, selectedRoleForGoogle === option.key && styles.roleSelectIconActive]}>
+                      <Ionicons
+                        name={option.icon}
+                        size={24}
+                        color={selectedRoleForGoogle === option.key ? COLORS.white : COLORS.primary}
+                      />
+                    </View>
+                    <Text style={styles.roleSelectLabel}>{option.label}</Text>
+                    <Text style={styles.roleSelectHelp}>{option.help}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Button
+                title="Continue with Google"
+                onPress={handleGoogleSignUp}
+                loading={googleLoading}
+                variant="success"
+                style={{ marginTop: 16 }}
+              />
+              <Button
+                title="Cancel"
+                onPress={() => setShowGoogleSignUpModal(false)}
+                disabled={googleLoading}
+                style={{ marginTop: 12, backgroundColor: COLORS.border }}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -419,4 +532,78 @@ const styles = StyleSheet.create({
   routeEmpty: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF7ED", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#FED7AA" },
   routeEmptyText: { flex: 1, fontSize: 12, color: "#9A3412", fontWeight: "600" },
   error: { color: COLORS.error, fontSize: 13, textAlign: "center", marginBottom: 8, fontWeight: "500" },
+  dividerContainer: { flexDirection: "row", alignItems: "center", marginVertical: SPACING.md, gap: 12 },
+  divider: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  dividerText: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#DCDCDC",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: SPACING.sm,
+  },
+  googleButtonDisabled: { opacity: 0.6 },
+  googleButtonText: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "transparent",
+    justifyContent: "flex-end",
+    pointerEvents: "box-none",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    zIndex: 0,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: SPACING.lg,
+    maxHeight: "80%",
+    zIndex: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: SPACING.xl,
+  },
+  modalClose: {
+    alignSelf: "flex-end",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.inputBg,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: SPACING.md,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: COLORS.text, marginBottom: 6 },
+  modalSubtitle: { fontSize: 14, color: COLORS.textSecondary, marginBottom: SPACING.lg },
+  roleSelectGrid: { gap: 12, marginBottom: SPACING.lg },
+  roleSelectCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    padding: 16,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+  },
+  roleSelectCardActive: { borderColor: COLORS.primary, backgroundColor: "#EEF2FF" },
+  roleSelectIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF2FF",
+    marginBottom: 10,
+  },
+  roleSelectIconActive: { backgroundColor: COLORS.primary },
+  roleSelectLabel: { fontSize: 16, fontWeight: "700", color: COLORS.text, marginBottom: 4 },
+  roleSelectHelp: { fontSize: 12, color: COLORS.textSecondary },
 });

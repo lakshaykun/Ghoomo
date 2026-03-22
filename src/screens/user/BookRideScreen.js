@@ -30,6 +30,19 @@ const RIDE_OPTIONS = [
   { type: "cab", label: "Cab", icon: "car", color: "#6C63FF", desc: "AC cab, premium ride", shareable: true },
 ];
 
+const PAYMENT_OPTIONS = [
+  { key: "cash", label: "Cash", icon: "cash" },
+  { key: "upi", label: "UPI", icon: "phone-portrait" },
+  { key: "card", label: "Card", icon: "card" },
+  { key: "wallet", label: "Wallet", icon: "wallet" },
+];
+
+const SCHEDULE_OPTIONS = [
+  { key: "now", label: "Now", minutes: 0 },
+  { key: "15", label: "In 15 min", minutes: 15 },
+  { key: "30", label: "In 30 min", minutes: 30 },
+];
+
 function SimpleField({
   label,
   leftIcon,
@@ -81,6 +94,8 @@ export default function BookRideScreen({ navigation, route }) {
   const [searching, setSearching] = useState(null);
   const [currentCoords, setCurrentCoords] = useState(null);
   const [sharedSeatsWanted, setSharedSeatsWanted] = useState(1);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [scheduleKey, setScheduleKey] = useState("now");
 
   const selectedType = initType;
   const currentRide = RIDE_OPTIONS.find(r => r.type === selectedType) || RIDE_OPTIONS[2];
@@ -91,6 +106,15 @@ export default function BookRideScreen({ navigation, route }) {
   const hasAvailableDriver = Boolean(currentQuote?.availability?.available);
   const estDist = estimate?.distanceKm || 0;
   const estFare = estimate?.fare || fareInfo.base;
+  const nonSharedEstimate = Math.round((FARES[selectedType]?.base || 0) + (FARES[selectedType]?.perKm || 0) * estDist);
+  const sharedSavings = isShare && currentRide?.shareable ? Math.max(0, nonSharedEstimate - estFare) : 0;
+  const surgeAmount = estimate?.surgeAmount || 0;
+  const surgeMultiplier = estimate?.surgeMultiplier || 1;
+  const scheduledAt = (() => {
+    const option = SCHEDULE_OPTIONS.find((item) => item.key === scheduleKey);
+    if (!option || option.minutes <= 0) return null;
+    return new Date(Date.now() + option.minutes * 60 * 1000).toISOString();
+  })();
   const estTime = estimate?.durationMinutes || (selectedType === "bike" ? 12 : selectedType === "auto" ? 18 : 20);
 
   useEffect(() => {
@@ -133,8 +157,9 @@ export default function BookRideScreen({ navigation, route }) {
       isShare: isShare && currentRide?.shareable,
       pickup: pickupPlace,
       drop: dropPlace,
+      scheduledAt,
     })).catch(() => {});
-  }, [dispatch, dropPlace, currentRide?.shareable, isShare, pickupPlace, selectedType]);
+  }, [dispatch, dropPlace, currentRide?.shareable, isShare, pickupPlace, scheduledAt, selectedType]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -180,7 +205,7 @@ export default function BookRideScreen({ navigation, route }) {
 
   const handleBook = () => {
     if (!pickupPlace || !dropPlace) {
-      Alert.alert("Missing Info", "Please choose pickup and drop from the live map search");
+      Alert.alert("Missing Info", "Please choose pickup and drop locations from search");
       return;
     }
     if (!hasAvailableDriver) {
@@ -195,6 +220,8 @@ export default function BookRideScreen({ navigation, route }) {
       userId: user.id,
       isShare: isShare && currentRide?.shareable,
       sharedSeatsWanted: isShare && currentRide?.shareable ? sharedSeatsWanted : 0,
+      paymentMethod,
+      scheduledAt,
     }))
       .then(() => navigation.navigate("RideTracking"))
       .catch((bookingError) => Alert.alert("Booking Failed", bookingError.message || "Unable to create ride"));
@@ -278,7 +305,7 @@ export default function BookRideScreen({ navigation, route }) {
               {isShare && (
                 <>
                   <View style={styles.savingBadge}>
-                    <Text style={styles.savingText}>You save ₹{estFare - Math.round(FARES[fareKey]?.base + FARES[fareKey]?.perKm * estDist)} on this trip!</Text>
+                    <Text style={styles.savingText}>You save about ₹{sharedSavings} on this trip!</Text>
                   </View>
                   <View style={styles.shareCountWrap}>
                     <Text style={styles.shareCountLabel}>Looking for how many co-riders?</Text>
@@ -376,12 +403,64 @@ export default function BookRideScreen({ navigation, route }) {
           </View>
         </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment</Text>
+          <Card elevated>
+            <View style={styles.choiceRow}>
+              {PAYMENT_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.choiceChip, paymentMethod === option.key && styles.choiceChipActive]}
+                  onPress={() => setPaymentMethod(option.key)}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={14}
+                    color={paymentMethod === option.key ? COLORS.primary : COLORS.textSecondary}
+                  />
+                  <Text style={[styles.choiceText, paymentMethod === option.key && styles.choiceTextActive]}>{option.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Schedule</Text>
+          <Card elevated>
+            <View style={styles.choiceRow}>
+              {SCHEDULE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.choiceChip, scheduleKey === option.key && styles.choiceChipActive]}
+                  onPress={() => setScheduleKey(option.key)}
+                >
+                  <Ionicons
+                    name={option.key === "now" ? "flash" : "calendar"}
+                    size={14}
+                    color={scheduleKey === option.key ? COLORS.primary : COLORS.textSecondary}
+                  />
+                  <Text style={[styles.choiceText, scheduleKey === option.key && styles.choiceTextActive]}>{option.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {scheduledAt ? (
+              <Text style={styles.scheduleNote}>
+                Pickup time: {new Date(scheduledAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+              </Text>
+            ) : (
+              <Text style={styles.scheduleNote}>Instant trip request with nearest online driver</Text>
+            )}
+          </Card>
+        </View>
+
         {/* Fare Summary */}
         <View style={styles.section}>
           <Card style={styles.fareCard} elevated>
             <Text style={styles.fareSummaryTitle}>Fare Summary</Text>
             <View style={styles.fareRow}><Text style={styles.fareKey}>Base fare</Text><Text style={styles.fareVal}>₹{fareInfo.base}</Text></View>
             <View style={styles.fareRow}><Text style={styles.fareKey}>Distance ({estDist || "--"} km)</Text><Text style={styles.fareVal}>₹{Math.round(fareInfo.perKm * estDist)}</Text></View>
+            <View style={styles.fareRow}><Text style={styles.fareKey}>Surge ({surgeMultiplier.toFixed(2)}x)</Text><Text style={styles.fareVal}>₹{surgeAmount}</Text></View>
             <View style={styles.fareRow}><Text style={styles.fareKey}>Travel time</Text><Text style={styles.fareVal}>{estTime} min</Text></View>
             <View style={styles.fareRow}>
               <Text style={styles.fareKey}>Driver availability</Text>
@@ -395,6 +474,7 @@ export default function BookRideScreen({ navigation, route }) {
             </View>
             <View style={styles.divider} />
             <View style={styles.fareRow}><Text style={styles.fareTotalKey}>Total Estimate</Text><Text style={styles.fareTotalVal}>₹{estFare}</Text></View>
+            <View style={styles.fareRow}><Text style={styles.fareKey}>Payment mode</Text><Text style={styles.fareVal}>{paymentMethod.toUpperCase()}</Text></View>
             <Text style={styles.fareNote}>{currentQuote ? "* Based on live OpenStreetMap route data" : "* Search both locations to load live route pricing"}</Text>
             {availability?.message ? <Text style={[styles.fareNote, !hasAvailableDriver && styles.unavailableText]}>{availability.message}</Text> : null}
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -460,6 +540,22 @@ const styles = StyleSheet.create({
   shareCountChipActive: { borderColor: COLORS.success, backgroundColor: "#ECFDF5" },
   shareCountText: { fontSize: 12, fontWeight: "700", color: COLORS.textSecondary },
   shareCountTextActive: { color: COLORS.success },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  choiceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  choiceChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "12" },
+  choiceText: { fontSize: 12, fontWeight: "700", color: COLORS.textSecondary },
+  choiceTextActive: { color: COLORS.primary },
+  scheduleNote: { fontSize: 12, color: COLORS.textSecondary, marginTop: 10, fontWeight: "600" },
   locationActions: { marginTop: -8, marginBottom: 8 },
   locationButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#EEF2FF", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   locationButtonText: { fontSize: 12, fontWeight: "700", color: COLORS.primary },

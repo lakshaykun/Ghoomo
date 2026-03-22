@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -24,6 +24,7 @@ export default function BusDriverRouteScreen({ route, navigation }) {
   const [scanResult, setScanResult] = useState(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [bookingIdInput, setBookingIdInput] = useState("");
 
   useEffect(() => {
     dispatch(fetchBusRoutes()).catch(() => {});
@@ -119,6 +120,7 @@ export default function BusDriverRouteScreen({ route, navigation }) {
           data,
           message: "Ticket verified successfully.",
         });
+        setBookingIdInput("");
       } else {
         setScanResult({ valid: false, message: "Invalid or expired QR code" });
       }
@@ -173,7 +175,7 @@ export default function BusDriverRouteScreen({ route, navigation }) {
           <Text style={styles.sectionTitle}>Verify Passenger Ticket</Text>
           <Card elevated>
             <Text style={styles.scanInstructions}>
-              Selected route: {selectedRoute.name}. Scan the QR code to verify instantly.
+              Selected route: {selectedRoute.name}. Scan the QR code or enter the Booking ID to verify instantly.
             </Text>
             {permission && permission.granted ? (
               <View style={styles.cameraWrap}>
@@ -198,6 +200,32 @@ export default function BusDriverRouteScreen({ route, navigation }) {
                 <Text style={styles.permissionText}>Camera permission is required to scan tickets.</Text>
               </View>
             )}
+
+            <View style={styles.manualRow}>
+              <TextInput
+                value={bookingIdInput}
+                onChangeText={setBookingIdInput}
+                placeholder="Enter Booking ID (e.g. bus_...)"
+                placeholderTextColor={COLORS.gray}
+                style={styles.manualInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={[styles.verifyBtn, !bookingIdInput.trim() && styles.verifyBtnDisabled]}
+                onPress={() => {
+                  const id = bookingIdInput.trim();
+                  if (!id) return;
+                  setScanned(true);
+                  verifyQR(id);
+                }}
+                disabled={!bookingIdInput.trim()}
+              >
+                <Ionicons name="checkmark-circle" size={18} color={COLORS.white} />
+                <Text style={styles.verifyBtnText}>Verify</Text>
+              </TouchableOpacity>
+            </View>
+
             {scanned ? (
               <TouchableOpacity
                 style={styles.scanAgainBtn}
@@ -314,7 +342,30 @@ const styles = StyleSheet.create({
   scanFrameText: { fontSize: 12, color: "rgba(255,255,255,0.9)", fontWeight: "600" },
   permissionCard: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFF7ED", borderRadius: 12, padding: 12, marginBottom: 12 },
   permissionText: { flex: 1, fontSize: 12, color: "#9A3412", fontWeight: "600" },
-  scanAgainBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, marginBottom: 12 },
+  manualRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  manualInput: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 13,
+    color: COLORS.text,
+    backgroundColor: COLORS.inputBg || COLORS.grayLight,
+  },
+  verifyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+  },
+  verifyBtnDisabled: { opacity: 0.5 },
+  verifyBtnText: { fontSize: 13, fontWeight: "800", color: COLORS.white },
+  scanAgainBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white, marginBottom: 12 },
   scanAgainText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
   scanResult: { borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 12 },
   scanResultInfo: { flex: 1 },

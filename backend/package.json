@@ -9,13 +9,19 @@
   "scripts": {
     "build": "node -e \"console.log('No build step required')\"",
     "start": "node server.js",
+    "seed:roles": "node scripts/seed-role-users.js",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
   "dependencies": {
+    "express": "^4.18.2",
     "expo": "~54.0.33",
     "pg": "^8.16.3",
     "react": "19.1.0",
     "react-native": "0.81.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/pg": "^8.15.5"
   }
 }

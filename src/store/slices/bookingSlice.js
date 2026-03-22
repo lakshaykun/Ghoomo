@@ -232,7 +232,7 @@ export const fetchRideQuote = (payload) => async (dispatch) => {
 export const createRideBooking = (payload) => async (dispatch) => {
   dispatch(requestStart());
   try {
-    const { ride } = await api.createRide(payload);
+    const { ride, sharedRequest } = await api.createRide(payload);
     await sendLocalNotification({
       key: `ride-created-${ride.id}`,
       title: ride.status === BOOKING_STATUS.PENDING ? "Ride request sent" : "Ride booked",
@@ -244,6 +244,14 @@ export const createRideBooking = (payload) => async (dispatch) => {
             : "Your ride request has been created.",
       data: { rideId: ride.id, status: ride.status, role: "user" },
     });
+    if (sharedRequest) {
+      await sendLocalNotification({
+        key: `shared-ride-created-${sharedRequest.id}`,
+        title: "Shared ride request posted",
+        body: `Your shared ${ride.rideType} request is live for ${sharedRequest.requestedSeats} co-rider${sharedRequest.requestedSeats === 1 ? "" : "s"}.`,
+        data: { sharedRideRequestId: sharedRequest.id, rideId: ride.id, role: "user" },
+      });
+    }
     dispatch(setActiveBooking(ride));
     return ride;
   } catch (error) {

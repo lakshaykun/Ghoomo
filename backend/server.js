@@ -20,6 +20,7 @@ const FARES = {
 const BOOKING_STATUS = {
   PENDING: "pending",
   ACCEPTED: "accepted",
+  ARRIVED: "arrived",
   IN_PROGRESS: "in_progress",
   COMPLETED: "completed",
   CANCELLED: "cancelled",
@@ -111,6 +112,20 @@ function safeUser(user) {
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function normalizeIsoTimestamp(value) {
+  const input = normalizeText(value);
+  if (!input) return null;
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function normalizePaymentMethod(value) {
+  const method = normalizeText(value).toLowerCase();
+  const allowed = new Set(["cash", "upi", "card", "wallet"]);
+  return allowed.has(method) ? method : "cash";
 }
 
 function validateRegistration(body) {
@@ -422,12 +437,44 @@ async function getRoute(start, end) {
   }
 }
 
-function calculateFare(rideType, isShare, distanceKm) {
+function getTimeSurgeMultiplier(now = new Date()) {
+  const hour = now.getHours();
+  const isMorningPeak = hour >= 8 && hour <= 11;
+  const isEveningPeak = hour >= 17 && hour <= 21;
+  return isMorningPeak || isEveningPeak ? 1.2 : 1;
+}
+
+function getDemandSurgeMultiplier(nearbyDriversCount) {
+  if (nearbyDriversCount <= 0) return 1.35;
+  if (nearbyDriversCount === 1) return 1.2;
+  if (nearbyDriversCount === 2) return 1.1;
+  return 1;
+}
+
+function getScheduleAdjustmentMultiplier(scheduledAtIso) {
+  if (!scheduledAtIso) return 1;
+  const scheduledDate = new Date(scheduledAtIso);
+  const deltaMinutes = (scheduledDate.getTime() - Date.now()) / (60 * 1000);
+  if (deltaMinutes >= 30) return 0.95;
+  return 1;
+}
+
+function calculateFare(rideType, isShare, distanceKm, pricingContext = {}) {
   const fareKey = isShare ? `${rideType}Share` : rideType;
   const fareRule = FARES[fareKey] || FARES[rideType] || FARES.cab;
+  const rawBaseFare = fareRule.base + fareRule.perKm * distanceKm;
+  const timeMultiplier = getTimeSurgeMultiplier();
+  const demandMultiplier = getDemandSurgeMultiplier(Number(pricingContext.nearbyDriversCount || 0));
+  const scheduleMultiplier = getScheduleAdjustmentMultiplier(pricingContext.scheduledAt || null);
+  const surgeMultiplier = Number((timeMultiplier * demandMultiplier * scheduleMultiplier).toFixed(2));
+  const surgeAdjustedFare = rawBaseFare * surgeMultiplier;
+  const fare = Math.round(surgeAdjustedFare);
   return {
     fareKey,
-    fare: Math.round(fareRule.base + fareRule.perKm * distanceKm),
+    fare,
+    baseFare: Math.round(rawBaseFare),
+    surgeAmount: Math.max(0, Math.round(surgeAdjustedFare - rawBaseFare)),
+    surgeMultiplier,
     fareRule,
   };
 }
@@ -539,6 +586,49 @@ function assignDriver(store, pickup, rideType, excludedDriverIds = []) {
   }
 
   return null;
+}
+
+function movePointTowards(point, target, ratio) {
+  const lat = Number(point.latitude || 0);
+  const lon = Number(point.longitude || 0);
+  const targetLat = Number(target.latitude || lat);
+  const targetLon = Number(target.longitude || lon);
+  const nextLat = lat + (targetLat - lat) * ratio;
+  const nextLon = lon + (targetLon - lon) * ratio;
+  return {
+    latitude: Number(nextLat.toFixed(6)),
+    longitude: Number(nextLon.toFixed(6)),
+  };
+}
+
+function tickNearbyDriversTowardsPickup(store, pickup, rideType) {
+  const activeDriverIds = getActiveDriverIds(store);
+  const allowedVehicleTypes = getMatchingVehicleTypes(rideType || "cab");
+  const onlineDrivers = store.users.filter(
+    (user) =>
+      user.role === "driver" &&
+      user.vehicleType !== "bus" &&
+      Boolean(user.online) &&
+      allowedVehicleTypes.includes(user.vehicleType) &&
+      !activeDriverIds.has(user.id)
+  );
+
+  onlineDrivers.forEach((driver) => {
+    const current = driver.currentLocation || {
+      latitude: DEFAULT_CITY.lat,
+      longitude: DEFAULT_CITY.lon,
+    };
+    const approached = movePointTowards(current, pickup, 0.16);
+    const jitterLat = (Math.random() - 0.5) * 0.0004;
+    const jitterLon = (Math.random() - 0.5) * 0.0004;
+    driver.currentLocation = {
+      latitude: Number((approached.latitude + jitterLat).toFixed(6)),
+      longitude: Number((approached.longitude + jitterLon).toFixed(6)),
+    };
+    driver.lastSeenAt = new Date().toISOString();
+  });
+
+  return getNearbyDrivers(store, pickup, rideType || "cab");
 }
 
 function rejectAndReassignRide(store, ride, rejectingDriverId) {
@@ -847,6 +937,96 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Google authentication endpoint
+    if (req.method === "POST" && requestUrl.pathname === "/api/auth/google-login") {
+      const body = await parseBody(req);
+      const store = readStore();
+      
+      const firebaseUid = normalizeText(body.firebaseUid);
+      const email = String(body.email || "").trim().toLowerCase();
+      const displayName = normalizeText(body.displayName);
+      const role = normalizeText(body.role || USER_ROLES.USER);
+      
+      if (!firebaseUid || !email || !displayName) {
+        sendJson(res, 400, { message: "Firebase UID, email, and display name are required" });
+        return;
+      }
+
+      if (![USER_ROLES.USER, USER_ROLES.DRIVER, USER_ROLES.ADMIN].includes(role)) {
+        sendJson(res, 400, { message: "Invalid role selected" });
+        return;
+      }
+
+      // Check if user already exists by firebase UID
+      let user = store.users.find((entry) => entry.firebaseUid === firebaseUid);
+      
+      if (user) {
+        // User exists, update last login
+        user.lastLogin = new Date().toISOString();
+        await writeStore(store);
+        sendJson(res, 200, { user: safeUser(user), isNewUser: false });
+        return;
+      }
+
+      // Check if email already exists
+      user = store.users.find((entry) => entry.email === email);
+      if (user && !user.firebaseUid) {
+        // Email exists but not linked to Firebase - link it
+        user.firebaseUid = firebaseUid;
+        user.authMethod = "google";
+        user.lastLogin = new Date().toISOString();
+        await writeStore(store);
+        sendJson(res, 200, { user: safeUser(user), isNewUser: false });
+        return;
+      } else if (user && user.firebaseUid && user.firebaseUid !== firebaseUid) {
+        // Email exists but linked to different Firebase UID
+        sendJson(res, 409, { message: "Email already registered with a different account" });
+        return;
+      }
+
+      // Create new user with Google auth
+      const newUser = {
+        id: buildId("u"),
+        firebaseUid,
+        name: displayName,
+        email,
+        role,
+        authMethod: "google",
+        photoURL: body.photoURL || null,
+        phone: null,
+        city: null,
+        emergencyContact: null,
+        password: null,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true,
+      };
+
+      // If driver role, add required driver fields
+      if (role === USER_ROLES.DRIVER) {
+        newUser.vehicleType = null;
+        newUser.vehicleNo = null;
+        newUser.licenseNumber = null;
+        newUser.rating = 5;
+        newUser.online = false;
+        newUser.currentLocation = {
+          latitude: DEFAULT_CITY.lat,
+          longitude: DEFAULT_CITY.lon,
+        };
+      }
+
+      // If admin role, add required admin fields
+      if (role === USER_ROLES.ADMIN) {
+        newUser.employeeId = null;
+        newUser.organization = null;
+      }
+
+      store.users.push(newUser);
+      await writeStore(store);
+      sendJson(res, 201, { user: safeUser(newUser), isNewUser: true });
+      return;
+    }
+
     if (requestUrl.pathname.match(/^\/api\/users\/[^/]+\/push-token$/)) {
       const userId = requestUrl.pathname.split("/")[3];
       const store = readStore();
@@ -1031,8 +1211,12 @@ const server = http.createServer(async (req, res) => {
       const pickup = await ensureLocation(body.pickup);
       const drop = await ensureLocation(body.drop);
       const route = await getRoute(pickup, drop);
-      const pricing = calculateFare(body.rideType || "cab", Boolean(body.isShare), route.distanceKm);
+      const normalizedSchedule = normalizeIsoTimestamp(body.scheduledAt);
       const nearbyDrivers = getNearbyDrivers(readStore(), pickup, body.rideType || "cab");
+      const pricing = calculateFare(body.rideType || "cab", Boolean(body.isShare), route.distanceKm, {
+        nearbyDriversCount: nearbyDrivers.length,
+        scheduledAt: normalizedSchedule,
+      });
       const driver = nearbyDrivers[0] || null;
       sendJson(res, 200, {
         pickup,
@@ -1040,10 +1224,14 @@ const server = http.createServer(async (req, res) => {
         route,
         estimate: {
           fare: pricing.fare,
+          baseFare: pricing.baseFare,
+          surgeAmount: pricing.surgeAmount,
+          surgeMultiplier: pricing.surgeMultiplier,
           distanceKm: route.distanceKm,
           durationMinutes: route.durationMinutes,
           fareRule: pricing.fareRule,
           shareApplied: Boolean(body.isShare),
+          scheduledAt: normalizedSchedule,
         },
         driver,
         nearbyDrivers,
@@ -1054,14 +1242,43 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && requestUrl.pathname === "/api/drivers/nearby") {
+      const lat = Number(requestUrl.searchParams.get("lat"));
+      const lon = Number(requestUrl.searchParams.get("lon"));
+      const rideType = normalizeText(requestUrl.searchParams.get("rideType") || "cab") || "cab";
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        sendJson(res, 400, { message: "lat and lon are required" });
+        return;
+      }
+
+      const store = readStore();
+      const pickup = {
+        latitude: lat,
+        longitude: lon,
+        name: "Selected Pickup",
+      };
+      const nearbyDrivers = tickNearbyDriversTowardsPickup(store, pickup, rideType);
+      await writeStore(store);
+      sendJson(res, 200, {
+        drivers: nearbyDrivers,
+        refreshedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
     if (req.method === "POST" && requestUrl.pathname === "/api/rides") {
       const body = await parseBody(req);
       const store = readStore();
       const pickup = await ensureLocation(body.pickup);
       const drop = await ensureLocation(body.drop);
       const route = await getRoute(pickup, drop);
-      const pricing = calculateFare(body.rideType || "cab", Boolean(body.isShare), route.distanceKm);
       const nearbyDrivers = getNearbyDrivers(store, pickup, body.rideType || "cab");
+      const normalizedSchedule = normalizeIsoTimestamp(body.scheduledAt);
+      const pricing = calculateFare(body.rideType || "cab", Boolean(body.isShare), route.distanceKm, {
+        nearbyDriversCount: nearbyDrivers.length,
+        scheduledAt: normalizedSchedule,
+      });
+      const paymentMethod = normalizePaymentMethod(body.paymentMethod);
       if (!nearbyDrivers.length) {
         sendJson(res, 409, { message: "No online drivers are available near this pickup location right now." });
         return;
@@ -1077,8 +1294,13 @@ const server = http.createServer(async (req, res) => {
         drop,
         route,
         fare: pricing.fare,
+        baseFare: pricing.baseFare,
+        surgeAmount: pricing.surgeAmount,
+        surgeMultiplier: pricing.surgeMultiplier,
         distance: route.distanceKm,
         durationMinutes: route.durationMinutes,
+        paymentMethod,
+        scheduledAt: normalizedSchedule,
         status: BOOKING_STATUS.PENDING,
         createdAt: new Date().toISOString(),
         otp: String(Math.floor(1000 + Math.random() * 9000)),
@@ -1242,7 +1464,18 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 400, { message: "Invalid OTP. Ask the rider for the correct trip OTP before starting." });
           return;
         }
+        if (![BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ARRIVED].includes(ride.status)) {
+          sendJson(res, 409, { message: "Ride can only start after driver acceptance." });
+          return;
+        }
         ride.otpVerifiedAt = new Date().toISOString();
+      }
+
+      if (body.status === BOOKING_STATUS.ARRIVED) {
+        if (ride.status !== BOOKING_STATUS.ACCEPTED) {
+          sendJson(res, 409, { message: "Driver can mark arrived only after accepting the ride." });
+          return;
+        }
       }
 
       if (
@@ -1339,6 +1572,13 @@ const server = http.createServer(async (req, res) => {
         await notifyUserById(store, ride.userId, {
           title: "Ride started",
           body: `${ride.driver?.name || "Your driver"} verified the OTP and started the trip.`,
+          data: { rideId: ride.id, status: ride.status, role: "user" },
+        });
+      }
+      if (ride.status === BOOKING_STATUS.ARRIVED) {
+        await notifyUserById(store, ride.userId, {
+          title: "Driver arrived",
+          body: `${ride.driver?.name || "Your driver"} has reached the pickup point. Share OTP to begin.`,
           data: { rideId: ride.id, status: ride.status, role: "user" },
         });
       }

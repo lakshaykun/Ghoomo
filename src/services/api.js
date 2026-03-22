@@ -56,6 +56,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(user),
     }),
+  googleLogin: (googleUserData) =>
+    request("/api/auth/google-login", {
+      method: "POST",
+      body: JSON.stringify(googleUserData),
+    }),
   registerPushToken: (userId, token) =>
     request(`/api/users/${userId}/push-token`, {
       method: "POST",
@@ -77,6 +82,10 @@ export const api = {
     ),
   reverseGeocode: ({ latitude, longitude }) =>
     request(`/api/places/reverse?lat=${latitude}&lon=${longitude}`),
+  getNearbyDrivers: ({ latitude, longitude, rideType }) =>
+    request(
+      `/api/drivers/nearby?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&rideType=${encodeURIComponent(rideType || "cab")}`
+    ),
   fetchQuote: (payload) =>
     request("/api/rides/quote", {
       method: "POST",

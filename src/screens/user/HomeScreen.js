@@ -1,14 +1,12 @@
 
-import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, StatusBar, Alert } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, StatusBar } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, FARES, RADIUS, SHADOWS, SPACING } from "../../constants";
 import Card from "../../components/common/Card";
-import Button from "../../components/common/Button";
-import { fetchSharedRides, joinSharedRideRequest, stopSharedRideRequest } from "../../store/slices/sharedRidesSlice";
 
 const { width } = Dimensions.get("window");
 const isTablet = width >= 768;
@@ -24,41 +22,10 @@ const SERVICES = [
 ];
 
 export default function HomeScreen({ navigation }) {
-  const dispatch = useDispatch();
   const user = useSelector(s => s.auth.user);
   const activeBooking = useSelector(s => s.booking.activeBooking);
-  const { myRequests, availableRequests } = useSelector((state) => state.sharedRides);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
-
-  useEffect(() => {
-    if (!user?.id) return undefined;
-    dispatch(fetchSharedRides(user.id)).catch(() => {});
-    const intervalId = setInterval(() => {
-      dispatch(fetchSharedRides(user.id)).catch(() => {});
-    }, 10000);
-    return () => clearInterval(intervalId);
-  }, [dispatch, user?.id]);
-
-  const handleJoinSharedRide = (requestId) => {
-    dispatch(joinSharedRideRequest(requestId, user.id)).catch((error) =>
-      Alert.alert("Unable to Join", error.message)
-    );
-  };
-
-  const handleStopSharedRide = (requestId) => {
-    Alert.alert("Stop Shared Request", "This shared ride request will be removed from the list.", [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Stop",
-        style: "destructive",
-        onPress: () =>
-          dispatch(stopSharedRideRequest(requestId, user.id)).catch((error) =>
-            Alert.alert("Unable to Stop", error.message)
-          ),
-      },
-    ]);
-  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -145,52 +112,6 @@ export default function HomeScreen({ navigation }) {
           </LinearGradient>
         </View>
 
-        {(myRequests.length > 0 || availableRequests.length > 0) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shared Ride Requests</Text>
-            {myRequests.map((request) => (
-              <Card key={request.id} elevated style={styles.sharedCard}>
-                <View style={styles.sharedHeader}>
-                  <View style={styles.sharedBadge}>
-                    <Ionicons name="people" size={18} color={COLORS.success} />
-                  </View>
-                  <View style={styles.sharedInfo}>
-                    <Text style={styles.sharedTitle}>Your shared {request.rideType}</Text>
-                    <Text style={styles.sharedRoute} numberOfLines={2}>{request.pickup?.name} to {request.drop?.name}</Text>
-                  </View>
-                </View>
-                <Text style={styles.sharedMeta}>
-                  {request.acceptedCount}/{request.requestedSeats} joined • {request.remainingSeats} seat{request.remainingSeats === 1 ? "" : "s"} left
-                </Text>
-                <Button title="Stop Request" onPress={() => handleStopSharedRide(request.id)} variant="danger" variant2="outline" />
-              </Card>
-            ))}
-
-            {availableRequests.map((request) => (
-              <Card key={request.id} elevated style={styles.sharedCard}>
-                <View style={styles.sharedHeader}>
-                  <View style={[styles.sharedBadge, { backgroundColor: COLORS.primary + "15" }]}>
-                    <Ionicons name="people-circle" size={18} color={COLORS.primary} />
-                  </View>
-                  <View style={styles.sharedInfo}>
-                    <Text style={styles.sharedTitle}>{request.ownerName}'s shared {request.rideType}</Text>
-                    <Text style={styles.sharedRoute} numberOfLines={2}>{request.pickup?.name} to {request.drop?.name}</Text>
-                  </View>
-                </View>
-                <Text style={styles.sharedMeta}>
-                  {request.remainingSeats} seat{request.remainingSeats === 1 ? "" : "s"} available • {request.acceptedCount} joined
-                </Text>
-                <Button
-                  title="Accept Shared Request"
-                  onPress={() => handleJoinSharedRide(request.id)}
-                  variant="success"
-                  disabled={Boolean(activeBooking)}
-                />
-              </Card>
-            ))}
-          </View>
-        )}
-
         <View style={{ height: SPACING.xxl }} />
       </ScrollView>
     </SafeAreaView>
@@ -265,11 +186,4 @@ const styles = StyleSheet.create({
   promoBanner: { borderRadius: RADIUS.lg, padding: SPACING.lg, flexDirection: "row", justifyContent: "space-between", alignItems: "center", ...SHADOWS.soft },
   promoTitle: { fontSize: 20, fontWeight: "800", color: COLORS.white, marginBottom: 4 },
   promoSub: { fontSize: 13, color: "rgba(255,255,255,0.85)", maxWidth: 180 },
-  sharedCard: { marginBottom: SPACING.sm },
-  sharedHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 10 },
-  sharedBadge: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.success + "15" },
-  sharedInfo: { flex: 1 },
-  sharedTitle: { fontSize: 15, fontWeight: "800", color: COLORS.text, marginBottom: 4 },
-  sharedRoute: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 18 },
-  sharedMeta: { fontSize: 12, fontWeight: "700", color: COLORS.primary, marginBottom: 12 },
 });

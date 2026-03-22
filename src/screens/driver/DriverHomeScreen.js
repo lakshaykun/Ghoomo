@@ -337,6 +337,23 @@ export default function DriverHomeScreen() {
                 <View style={styles.actionRow}>
                   {activeRide.status === BOOKING_STATUS.ACCEPTED ? (
                     <View style={styles.otpStartWrap}>
+                      <Button
+                        title="Mark Arrived"
+                        onPress={() => handleRideAction(activeRide.id, BOOKING_STATUS.ARRIVED)}
+                        variant="primary"
+                        style={{ flex: 1 }}
+                      />
+                      <Button
+                        title="Reject Ride"
+                        onPress={() => handleRejectRide(activeRide.id)}
+                        variant="danger"
+                        variant2="outline"
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  ) : null}
+                  {activeRide.status === BOOKING_STATUS.ARRIVED ? (
+                    <View style={styles.otpStartWrap}>
                       <View style={styles.otpFieldWrap}>
                         <Text style={styles.otpLabel}>Enter Rider OTP</Text>
                         <TextInput
@@ -370,10 +387,9 @@ export default function DriverHomeScreen() {
                         disabled={enteredOtp.trim().length < 4}
                       />
                       <Button
-                        title="Reject Ride"
-                        onPress={() => handleRejectRide(activeRide.id)}
-                        variant="danger"
-                        variant2="outline"
+                        title="Need Help"
+                        onPress={() => Alert.alert("Support", "Ask rider to share the correct OTP. You can start only after OTP verification.")}
+                        variant="outline"
                         style={{ flex: 1 }}
                       />
                     </View>
