@@ -34,3 +34,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+#ios
+ios/Pods/
+node_modules/
+android/.gradle/
+build/
