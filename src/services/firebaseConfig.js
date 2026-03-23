@@ -1,5 +1,5 @@
 // Firebase configuration for Ghoomo app
-import { initializeApp } from "firebase/app";
+import { getApp, getApps, initializeApp } from "firebase/app";
 import {
   getAuth,
   initializeAuth,
@@ -22,12 +22,25 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Auth with React Native persistence
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-});
+let authInstance;
+
+try {
+  authInstance = initializeAuth(app, {
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+  });
+} catch (error) {
+  // Fast refresh can re-run module initialization while auth already exists.
+  if (error?.code === "auth/already-initialized") {
+    authInstance = getAuth(app);
+  } else {
+    throw error;
+  }
+}
+
+export const auth = authInstance;
 
 // Initialize Firestore (optional, for storing user roles and profiles)
 export const db = getFirestore(app);

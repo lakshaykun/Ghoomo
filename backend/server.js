@@ -417,13 +417,27 @@ async function searchPlaces(query, near) {
     params.set("bounded", "0");
   }
 
-  const data = await fetchJson(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
-  return data.map((place) => ({
-    id: String(place.place_id),
-    name: place.display_name,
-    latitude: Number(place.lat),
-    longitude: Number(place.lon),
-  }));
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PLACE_SEARCH_TIMEOUT_MS);
+
+  try {
+    const data = await fetchJson(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+      signal: controller.signal,
+    });
+    return data.map((place) => ({
+      id: String(place.place_id),
+      name: place.display_name,
+      latitude: Number(place.lat),
+      longitude: Number(place.lon),
+    }));
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return [];
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function reverseGeocode(lat, lon) {
@@ -445,6 +459,7 @@ async function reverseGeocode(lat, lon) {
 const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
 const ROUTE_CACHE_MAX = 500;
 const ROUTE_TIMEOUT_MS = 4000;
+const PLACE_SEARCH_TIMEOUT_MS = Number(process.env.PLACE_SEARCH_TIMEOUT_MS || 6000);
 const routeCache = new Map();
 
 function roundCoord(value, precision = 4) {

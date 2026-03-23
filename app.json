@@ -48,6 +48,7 @@
       "expo-font"
     ],
     "extra": {
+      "apiBaseUrl": "https://ghoomo-backend.onrender.com",
       "eas": {
         "projectId": ""
       },
