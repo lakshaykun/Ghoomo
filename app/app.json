@@ -5,8 +5,15 @@
     "version": "1.0.0",
     "runtimeVersion": "1.0.0",
     "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/34a9c2f4-8e0e-4d29-a0b2-b8b4eaf924ed"
     },
+    "android": {
+      "package": "com.ghoomo.app",
+      "versionCode": 1
+    },
+    "orientation": "portrait",
     "web": {},
     "extra": {
       "apiBaseUrl": "https://backend-fawn-seven-41.vercel.app",

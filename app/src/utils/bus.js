@@ -1,10 +1,16 @@
 export const BUS_WAITLIST_LIMIT = 10;
 
 function parseTimeLabel(timeLabel) {
-  const [time, period] = timeLabel.trim().split(" ");
+  const safeLabel = String(timeLabel || "12:00 PM").trim();
+  const [time, periodText = "AM"] = safeLabel.split(" ");
+  const period = periodText.toUpperCase();
   const [hourText, minuteText] = time.split(":");
   let hour = Number(hourText);
   const minute = Number(minuteText);
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return { hour: 12, minute: 0 };
+  }
 
   if (period === "PM" && hour !== 12) hour += 12;
   if (period === "AM" && hour === 12) hour = 0;
@@ -13,7 +19,7 @@ function parseTimeLabel(timeLabel) {
 }
 
 export function getNextDeparture(route, now = new Date()) {
-  const { hour, minute } = parseTimeLabel(route.departureTime);
+  const { hour, minute } = parseTimeLabel(route?.departureTime);
   const departure = new Date(now);
   departure.setHours(hour, minute, 0, 0);
 
@@ -54,21 +60,27 @@ export function formatRelativeMinutes(target, now = new Date()) {
 }
 
 export function getRouteOccupancy(route, busBookings = []) {
+  const routeId = route?.id;
+  const totalSeats = Number.isFinite(Number(route?.totalSeats)) && Number(route?.totalSeats) > 0
+    ? Number(route.totalSeats)
+    : 40;
+  const bookedSeats = Array.isArray(route?.bookedSeats) ? route.bookedSeats : [];
+
   const activeBookings = busBookings.filter(
-    (booking) => booking.routeId === route.id && booking.status !== "cancelled"
+    (booking) => booking.routeId === routeId && booking.status !== "cancelled"
   );
   const confirmedSeatBookings = activeBookings.filter(
     (booking) => !booking.isWaiting && typeof booking.seatNumber === "number"
   );
   const confirmedSeatNumbers = [
-    ...route.bookedSeats,
+    ...bookedSeats,
     ...confirmedSeatBookings.map((booking) => booking.seatNumber),
   ];
   const dedupedConfirmedSeats = [...new Set(confirmedSeatNumbers)].sort((a, b) => a - b);
   const waitingBookings = activeBookings
     .filter((booking) => booking.isWaiting)
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  const availableSeats = Array.from({ length: route.totalSeats }, (_, index) => index + 1).filter(
+  const availableSeats = Array.from({ length: totalSeats }, (_, index) => index + 1).filter(
     (seatNumber) => !dedupedConfirmedSeats.includes(seatNumber)
   );
 
@@ -78,7 +90,7 @@ export function getRouteOccupancy(route, busBookings = []) {
     availableSeats,
     availableSeatCount: availableSeats.length,
     waitlistRemaining: Math.max(0, BUS_WAITLIST_LIMIT - waitingBookings.length),
-    occupancyRatio: (route.totalSeats - availableSeats.length) / route.totalSeats,
+    occupancyRatio: (totalSeats - availableSeats.length) / totalSeats,
   };
 }
 

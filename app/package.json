@@ -7,7 +7,10 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build:android:apk": "eas build -p android --profile preview",
-    "build:android:prod": "eas build -p android --profile production"
+    "build:android:prod": "eas build -p android --profile production",
+    "build:android:prod-apk": "eas build -p android --profile production-apk",
+    "update:preview": "eas update --channel preview --message \"Preview OTA update\"",
+    "update:production": "eas update --channel production --message \"Production OTA update\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

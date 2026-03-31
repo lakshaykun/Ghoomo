@@ -7,12 +7,16 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://backend-fawn-seven-41.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "channel": "production",
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },

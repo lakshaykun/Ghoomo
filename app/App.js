@@ -10,6 +10,7 @@ import { enableScreens } from "react-native-screens";
 import { store } from "./src/store";
 import RootNavigator from "./src/navigation/RootNavigator";
 import { initializeNotifications } from "./src/services/notifications";
+import { checkAndApplyOtaUpdate } from "./src/services/appUpdate";
 import "./src/services/backgroundLocation";
 import { hydrateAuthSession } from "./src/store/slices/authSlice";
 import { COLORS } from "./src/constants";
@@ -38,6 +39,12 @@ function AppBootstrap() {
 export default function App() {
   useEffect(() => {
     initializeNotifications().catch(() => {});
+
+    const updateTimer = setTimeout(() => {
+      checkAndApplyOtaUpdate().catch(() => {});
+    }, 2000);
+
+    return () => clearTimeout(updateTimer);
   }, []);
 
   return (
