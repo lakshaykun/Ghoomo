@@ -3,6 +3,12 @@
     "name": "Ghoomo",
     "slug": "ghoomo",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/34a9c2f4-8e0e-4d29-a0b2-b8b4eaf924ed"
+    },
     "web": {},
     "extra": {
       "apiBaseUrl": "https://backend-fawn-seven-41.vercel.app",

@@ -41,6 +41,88 @@
   gap: 16px;
 }
 
+.route-form-full {
+  grid-column: 1 / -1;
+}
+
+.stops-editor {
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.stops-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.stops-editor-header h3 {
+  margin: 0;
+  color: var(--gray-800);
+  font-size: 15px;
+}
+
+.btn-add-stop {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-add-stop:hover {
+  filter: brightness(0.95);
+}
+
+.stops-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.stops-table th,
+.stops-table td {
+  border-bottom: 1px solid var(--gray-200);
+  padding: 8px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.stops-table input {
+  width: 100%;
+}
+
+.btn-remove-stop {
+  background: #FEE2E2;
+  color: #991B1B;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-remove-stop:hover {
+  background: #FECACA;
+}
+
+.btn-remove-stop:disabled,
+.btn-add-stop:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.route-form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .route-form input {
   padding: 10px 16px;
   border: 1px solid var(--gray-300);
@@ -81,6 +163,13 @@
   background: var(--gray-400);
 }
 
+.route-error {
+  margin: 0 0 16px;
+  color: #B91C1C;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .table-card {
   background: white;
   border-radius: 12px;
@@ -113,6 +202,22 @@
   padding: 12px;
   border-bottom: 1px solid var(--gray-200);
   color: var(--gray-600);
+}
+
+.timetable-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.timetable-item {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .data-table tbody tr:hover {
@@ -166,6 +271,16 @@
 
   .route-form {
     grid-template-columns: 1fr;
+  }
+
+  .stops-editor-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .stops-table {
+    min-width: 540px;
   }
 
   .data-table {
