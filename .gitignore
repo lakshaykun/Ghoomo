@@ -1,0 +1,71 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+.expo/
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+.env.*
+/app/.env.local
+/app/.env
+/app/.env.*
+/app/.env.*.local
+
+/web/.env.local
+/web/.env
+/web/.env.*
+/web/.env.*.local
+
+# keep safe templates committed
+!.env.example
+!**/.env.example
+
+# secrets, keys, and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.cer
+*.crt
+*.der
+*.asc
+*.kdbx
+*.p8
+google-services.json
+GoogleService-Info.plist
+*service-account*.json
+*service_account*.json
+*firebase*admin*.json
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
