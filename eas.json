@@ -17,6 +17,13 @@
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://ghoomo-backend.onrender.com"
       }
+    },
+    "production-apk": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
