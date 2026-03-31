@@ -35,6 +35,8 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Build admin web
+        env:
+          VITE_API_URL: https://backend-fawn-seven-41.vercel.app/api
         run: npm run build
 
       - name: Setup Pages
