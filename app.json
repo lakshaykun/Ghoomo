@@ -11,7 +11,9 @@
     "updates": {
       "url": "https://u.expo.dev/26c3999b-9063-447f-896a-df95f76077e4"
     },
-    "android": {},
+    "android": {
+      "package": "com.shivam1507.ghoomoplatform"
+    },
     "ios": {}
   }
 }
