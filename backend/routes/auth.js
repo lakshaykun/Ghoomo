@@ -1,15 +1,18 @@
 /**
  * Authentication Routes
- * Placeholder for testing
  */
 
 const express = require('express');
-const router = express.Router();
-const authController = require('../controllers/authController');
+const router  = express.Router();
+const ctrl    = require('../controllers/authController');
+const { verifyToken } = require('../middleware/auth');
 
-// Public routes
-router.post('/register', authController.register);
-router.post('/login', authController.login);
-router.post('/verify-otp', authController.verifyOTP);
+// Public
+router.post('/send-otp',   ctrl.sendOTP);
+router.post('/verify-otp', ctrl.verifyOTP);
+
+// Protected
+router.get('/me',      verifyToken, ctrl.getMe);
+router.put('/profile', verifyToken, ctrl.updateProfile);
 
 module.exports = router;

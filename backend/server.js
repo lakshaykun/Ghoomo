@@ -4,64 +4,89 @@
  */
 
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const http = require('http');
-const socketIO = require('socket.io');
+const express   = require('express');
+const cors      = require('cors');
+const http      = require('http');
+const socketIO  = require('socket.io');
+const socketMgr = require('./socket');
 
-// Import routes (to be created)
-// const authRoutes = require('./routes/auth');
-// const rideRoutes = require('./routes/rides');
-// const gpsRoutes = require('./routes/gps');
-// const adminRoutes = require('./routes/admin');
-// const driverRoutes = require('./routes/drivers');
+// Routes
+const authRoutes     = require('./routes/auth');
+const rideRoutes     = require('./routes/rides');
+const gpsRoutes      = require('./routes/gps');
+const adminRoutes    = require('./routes/admin');
+const locationRoutes = require('./routes/locations');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
-const io = socketIO(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+const io     = socketIO(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-// Middleware
+// Init socket singleton so controllers can emit
+socketMgr.init(io);
+
+// ── Middleware ────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Request logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
-});
+// ── Health ────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-// Routes
-// app.use('/api/auth', authRoutes);
-// app.use('/api/rides', rideRoutes);
-// app.use('/api/gps', gpsRoutes);
-// app.use('/api/admin', adminRoutes);
-// app.use('/api/drivers', driverRoutes);
+// ── API Routes ────────────────────────────────────────────────────
+app.use('/api/auth',      authRoutes);
+app.use('/api/rides',     rideRoutes);
+app.use('/api/gps',       gpsRoutes);
+app.use('/api/admin',     adminRoutes);
+app.use('/api/locations', locationRoutes);
 
-// WebSocket connection handling
+// ── WebSocket ─────────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
+  console.log('Client connected:', socket.id);
 
-  // Handle driver location updates
+  // Driver joins their personal room so the server can address them
+  socket.on('join_driver', ({ driver_id }) => {
+    if (driver_id) {
+      socket.join(`driver:${driver_id}`);
+      console.log(`Driver ${driver_id} joined room`);
+    }
+  });
+
+  // User joins a ride room to get real-time driver location
+  socket.on('join_ride', ({ ride_id }) => {
+    if (ride_id) {
+      socket.join(`ride:${ride_id}`);
+      console.log(`Client joined ride room ${ride_id}`);
+    }
+  });
+
+  // Driver broadcasts location update
   socket.on('driver_location', (data) => {
-    console.log('Driver location:', data);
-    // Broadcast to admin dashboard
+    const { driver_id, ride_id, latitude, longitude } = data;
+    if (ride_id) {
+      io.to(`ride:${ride_id}`).emit('driver_location', { latitude, longitude });
+    }
+    // Also update admin dashboard
     socket.broadcast.emit('driver_location_update', data);
   });
 
-  // Handle ride updates
+  // Driver accepts a ride request  → inform user
+  socket.on('ride_accepted', (data) => {
+    const { request_id, ride_id, driver_id } = data;
+    io.emit('ride_accepted', { request_id, ride_id, driver_id });
+  });
+
+  // Generic ride status update
   socket.on('ride_update', (data) => {
-    console.log('Ride update:', data);
+    const { ride_id, status } = data;
+    if (ride_id) {
+      io.to(`ride:${ride_id}`).emit('ride_status_update', { ride_id, status });
+    }
     socket.broadcast.emit('ride_status_update', data);
   });
 
@@ -70,24 +95,18 @@ io.on('connection', (socket) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
-// Error handling middleware
+// ── Error Handlers ────────────────────────────────────────────────
+app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
-  });
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 3001;
-
 server.listen(PORT, () => {
-  console.log(`🚀 Ghoomo Backend Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Ghoomo Backend running on http://localhost:${PORT}`);
   console.log(`📡 WebSocket ready at ws://localhost:${PORT}`);
 });
 
 module.exports = app;
+

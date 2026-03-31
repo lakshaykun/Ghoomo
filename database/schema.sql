@@ -14,7 +14,7 @@ CREATE EXTENSION IF NOT EXISTS citext;
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          VARCHAR(255)  NOT NULL,
-  email         CITEXT        UNIQUE,
+  email         CITEXT        NOT NULL UNIQUE,
   phone_number  VARCHAR(20)   NOT NULL UNIQUE,
   password_hash TEXT,
   role          VARCHAR(20)   NOT NULL DEFAULT 'student'
@@ -158,6 +158,38 @@ CREATE INDEX IF NOT EXISTS idx_driver_ratings_ride_id    ON driver_ratings(ride_
 
 CREATE INDEX IF NOT EXISTS idx_campus_entry_logs_ride_id    ON campus_entry_logs(ride_id);
 CREATE INDEX IF NOT EXISTS idx_campus_entry_logs_driver_id  ON campus_entry_logs(driver_id);
+
+
+-- ============================================================
+-- 8. OTP CODES  (phone-based login)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone_number  VARCHAR(20) NOT NULL,
+  otp           VARCHAR(6)  NOT NULL,
+  expires_at    TIMESTAMPTZ NOT NULL,
+  used          BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_codes_phone  ON otp_codes(phone_number);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_expiry ON otp_codes(expires_at);
+
+
+-- ============================================================
+-- 9. SAVED LOCATIONS  (user favourite places)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS saved_locations (
+  id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       VARCHAR(100) NOT NULL,
+  address    TEXT         NOT NULL,
+  latitude   DECIMAL(10, 8) NOT NULL,
+  longitude  DECIMAL(11, 8) NOT NULL,
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_locations_user_id ON saved_locations(user_id);
 
 
 -- ============================================================

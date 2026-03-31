@@ -1,15 +1,16 @@
 /**
  * GPS Routes
- * Placeholder for GPS tracking endpoints
  */
 
 const express = require('express');
-const router = express.Router();
-// const { verifyToken } = require('../middleware/auth');
-// const gpsController = require('../controllers/gpsController');
+const router  = express.Router();
+const ctrl    = require('../controllers/gpsController');
+const { verifyToken } = require('../middleware/auth');
 
-// Protected routes
-// router.post('/log', verifyToken, gpsController.logLocation);
-// router.get('/ride/:rideId', verifyToken, gpsController.getGPSLogs);
+router.use(verifyToken);
+
+router.post('/log',                      ctrl.logLocation);       // POST /api/gps/log  (driver)
+router.get('/ride/:rideId',              ctrl.getGPSLogs);        // GET  /api/gps/ride/:id
+router.get('/driver/:driverId/location', ctrl.getDriverLocation); // GET  /api/gps/driver/:id/location
 
 module.exports = router;

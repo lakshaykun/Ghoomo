@@ -5,66 +5,76 @@
 
 const pool = require('../config/database');
 
+const PUBLIC_COLS = 'id, name, email, phone_number, role, created_at, updated_at';
+
 class User {
   /**
-   * Create a new user
+   * Create a new user (student by default)
    */
   static async create(userData) {
     const query = `
-      INSERT INTO users (name, email, phone, role, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      RETURNING id, name, email, phone, role, created_at
+      INSERT INTO users (name, email, phone_number, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING ${PUBLIC_COLS}
     `;
-    const values = [userData.name, userData.email, userData.phone, userData.role];
+    const values = [
+      userData.name,
+      userData.email || null,
+      userData.phone_number,
+      userData.role || 'student',
+    ];
     const result = await pool.query(query, values);
     return result.rows[0];
   }
 
-  /**
-   * Find user by email
-   */
+  /** Find user by phone number */
+  static async findByPhone(phone_number) {
+    const query = `SELECT ${PUBLIC_COLS} FROM users WHERE phone_number = $1`;
+    const result = await pool.query(query, [phone_number]);
+    return result.rows[0];
+  }
+
+  /** Find user by email */
   static async findByEmail(email) {
-    const query = 'SELECT * FROM users WHERE email = $1';
+    const query = `SELECT ${PUBLIC_COLS} FROM users WHERE email = $1`;
     const result = await pool.query(query, [email]);
     return result.rows[0];
   }
 
-  /**
-   * Find user by ID
-   */
+  /** Find user by ID */
   static async findById(id) {
-    const query = 'SELECT id, name, email, phone, role, created_at FROM users WHERE id = $1';
+    const query = `SELECT ${PUBLIC_COLS} FROM users WHERE id = $1`;
     const result = await pool.query(query, [id]);
     return result.rows[0];
   }
 
-  /**
-   * Get all users (admin)
-   */
+  /** Get all users (admin) */
   static async getAll(limit = 20, offset = 0) {
-    const query = 'SELECT id, name, email, phone, role, created_at FROM users LIMIT $1 OFFSET $2';
+    const query = `SELECT ${PUBLIC_COLS} FROM users LIMIT $1 OFFSET $2`;
     const result = await pool.query(query, [limit, offset]);
     return result.rows;
   }
 
-  /**
-   * Update user
-   */
+  /** Update user profile */
   static async update(id, userData) {
     const query = `
-      UPDATE users 
-      SET name = COALESCE($2, name), 
-          phone = COALESCE($3, phone)
+      UPDATE users
+      SET name         = COALESCE($2, name),
+          phone_number = COALESCE($3, phone_number),
+          email        = COALESCE($4, email)
       WHERE id = $1
-      RETURNING id, name, email, phone, role, created_at
+      RETURNING ${PUBLIC_COLS}
     `;
-    const result = await pool.query(query, [id, userData.name, userData.phone]);
+    const result = await pool.query(query, [
+      id,
+      userData.name        || null,
+      userData.phone_number || null,
+      userData.email       || null,
+    ]);
     return result.rows[0];
   }
 
-  /**
-   * Delete user
-   */
+  /** Delete user */
   static async delete(id) {
     const query = 'DELETE FROM users WHERE id = $1 RETURNING id';
     const result = await pool.query(query, [id]);
