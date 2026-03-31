@@ -22,7 +22,42 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
+  margin-bottom: 20px;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
   margin-bottom: 30px;
+}
+
+.insight-card {
+  background: white;
+  border: 1px solid var(--ink-200);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.insight-card p {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-500);
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.insight-card h3 {
+  font-size: 28px;
+  color: var(--ink-900);
+  margin-bottom: 8px;
+}
+
+.insight-card span {
+  font-size: 13px;
+  color: var(--ink-600);
 }
 
 .overview-tables {
@@ -137,12 +172,21 @@
     grid-template-columns: 1fr;
   }
 
+  .insights-grid {
+    grid-template-columns: 1fr;
+  }
+
   .overview-tables {
     grid-template-columns: 1fr;
   }
 
+  .table-card {
+    overflow-x: auto;
+  }
+
   .data-table {
     font-size: 12px;
+    min-width: 640px;
   }
 
   .data-table th,

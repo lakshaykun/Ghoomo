@@ -24,26 +24,6 @@ export default function Rides() {
     }
   };
 
-  const handleCancel = async (rideId) => {
-    if (window.confirm('Are you sure you want to cancel this ride?')) {
-      try {
-        await dashboardAPI.cancelRide(rideId);
-        fetchRides();
-      } catch (err) {
-        console.error('Failed to cancel ride:', err);
-      }
-    }
-  };
-
-  const handleComplete = async (rideId) => {
-    try {
-      await dashboardAPI.completeRide(rideId);
-      fetchRides();
-    } catch (err) {
-      console.error('Failed to complete ride:', err);
-    }
-  };
-
   if (loading) return <div className="loading">Loading rides...</div>;
 
   return (
@@ -93,8 +73,8 @@ export default function Rides() {
               <th>Pickup</th>
               <th>Dropoff</th>
               <th>Distance</th>
-              <th>Amount</th>
               <th>Status</th>
+              <th>Created</th>
             </tr>
           </thead>
           <tbody>
@@ -106,8 +86,8 @@ export default function Rides() {
                 <td>{ride.pickup?.name || ride.pickup || '-'}</td>
                 <td>{ride.drop?.name || ride.drop || '-'}</td>
                 <td>{Number(ride.distance || ride.route?.distanceKm || 0).toFixed(1)} km</td>
-                <td>${ride.fare}</td>
                 <td><span className={`status-badge ${ride.status}`}>{ride.status}</span></td>
+                <td>{ride.createdAt ? new Date(ride.createdAt).toLocaleString() : '-'}</td>
               </tr>
             ))}
           </tbody>
