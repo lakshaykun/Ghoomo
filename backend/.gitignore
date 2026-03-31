@@ -1,3 +1,25 @@
 .vercel
 .env*.local
 .env
+.env.*
+!.env.example
+
+# secrets and keys
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.cer
+*.crt
+*.der
+*.asc
+*.kdbx
+*.p8
+google-services.json
+GoogleService-Info.plist
+*service-account*.json
+*service_account*.json
+*firebase*admin*.json
