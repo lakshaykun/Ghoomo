@@ -9,8 +9,19 @@ const api = axios.create({
   },
 });
 
+function shouldSendAuthHeader() {
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
 // Add token to requests
 api.interceptors.request.use((config) => {
+  if (!shouldSendAuthHeader()) {
+    delete config.headers.Authorization;
+    return config;
+  }
+
   const token = localStorage.getItem('admin_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

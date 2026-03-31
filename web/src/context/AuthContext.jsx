@@ -19,7 +19,6 @@ export function AuthProvider({ children }) {
         if (parsedUser?.role === 'admin') {
           setUser(parsedUser);
           setIsAuthenticated(true);
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         } else {
           localStorage.removeItem('admin_token');
           localStorage.removeItem('admin_user');
@@ -45,7 +44,6 @@ export function AuthProvider({ children }) {
 
       localStorage.setItem('admin_token', token);
       localStorage.setItem('admin_user', JSON.stringify(user));
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
       setUser(user);
       setIsAuthenticated(true);
@@ -64,7 +62,6 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_user');
-    delete api.defaults.headers.common['Authorization'];
     setUser(null);
     setIsAuthenticated(false);
   };
