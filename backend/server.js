@@ -176,6 +176,49 @@ async function writeStore(data) {
   await storage.writeStore(data);
 }
 
+async function updateUserPushTokenWithRetry(userId, token, { remove = false, maxRetries = 3 } = {}) {
+  const normalizedUserId = normalizeText(userId);
+  if (!normalizedUserId) {
+    return { found: false };
+  }
+
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.id === normalizedUserId);
+    if (!user) {
+      return { found: false };
+    }
+
+    const nextToken = remove ? "" : normalizeText(token);
+    const currentToken = normalizeText(user.pushToken);
+
+    // Skip write if no state change is required.
+    if ((remove && !currentToken) || (!remove && currentToken === nextToken)) {
+      return { found: true, updated: false };
+    }
+
+    if (remove) {
+      delete user.pushToken;
+    } else {
+      user.pushToken = nextToken;
+    }
+
+    try {
+      await writeStore(store);
+      return { found: true, updated: true };
+    } catch (error) {
+      if (error?.code !== "STORE_VERSION_CONFLICT" || attempt === maxRetries) {
+        throw error;
+      }
+    }
+
+    attempt += 1;
+  }
+
+  return { found: true, updated: false };
+}
+
 function getBusRoutes(store) {
   return (store.busRoutes || []).map((route) => {
     const { fare, ...rest } = route || {};
@@ -1202,24 +1245,24 @@ const server = http.createServer(async (req, res) => {
 
     if (requestUrl.pathname.match(/^\/api\/users\/[^/]+\/push-token$/)) {
       const userId = requestUrl.pathname.split("/")[3];
-      const store = await readStore();
-      const user = store.users.find((entry) => entry.id === userId);
-      if (!user) {
-        sendJson(res, 404, { message: "User not found" });
-        return;
-      }
 
       if (req.method === "POST") {
         const body = await parseBody(req);
-        user.pushToken = normalizeText(body.token);
-        await writeStore(store);
+        const result = await updateUserPushTokenWithRetry(userId, body.token, { remove: false });
+        if (!result.found) {
+          sendJson(res, 404, { message: "User not found" });
+          return;
+        }
         sendJson(res, 200, { ok: true });
         return;
       }
 
       if (req.method === "DELETE") {
-        delete user.pushToken;
-        await writeStore(store);
+        const result = await updateUserPushTokenWithRetry(userId, "", { remove: true });
+        if (!result.found) {
+          sendJson(res, 404, { message: "User not found" });
+          return;
+        }
         sendJson(res, 200, { ok: true });
         return;
       }
