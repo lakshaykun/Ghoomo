@@ -18,6 +18,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BACKEND_API_URL: https://backend-fawn-seven-41.vercel.app/api
     defaults:
       run:
         working-directory: web
@@ -34,9 +36,24 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Validate backend CORS preflight
+        run: |
+          ORIGIN="https://${{ github.repository_owner }}.github.io"
+          HEADERS=$(curl -sS -D - -o /dev/null -X OPTIONS "${BACKEND_API_URL}/admin/dashboard" \
+            -H "Origin: ${ORIGIN}" \
+            -H "Access-Control-Request-Method: GET" \
+            -H "Access-Control-Request-Headers: authorization,content-type")
+
+          echo "$HEADERS"
+
+          echo "$HEADERS" | grep -qi "^access-control-allow-headers:.*authorization" || {
+            echo "::error::Backend CORS is missing Authorization in Access-Control-Allow-Headers."
+            exit 1
+          }
+
       - name: Build admin web
         env:
-          VITE_API_URL: https://backend-fawn-seven-41.vercel.app/api
+          VITE_API_URL: ${{ env.BACKEND_API_URL }}
         run: npm run build
 
       - name: Setup Pages
