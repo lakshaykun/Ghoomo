@@ -58,44 +58,7 @@ export default function Routes_Component() {
     <div className="routes-page">
       <div className="routes-header">
         <h2>Route Management</h2>
-        <button onClick={() => setShowForm(!showForm)} className="btn-create">
-          + Create Route
-        </button>
       </div>
-
-      {showForm && (
-        <form onSubmit={handleCreate} className="route-form">
-          <input
-            type="text"
-            placeholder="Route Name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Start Point"
-            value={formData.startPoint}
-            onChange={(e) => setFormData({ ...formData, startPoint: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="End Point"
-            value={formData.endPoint}
-            onChange={(e) => setFormData({ ...formData, endPoint: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Stops (comma-separated)"
-            value={formData.stops}
-            onChange={(e) => setFormData({ ...formData, stops: e.target.value })}
-          />
-          <button type="submit" className="btn-submit">Create</button>
-          <button type="button" onClick={() => setShowForm(false)} className="btn-cancel">Cancel</button>
-        </form>
-      )}
 
       <div className="table-card">
         <table className="data-table">
@@ -105,27 +68,21 @@ export default function Routes_Component() {
               <th>Start Point</th>
               <th>End Point</th>
               <th>Stops</th>
-              <th>Active Buses</th>
+              <th>Total Seats</th>
               <th>Passengers</th>
               <th>Status</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {routes.map((route) => (
               <tr key={route.id}>
                 <td>{route.name}</td>
-                <td>{route.startPoint}</td>
-                <td>{route.endPoint}</td>
-                <td>{route.stops}</td>
-                <td>{route.activeBuses || 0}</td>
-                <td>{route.passengers || 0}</td>
-                <td><span className={`status-badge ${route.status}`}>{route.status}</span></td>
-                <td className="actions">
-                  <button onClick={() => handleDelete(route.id)} className="btn-delete">
-                    Delete
-                  </button>
-                </td>
+                <td>{route.from}</td>
+                <td>{route.to}</td>
+                <td>{Array.isArray(route.stops) ? route.stops.join(', ') : (route.stops || '-')}</td>
+                <td>{route.totalSeats || 0}</td>
+                <td>{route.bookedSeats || 0}</td>
+                <td><span className={`status-badge ${route.availableSeats > 0 ? 'active' : 'suspended'}`}>{route.availableSeats > 0 ? 'active' : 'full'}</span></td>
               </tr>
             ))}
           </tbody>

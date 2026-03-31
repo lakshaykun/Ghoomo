@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "web": {},
     "extra": {
-      "apiBaseUrl": "https://ghoomo-backend.onrender.com",
+      "apiBaseUrl": "https://backend-fawn-seven-41.vercel.app",
       "eas": {
         "projectId": "34a9c2f4-8e0e-4d29-a0b2-b8b4eaf924ed"
       },

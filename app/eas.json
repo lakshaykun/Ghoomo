@@ -15,7 +15,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://ghoomo-backend.onrender.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://backend-fawn-seven-41.vercel.app"
       }
     },
     "production-apk": {

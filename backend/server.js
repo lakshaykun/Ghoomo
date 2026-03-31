@@ -48,8 +48,29 @@ const DEFAULT_STORE = {
 };
 
 let storage;
+let storageInitPromise = null;
 const rideRealtimeSubscribers = new Map();
 const busRealtimeSubscribers = new Set();
+
+async function ensureStorageReady() {
+  if (storage) {
+    return storage;
+  }
+
+  if (!storageInitPromise) {
+    storageInitPromise = createStorage({ seedStore: DEFAULT_STORE })
+      .then((resolvedStorage) => {
+        storage = resolvedStorage;
+        return resolvedStorage;
+      })
+      .catch((error) => {
+        storageInitPromise = null;
+        throw error;
+      });
+  }
+
+  return storageInitPromise;
+}
 
 function wsSafeSend(socket, payload) {
   if (!socket || socket.readyState !== 1) return;
@@ -1087,7 +1108,7 @@ function validateBusRoutePayload(body) {
 
 const HOST = process.env.HOST || "0.0.0.0";
 
-const server = http.createServer(async (req, res) => {
+async function requestHandler(req, res) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
@@ -1101,6 +1122,8 @@ const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
   try {
+    await ensureStorageReady();
+
     if (req.method === "GET" && requestUrl.pathname === "/health") {
       sendJson(res, 200, { ok: true, service: "ghoomo-backend" });
       return;
@@ -2037,6 +2060,13 @@ const server = http.createServer(async (req, res) => {
     }
     sendJson(res, 500, { message: error.message || "Internal server error" });
   }
+}
+
+const server = http.createServer((req, res) => {
+  requestHandler(req, res).catch((error) => {
+    console.error("Unhandled request error", error);
+    sendJson(res, 500, { message: "Internal server error" });
+  });
 });
 
 const wss = new WebSocketServer({ noServer: true });
@@ -2137,16 +2167,26 @@ server.on("upgrade", (req, socket, head) => {
   });
 });
 
-createStorage({ seedStore: DEFAULT_STORE })
-  .then((resolvedStorage) => {
-    storage = resolvedStorage;
-    server.listen(PORT, HOST, () => {
-      console.log(
-        `Ghoomo backend listening on http://${HOST}:${PORT} using ${resolvedStorage.mode} storage`
-      );
+if (require.main === module) {
+  ensureStorageReady()
+    .then((resolvedStorage) => {
+      server.listen(PORT, HOST, () => {
+        console.log(
+          `Ghoomo backend listening on http://${HOST}:${PORT} using ${resolvedStorage.mode} storage`
+        );
+      });
+    })
+    .catch((error) => {
+      console.error("Failed to initialize storage", error);
+      process.exit(1);
     });
-  })
-  .catch((error) => {
-    console.error("Failed to initialize storage", error);
-    process.exit(1);
-  });
+}
+
+async function vercelHandler(req, res) {
+  await requestHandler(req, res);
+}
+
+module.exports = {
+  vercelHandler,
+  requestHandler,
+};

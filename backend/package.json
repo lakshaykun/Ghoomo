@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node -e \"console.log('No build step required')\"",
     "start": "node server.js",
+    "deploy:vercel": "vercel --prod",
     "seed:roles": "node scripts/seed-role-users.js"
   },
   "dependencies": {

@@ -47,5 +47,8 @@
   "bugs": {
     "url": "https://github.com/ghoomo/platform/issues"
   },
-  "homepage": "https://ghoomo.com"
+  "homepage": "https://ghoomo.com",
+  "dependencies": {
+    "expo-updates": "~29.0.16"
+  }
 }

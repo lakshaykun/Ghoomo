@@ -95,32 +95,19 @@ export default function Rides() {
               <th>Distance</th>
               <th>Amount</th>
               <th>Status</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {rides.map((ride) => (
               <tr key={ride.id}>
                 <td>{ride.id}</td>
-                <td>{ride.userName}</td>
-                <td>{ride.driverName}</td>
-                <td>{ride.pickupLocation}</td>
-                <td>{ride.dropoffLocation}</td>
-                <td>{ride.distance} km</td>
+                <td>{ride.userName || ride.userId || '-'}</td>
+                <td>{ride.driver?.name || ride.driver?.id || '-'}</td>
+                <td>{ride.pickup?.name || ride.pickup || '-'}</td>
+                <td>{ride.drop?.name || ride.drop || '-'}</td>
+                <td>{Number(ride.distance || ride.route?.distanceKm || 0).toFixed(1)} km</td>
                 <td>${ride.fare}</td>
                 <td><span className={`status-badge ${ride.status}`}>{ride.status}</span></td>
-                <td className="actions">
-                  {ride.status === 'pending' && (
-                    <button onClick={() => handleCancel(ride.id)} className="btn-cancel">
-                      Cancel
-                    </button>
-                  )}
-                  {ride.status === 'in_progress' && (
-                    <button onClick={() => handleComplete(ride.id)} className="btn-complete">
-                      Complete
-                    </button>
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>

@@ -72,7 +72,6 @@ export default function Drivers() {
               <th>Rating</th>
               <th>Rides</th>
               <th>Status</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -80,22 +79,11 @@ export default function Drivers() {
               <tr key={driver.id}>
                 <td>{driver.name}</td>
                 <td>{driver.email}</td>
-                <td>{driver.vehicle}</td>
-                <td>{driver.licenseNumber}</td>
-                <td>⭐ {driver.rating}</td>
-                <td>{driver.completedRides || 0}</td>
-                <td><span className={`status-badge ${driver.status}`}>{driver.status}</span></td>
-                <td className="actions">
-                  {driver.status === 'suspended' ? (
-                    <button onClick={() => handleActivate(driver.id)} className="btn-activate">
-                      Activate
-                    </button>
-                  ) : (
-                    <button onClick={() => handleSuspend(driver.id)} className="btn-suspend">
-                      Suspend
-                    </button>
-                  )}
-                </td>
+                <td>{driver.vehicleType || '-'}</td>
+                <td>{driver.licenseNumber || '-'}</td>
+                <td>⭐ {driver.rating || '-'}</td>
+                <td>{driver.totalRides || 0}</td>
+                <td><span className={`status-badge ${driver.online ? 'active' : 'inactive'}`}>{driver.online ? 'active' : 'inactive'}</span></td>
               </tr>
             ))}
           </tbody>

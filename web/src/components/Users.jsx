@@ -68,9 +68,8 @@ export default function Users() {
               <th>Name</th>
               <th>Email</th>
               <th>Phone</th>
-              <th>Rides</th>
+              <th>Role</th>
               <th>Status</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -78,20 +77,9 @@ export default function Users() {
               <tr key={user.id}>
                 <td>{user.name}</td>
                 <td>{user.email}</td>
-                <td>{user.phone}</td>
-                <td>{user.rides || 0}</td>
-                <td><span className={`status-badge ${user.status}`}>{user.status}</span></td>
-                <td className="actions">
-                  {user.status === 'suspended' ? (
-                    <button onClick={() => handleActivate(user.id)} className="btn-activate">
-                      Activate
-                    </button>
-                  ) : (
-                    <button onClick={() => handleSuspend(user.id)} className="btn-suspend">
-                      Suspend
-                    </button>
-                  )}
-                </td>
+                <td>{user.phone || '-'}</td>
+                <td>{user.role || '-'}</td>
+                <td><span className={`status-badge ${user.isActive === false ? 'suspended' : 'active'}`}>{user.isActive === false ? 'suspended' : 'active'}</span></td>
               </tr>
             ))}
           </tbody>

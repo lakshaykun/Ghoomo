@@ -29,6 +29,7 @@ export default function Overview() {
   if (error) return <div className="error">{error}</div>;
 
   const data = stats || {};
+  const summary = data.stats || {};
 
   return (
     <div className="overview">
@@ -37,37 +38,37 @@ export default function Overview() {
       <div className="stats-grid">
         <StatCard
           title="Total Rides"
-          value={data.totalRides || 0}
+          value={summary.totalRides || 0}
           icon="🚗"
           color="#3B82F6"
         />
         <StatCard
           title="Active Drivers"
-          value={data.activeDrivers || 0}
+          value={summary.activeDrivers || 0}
           icon="👨‍💼"
           color="#10B981"
         />
         <StatCard
           title="Total Users"
-          value={data.totalUsers || 0}
+          value={summary.totalUsers || 0}
           icon="👥"
           color="#8B5CF6"
         />
         <StatCard
           title="Total Revenue"
-          value={`$${(data.totalRevenue || 0).toLocaleString()}`}
+          value={`$${(summary.totalRevenue || 0).toLocaleString()}`}
           icon="💰"
           color="#F59E0B"
         />
         <StatCard
           title="Pending Rides"
-          value={data.pendingRides || 0}
+          value={summary.driversOnTrip || 0}
           icon="⏳"
           color="#EF4444"
         />
         <StatCard
-          title="Avg Rating"
-          value={(data.avgRating || 0).toFixed(1)}
+          title="Completed Rides"
+          value={summary.completedRides || 0}
           icon="⭐"
           color="#EC4899"
         />
@@ -87,13 +88,13 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              {data.recentBookings?.map((booking) => (
+              {(data.recentBookings || []).map((booking) => (
                 <tr key={booking.id}>
                   <td>{booking.id}</td>
-                  <td>{booking.user}</td>
-                  <td>{booking.driver}</td>
+                  <td>{booking.userName || booking.userId || '-'}</td>
+                  <td>{booking.type === 'bus' ? 'Bus' : (booking.type || '-')}</td>
                   <td><span className={`status-badge ${booking.status}`}>{booking.status}</span></td>
-                  <td>{booking.amount}</td>
+                  <td>{booking.fare ? `$${booking.fare}` : '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -113,13 +114,13 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              {data.drivers?.map((driver) => (
+              {(data.drivers || []).map((driver) => (
                 <tr key={driver.id}>
                   <td>{driver.name}</td>
-                  <td>{driver.vehicle}</td>
-                  <td>{driver.rating}</td>
-                  <td>{driver.rides}</td>
-                  <td><span className={`status-badge ${driver.status}`}>{driver.status}</span></td>
+                  <td>{driver.vehicleType || '-'}</td>
+                  <td>{driver.rating || '-'}</td>
+                  <td>{driver.totalRides || 0}</td>
+                  <td><span className={`status-badge ${driver.online ? 'active' : 'inactive'}`}>{driver.online ? 'active' : 'inactive'}</span></td>
                 </tr>
               ))}
             </tbody>
