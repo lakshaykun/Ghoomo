@@ -20,7 +20,7 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Login failed');
+      setError(err?.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -28,9 +28,13 @@ export default function Login() {
 
   return (
     <div className="login-container">
+      <div className="login-grid-overlay" />
+      <div className="login-accent login-accent-top" />
+      <div className="login-accent login-accent-bottom" />
       <div className="login-card">
-        <h1 className="login-title">Ghoomo Admin</h1>
-        <p className="login-subtitle">Platform Management Dashboard</p>
+        <p className="login-eyebrow">Control Center</p>
+        <h1 className="login-title">Ghoomo Admin Portal</h1>
+        <p className="login-subtitle">Manage users, drivers, rides, and routes from one secure workspace.</p>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
@@ -40,7 +44,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
+              placeholder="ops@ghoomo.com"
               required
             />
           </div>
@@ -64,9 +68,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="login-footer">
-          Demo credentials: admin@example.com / password
-        </p>
+        <p className="login-footer">Only accounts with the admin role can access this portal.</p>
       </div>
     </div>
   );

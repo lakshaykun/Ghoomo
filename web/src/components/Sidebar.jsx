@@ -6,7 +6,7 @@ export default function Sidebar({ open, onToggle }) {
   const location = useLocation();
 
   const menuItems = [
-    { icon: '📊', label: 'Overview', path: '/dashboard' },
+    { icon: '📊', label: 'Overview', path: '/dashboard/overview' },
     { icon: '👥', label: 'Users', path: '/dashboard/users' },
     { icon: '👨‍💼', label: 'Drivers', path: '/dashboard/drivers' },
     { icon: '🚗', label: 'Rides', path: '/dashboard/rides' },
@@ -20,7 +20,7 @@ export default function Sidebar({ open, onToggle }) {
       <div className={`sidebar ${open ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
           <h1 className="sidebar-logo">Ghoomo</h1>
-          <span className="admin-badge">Admin</span>
+          <span className="admin-badge">Admin Portal</span>
         </div>
 
         <nav className="sidebar-menu">

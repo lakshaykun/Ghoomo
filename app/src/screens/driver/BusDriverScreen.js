@@ -57,7 +57,7 @@ export default function BusDriverScreen({ navigation }) {
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>No bus routes available</Text>
-          <Text style={styles.emptySub}>Ask an admin to add routes before scanning tickets.</Text>
+          <Text style={styles.emptySub}>Ask support to add routes before scanning tickets.</Text>
         </View>
       </SafeAreaView>
     );

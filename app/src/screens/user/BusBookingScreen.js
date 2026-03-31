@@ -510,7 +510,7 @@ export default function BusBookingScreen({ navigation }) {
           <Card style={styles.emptyState}>
             <Ionicons name="bus" size={42} color={COLORS.border} />
             <Text style={styles.emptyText}>No bus routes are available yet.</Text>
-            <Text style={styles.emptySub}>Please check again later or contact your admin.</Text>
+            <Text style={styles.emptySub}>Please check again later or contact support.</Text>
           </Card>
         ) : (
           sortedRoutes.map((route) => {

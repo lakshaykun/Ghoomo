@@ -106,7 +106,7 @@ export async function signUpWithEmail(email, password, displayName, role = "user
       uid: user.uid,
       email: user.email,
       displayName: displayName,
-      role: role, // user, driver, admin
+      role: role, // user, driver
       authMethod: "email",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -298,7 +298,7 @@ export async function getFirebaseToken() {
 }
 
 /**
- * Update user role (admin only)
+ * Update user role
  */
 export async function updateUserRole(userId, newRole) {
   try {

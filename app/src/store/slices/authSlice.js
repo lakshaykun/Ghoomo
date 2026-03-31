@@ -12,6 +12,7 @@ import {
 } from "../../services/firebaseAuth";
 
 const AUTH_STORAGE_KEY = "ghoomo.auth.user";
+const APP_ADMIN_ROLE_BLOCK_MESSAGE = "Admin accounts are not supported in the mobile app. Please use the admin website.";
 
 const initialState = {
   user: null,
@@ -74,6 +75,10 @@ export const loginUser = (email, password) => async (dispatch) => {
     // Backend remains source of truth for seeded test users.
     const { user } = await api.login(email, password);
 
+    if (user.role === "admin") {
+      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
+    }
+
     let firebaseUser = null;
     let authMethod = "email";
 
@@ -104,8 +109,6 @@ export const loginUser = (email, password) => async (dispatch) => {
       vehicleNo: user.vehicleNo || null,
       licenseNumber: user.licenseNumber || null,
       busRoute: user.busRoute || null,
-      employeeId: user.employeeId || null,
-      organization: user.organization || null,
     };
 
     dispatch(loginSuccess({ user: combinedUser, firebaseUser, authMethod }));
@@ -123,6 +126,10 @@ export const loginUser = (email, password) => async (dispatch) => {
 export const registerUser = (userData) => async (dispatch) => {
   dispatch(loginStart());
   try {
+    if (userData.role === "admin") {
+      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
+    }
+
     // Sign up with Firebase
     console.log("[Auth] Step 1: Starting Firebase signup for", userData.email);
     const firebaseResult = await signUpWithEmail(
@@ -160,8 +167,6 @@ export const registerUser = (userData) => async (dispatch) => {
       vehicleNo: user.vehicleNo || null,
       licenseNumber: user.licenseNumber || null,
       busRoute: user.busRoute || null,
-      employeeId: user.employeeId || null,
-      organization: user.organization || null,
     };
 
     console.log("[Auth] Step 3: Storing auth data locally");
@@ -193,6 +198,10 @@ export const registerUser = (userData) => async (dispatch) => {
 export const googleSignIn = (promptAsync, selectedRole = "user") => async (dispatch) => {
   dispatch(loginStart());
   try {
+    if (selectedRole === "admin") {
+      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
+    }
+
     // Sign in with Google via Firebase
     const firebaseResult = await handleGoogleSignIn(promptAsync, selectedRole);
 
@@ -218,6 +227,11 @@ export const googleSignIn = (promptAsync, selectedRole = "user") => async (dispa
       idToken: tokenResult.token,
     });
 
+    if (user.role === "admin") {
+      await signOutUser();
+      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
+    }
+
     // Store combined user info
     const combinedUser = {
       id: user.id,
@@ -233,8 +247,6 @@ export const googleSignIn = (promptAsync, selectedRole = "user") => async (dispa
       vehicleNo: user.vehicleNo || null,
       licenseNumber: user.licenseNumber || null,
       busRoute: user.busRoute || null,
-      employeeId: user.employeeId || null,
-      organization: user.organization || null,
     };
 
     dispatch(loginSuccess({ user: combinedUser, firebaseUser, authMethod: "google" }));

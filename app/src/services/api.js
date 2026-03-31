@@ -162,7 +162,6 @@ export const api = {
     }),
   getRideHistory: (userId) => request(`/api/rides/history/${userId}`),
   getDriverDashboard: (driverId) => request(`/api/drivers/${driverId}/dashboard`),
-  getAdminDashboard: () => request("/api/admin/dashboard"),
   setDriverOnline: (driverId, online) =>
     request(`/api/drivers/${driverId}/status`, {
       method: "POST",

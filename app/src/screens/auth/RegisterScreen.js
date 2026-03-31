@@ -82,8 +82,6 @@ export default function RegisterScreen({ navigation }) {
     vehicleNo: "",
     licenseNumber: "",
     busRoute: "",
-    employeeId: "",
-    organization: "",
     password: "",
     confirm: "",
   });
@@ -157,11 +155,6 @@ export default function RegisterScreen({ navigation }) {
       }
     }
 
-    if (form.role === "admin" && (!form.employeeId || !form.organization)) {
-      Alert.alert("Error", "Admins must provide employee ID and organization");
-      return;
-    }
-
     dispatch(registerUser({
       role: form.role,
       name: form.name,
@@ -173,8 +166,6 @@ export default function RegisterScreen({ navigation }) {
       vehicleNo: form.role === "driver" ? form.vehicleNo : undefined,
       licenseNumber: form.role === "driver" ? form.licenseNumber : undefined,
       busRoute: form.role === "driver" && form.vehicleType === "bus" ? form.busRoute : undefined,
-      employeeId: form.role === "admin" ? form.employeeId : undefined,
-      organization: form.role === "admin" ? form.organization : undefined,
       password: form.password,
     }));
   };
@@ -330,7 +321,7 @@ export default function RegisterScreen({ navigation }) {
                     {availableRoutes.length === 0 ? (
                       <View style={styles.routeEmpty}>
                         <Ionicons name="alert-circle" size={18} color={COLORS.warning} />
-                        <Text style={styles.routeEmptyText}>No bus routes are available yet. Please contact an admin.</Text>
+                        <Text style={styles.routeEmptyText}>No bus routes are available yet. Please contact support.</Text>
                       </View>
                     ) : (
                       <View style={styles.optionRow}>
@@ -348,29 +339,6 @@ export default function RegisterScreen({ navigation }) {
                     )}
                   </>
                 ) : null}
-              </>
-            ) : null}
-
-            {form.role === "admin" ? (
-              <>
-                <Text style={styles.sectionTitle}>Admin Details</Text>
-                <SimpleField
-                  label="Employee ID"
-                  placeholder="Official employee ID"
-                  value={form.employeeId}
-                  onChangeText={v => update("employeeId", String(v || "").toUpperCase())}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  leftIcon={<Ionicons name="id-card" size={20} color={COLORS.gray} />}
-                />
-                <SimpleField
-                  label="Organization"
-                  placeholder="Company or institution name"
-                  value={form.organization}
-                  onChangeText={v => update("organization", v)}
-                  autoCapitalize="words"
-                  leftIcon={<Ionicons name="briefcase" size={20} color={COLORS.gray} />}
-                />
               </>
             ) : null}
 

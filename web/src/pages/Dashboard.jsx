@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Overview from '../components/Overview';
 import Users from '../components/Users';
@@ -26,16 +26,20 @@ export default function Dashboard() {
       <div className="dashboard-main">
         <header className="dashboard-header">
           <div className="header-left">
-            <button 
+            <button
               className="menu-toggle"
               onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle navigation"
             >
               ☰
             </button>
-            <h2>Ghoomo Admin Dashboard</h2>
+            <div>
+              <p className="header-kicker">Admin Workspace</p>
+              <h2>Ghoomo Operations Console</h2>
+            </div>
           </div>
           <div className="header-right">
-            <span className="user-info">{user?.email}</span>
+            <span className="user-info">{user?.name || user?.email}</span>
             <button onClick={handleLogout} className="logout-btn">
               Logout
             </button>
@@ -44,11 +48,13 @@ export default function Dashboard() {
 
         <main className="dashboard-content">
           <Routes>
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={<Navigate to="overview" replace />} />
+            <Route path="/overview" element={<Overview />} />
             <Route path="/users" element={<Users />} />
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/rides" element={<Rides />} />
             <Route path="/routes" element={<Routes_Component />} />
+            <Route path="*" element={<Navigate to="overview" replace />} />
           </Routes>
         </main>
       </div>

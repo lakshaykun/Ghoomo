@@ -14,9 +14,20 @@ export function AuthProvider({ children }) {
     const storedUser = localStorage.getItem('admin_user');
 
     if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser?.role === 'admin') {
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        } else {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_user');
+        }
+      } catch (_error) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
+      }
     }
 
     setLoading(false);
@@ -28,6 +39,10 @@ export function AuthProvider({ children }) {
       const response = await api.post('/auth/login', { email, password });
       const { token, user } = response.data;
 
+      if (user?.role !== 'admin') {
+        throw new Error('Only admin accounts can sign in to this portal.');
+      }
+
       localStorage.setItem('admin_token', token);
       localStorage.setItem('admin_user', JSON.stringify(user));
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -37,7 +52,10 @@ export function AuthProvider({ children }) {
       return true;
     } catch (error) {
       console.error('Login failed:', error);
-      throw error.response?.data?.message || 'Login failed';
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(error.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);
     }

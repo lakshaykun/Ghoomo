@@ -79,7 +79,6 @@ export const FARES = {
 export const USER_ROLES = {
   USER: 'user',
   DRIVER: 'driver',
-  ADMIN: 'admin',
 };
 
 export const BOOKING_STATUS = {
