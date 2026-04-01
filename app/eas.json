@@ -8,6 +8,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
+        "EXPO_NEW_ARCH_ENABLED": "1",
         "EXPO_PUBLIC_API_BASE_URL": "https://backend-fawn-seven-41.vercel.app"
       },
       "android": {
@@ -21,6 +22,7 @@
         "buildType": "app-bundle"
       },
       "env": {
+        "EXPO_NEW_ARCH_ENABLED": "1",
         "EXPO_PUBLIC_API_BASE_URL": "https://backend-fawn-seven-41.vercel.app"
       }
     },

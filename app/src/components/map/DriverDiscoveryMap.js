@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { PanResponder } from "react-native";
 import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions } from "react-native";
 import Svg, { Circle, Text as SvgText } from "react-native-svg";
 import { COLORS } from "../../constants";
@@ -105,13 +106,55 @@ export default function DriverDiscoveryMap({
   const [tileLoadFailures, setTileLoadFailures] = useState(0);
   const [tileLoadSuccess, setTileLoadSuccess] = useState(0);
 
+  // For panning
+  const [center, setCenter] = useState(null); // { latitude, longitude }
+  const lastPan = useRef({ x: 0, y: 0 });
+
   const allPoints = useMemo(() => [pickup, ...renderDrivers].filter(Boolean), [pickup, renderDrivers]);
   const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
   const [zoom, setZoom] = useState(() => autoRegion.zoom || 13);
-  const region = useMemo(
-    () => ({ ...autoRegion, zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)) }),
-    [autoRegion, zoom]
-  );
+  // If user has panned, use center; else use autoRegion
+  const region = useMemo(() => {
+    const base = center ? { ...center, zoom } : { ...autoRegion, zoom };
+    return { ...base, zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)) };
+  }, [autoRegion, zoom, center]);
+    // PanResponder for map movement
+    const panResponder = React.useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          lastPan.current = { x: 0, y: 0 };
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          // gestureState.dx, gestureState.dy
+          if (!region) return;
+          const { dx, dy } = gestureState;
+          // Only update if moved enough
+          if (Math.abs(dx - lastPan.current.x) < 1 && Math.abs(dy - lastPan.current.y) < 1) return;
+          // Convert pixel movement to lat/lon delta
+          const grid = buildTileGrid(region);
+          const pxPerLon = grid.width / 360; // rough
+          const pxPerLat = grid.height / 180; // rough
+          // More accurate: use world coordinates
+          const TILE_SIZE = 256;
+          const scale = TILE_SIZE * 2 ** region.zoom;
+          // Move in world coordinates
+          const dLon = (dx - lastPan.current.x) * 360 / scale;
+          const dLat = -(dy - lastPan.current.y) * 170 / scale; // negative because y is down
+          setCenter((prev) => {
+            const base = prev || { latitude: region.latitude, longitude: region.longitude };
+            return {
+              latitude: base.latitude + dLat,
+              longitude: base.longitude + dLon,
+            };
+          });
+          lastPan.current = { x: dx, y: dy };
+        },
+        onPanResponderRelease: () => {},
+        onPanResponderTerminate: () => {},
+      })
+    ).current;
   const grid = useMemo(() => buildTileGrid(region), [region]);
   const clusters = useMemo(
     () => groupDriversForClusters(renderDrivers, region, grid),
@@ -168,8 +211,8 @@ export default function DriverDiscoveryMap({
   }, [drivers]);
 
   return (
-    <View style={styles.wrapper}>
-      <View style={[styles.canvasWrap, { transform: [{ scale }] }]}>
+    <View style={styles.wrapper} {...panResponder.panHandlers}>
+      <View style={[styles.canvasWrap, { transform: [{ scale }] }]}> 
         <View style={styles.canvas}>
           {grid.tiles.map((tile) => (
             <Image

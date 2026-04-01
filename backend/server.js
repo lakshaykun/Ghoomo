@@ -1266,6 +1266,83 @@ async function requestHandler(req, res) {
       return;
     }
 
+    if (req.method === "POST" && requestUrl.pathname === "/api/auth/firebase-login") {
+      const body = await parseBody(req);
+      const store = await readStore();
+
+      const firebaseUid = normalizeText(body.firebaseUid);
+      const email = String(body.email || "").trim().toLowerCase();
+      const displayName = normalizeText(body.displayName) || email.split("@")[0] || "User";
+      const role = normalizeText(body.role || USER_ROLES.USER);
+      const authMethod = normalizeText(body.authMethod || "email").toLowerCase();
+
+      if (!firebaseUid || !email) {
+        sendJson(res, 400, { message: "Firebase UID and email are required" });
+        return;
+      }
+
+      if (![USER_ROLES.USER, USER_ROLES.DRIVER, USER_ROLES.ADMIN].includes(role)) {
+        sendJson(res, 400, { message: "Invalid role selected" });
+        return;
+      }
+
+      let user =
+        store.users.find((entry) => entry.firebaseUid === firebaseUid) ||
+        store.users.find((entry) => entry.email === email);
+
+      if (user) {
+        user.firebaseUid = firebaseUid;
+        user.email = email;
+        user.name = user.name || displayName;
+        user.photoURL = body.photoURL || user.photoURL || null;
+        user.authMethod = authMethod || user.authMethod || "email";
+        user.lastLogin = new Date().toISOString();
+
+        await writeStore(store);
+        sendJson(res, 200, { user: safeUser(user), isNewUser: false });
+        return;
+      }
+
+      const newUser = {
+        id: buildId("u"),
+        firebaseUid,
+        name: displayName,
+        email,
+        role,
+        authMethod: authMethod || "email",
+        photoURL: body.photoURL || null,
+        phone: null,
+        city: null,
+        emergencyContact: null,
+        password: null,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true,
+      };
+
+      if (role === USER_ROLES.DRIVER) {
+        newUser.vehicleType = null;
+        newUser.vehicleNo = null;
+        newUser.licenseNumber = null;
+        newUser.rating = 5;
+        newUser.online = false;
+        newUser.currentLocation = {
+          latitude: DEFAULT_CITY.lat,
+          longitude: DEFAULT_CITY.lon,
+        };
+      }
+
+      if (role === USER_ROLES.ADMIN) {
+        newUser.employeeId = null;
+        newUser.organization = null;
+      }
+
+      store.users.push(newUser);
+      await writeStore(store);
+      sendJson(res, 201, { user: safeUser(newUser), isNewUser: true });
+      return;
+    }
+
     if (requestUrl.pathname.match(/^\/api\/users\/[^/]+\/push-token$/)) {
       const userId = requestUrl.pathname.split("/")[3];
 

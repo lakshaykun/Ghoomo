@@ -2,7 +2,9 @@
   "expo": {
     "name": "Ghoomo",
     "slug": "ghoomo",
+    "scheme": "ghoomo",
     "version": "1.0.0",
+    "newArchEnabled": true,
     "runtimeVersion": "1.0.0",
     "updates": {
       "checkAutomatically": "ON_LOAD",

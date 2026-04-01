@@ -72,43 +72,83 @@ export const { loginStart, loginSuccess, loginFailure, logout, updateProfile, re
 export const loginUser = (email, password) => async (dispatch) => {
   dispatch(loginStart());
   try {
-    // Backend remains source of truth for seeded test users.
-    const { user } = await api.login(email, password);
-
-    if (user.role === "admin") {
-      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
-    }
-
+    let backendUser = null;
     let firebaseUser = null;
     let authMethod = "email";
 
-    // If backend user is linked to Firebase, Firebase auth must succeed.
-    // If not linked (e.g., seeded local dummy users), allow legacy backend login.
-    if (user.firebaseUid) {
+    try {
+      // Backend remains source of truth for seeded test users.
+      const { user } = await api.login(email, password, { timeoutMs: 12000 });
+      backendUser = user;
+    } catch (error) {
+      const message = String(error?.message || "").toLowerCase();
+      const isCredentialMiss =
+        message.includes("invalid email or password") ||
+        message.includes("http 401");
+      const isNetworkOrTimeout =
+        error?.code === "TIMEOUT" ||
+        message.includes("network") ||
+        message.includes("failed to fetch") ||
+        message.includes("request timeout");
+
+      if (!isCredentialMiss && !isNetworkOrTimeout) {
+        throw error;
+      }
+
+      // If backend user record is missing (common after backend resets),
+      // sign in via Firebase and upsert backend profile for continuity.
       const firebaseResult = await signInWithEmail(email, password);
       if (!firebaseResult.success) {
-        throw new Error(firebaseResult.error || "Unable to sign in with Firebase");
+        throw new Error(firebaseResult.error || "Unable to sign in");
       }
+
       firebaseUser = firebaseResult.user;
+
+      const { user } = await api.firebaseLogin({
+        firebaseUid: firebaseUser.uid,
+        email: firebaseUser.email || email,
+        displayName: firebaseUser.displayName || email.split("@")[0],
+        photoURL: firebaseUser.photoURL || null,
+        role: "user",
+        authMethod: "email",
+      });
+
+      backendUser = user;
+    }
+
+    if (backendUser.role === "admin") {
+      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
+    }
+
+    // If backend user is linked to Firebase, Firebase auth must succeed.
+    // If not linked (e.g., seeded local dummy users), allow legacy backend login.
+    if (backendUser.firebaseUid) {
+      if (!firebaseUser) {
+        const firebaseResult = await signInWithEmail(email, password);
+        if (!firebaseResult.success) {
+          throw new Error(firebaseResult.error || "Unable to sign in with Firebase");
+        }
+        firebaseUser = firebaseResult.user;
+      }
     } else {
       authMethod = "legacy";
     }
 
     // Store combined user info
     const combinedUser = {
-      id: user.id,
-      uid: firebaseUser?.uid || user.firebaseUid || null,
-      email: firebaseUser?.email || user.email,
-      displayName: firebaseUser?.displayName || user.name,
-      role: user.role || firebaseUser?.role,
-      name: user.name,
-      phone: user.phone,
-      city: user.city,
-      photoURL: firebaseUser?.photoURL || user.photoURL || null,
-      vehicleType: user.vehicleType || null,
-      vehicleNo: user.vehicleNo || null,
-      licenseNumber: user.licenseNumber || null,
-      busRoute: user.busRoute || null,
+      id: backendUser.id,
+      uid: firebaseUser?.uid || backendUser.firebaseUid || null,
+      email: firebaseUser?.email || backendUser.email,
+      displayName: firebaseUser?.displayName || backendUser.name,
+      role: backendUser.role || firebaseUser?.role,
+      name: backendUser.name,
+      phone: backendUser.phone,
+      city: backendUser.city,
+      photoURL: firebaseUser?.photoURL || backendUser.photoURL || null,
+      vehicleType: backendUser.vehicleType || null,
+      vehicleNo: backendUser.vehicleNo || null,
+      licenseNumber: backendUser.licenseNumber || null,
+      busRoute: backendUser.busRoute || null,
     };
 
     dispatch(loginSuccess({ user: combinedUser, firebaseUser, authMethod }));
@@ -117,7 +157,9 @@ export const loginUser = (email, password) => async (dispatch) => {
       firebaseUser,
       authMethod,
     }));
-    await registerPushTokenForUser(user.id);
+    registerPushTokenForUser(backendUser.id).catch((pushError) => {
+      console.warn("[Auth] Push token registration failed (non-blocking):", pushError?.message || pushError);
+    });
   } catch (error) {
     dispatch(loginFailure(error.message || "Unable to sign in"));
   }

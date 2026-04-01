@@ -29,51 +29,80 @@ export function getApiBaseUrl() {
 }
 
 async function request(path, options = {}) {
-  const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 30000; // 30 second default timeout
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const maxRetries = options.maxRetries ?? 3;
+  const retryDelay = options.retryDelay ?? 350; // ms
+  let attempt = 0;
+  let lastError;
+  while (attempt <= maxRetries) {
+    const controller = new AbortController();
+    const timeoutMs = options.timeoutMs || 30000; // 30 second default timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}${path}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+        ...options,
+        signal: controller.signal,
+      });
 
-  try {
-    const response = await fetch(`${getApiBaseUrl()}${path}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
-      ...options,
-      signal: controller.signal,
-    });
+      const payload = await response.json().catch((err) => {
+        console.error(`[API] JSON parse error for ${path}:`, err.message);
+        return {};
+      });
 
-    const payload = await response.json().catch((err) => {
-      console.error(`[API] JSON parse error for ${path}:`, err.message);
-      return {};
-    });
+      if (!response.ok) {
+        const errorMessage = payload.message || `HTTP ${response.status}: Request failed`;
+        console.error(`[API] Request failed ${path}:`, errorMessage);
+        // Check for concurrency errors
+        if (
+          /Store was modified by another request|could not serialize access due to concurrent update/i.test(errorMessage)
+        ) {
+          if (attempt < maxRetries) {
+            attempt++;
+            await new Promise((res) => setTimeout(res, retryDelay * attempt));
+            continue;
+          }
+        }
+        throw new Error(errorMessage);
+      }
 
-    if (!response.ok) {
-      const errorMessage = payload.message || `HTTP ${response.status}: Request failed`;
-      console.error(`[API] Request failed ${path}:`, errorMessage);
-      throw new Error(errorMessage);
+      return payload;
+    } catch (error) {
+      if (error.name === "AbortError") {
+        const timeoutError = new Error(`Request timeout after ${options.timeoutMs || 30000}ms for ${path}`);
+        timeoutError.code = "TIMEOUT";
+        console.error(`[API] ${timeoutError.message}`);
+        throw timeoutError;
+      }
+      // Check for concurrency errors in network errors too
+      if (
+        error.message &&
+        /Store was modified by another request|could not serialize access due to concurrent update/i.test(error.message)
+      ) {
+        if (attempt < maxRetries) {
+          attempt++;
+          await new Promise((res) => setTimeout(res, retryDelay * attempt));
+          continue;
+        }
+      }
+      console.error(`[API] Network error for ${path}:`, error.message);
+      lastError = error;
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return payload;
-  } catch (error) {
-    if (error.name === "AbortError") {
-      const timeoutError = new Error(`Request timeout after ${timeoutMs}ms for ${path}`);
-      timeoutError.code = "TIMEOUT";
-      console.error(`[API] ${timeoutError.message}`);
-      throw timeoutError;
-    }
-    console.error(`[API] Network error for ${path}:`, error.message);
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
+  throw lastError || new Error("Unknown API error");
 }
 
 export const api = {
-  login: (email, password) =>
+  login: (email, password, options = {}) =>
     request("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+      timeoutMs: options.timeoutMs,
     }),
   register: (user) =>
     request("/api/auth/register", {
@@ -84,6 +113,11 @@ export const api = {
     request("/api/auth/google-login", {
       method: "POST",
       body: JSON.stringify(googleUserData),
+    }),
+  firebaseLogin: (firebaseUserData) =>
+    request("/api/auth/firebase-login", {
+      method: "POST",
+      body: JSON.stringify(firebaseUserData),
     }),
   registerPushToken: (userId, token) =>
     request(`/api/users/${userId}/push-token`, {

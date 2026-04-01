@@ -17,6 +17,17 @@ import Constants from "expo-constants";
 // Set up web browser for OAuth
 WebBrowser.maybeCompleteAuthSession();
 
+function getFirebaseUnavailableResult() {
+  return {
+    success: false,
+    error: "Firebase is not configured correctly in this build.",
+  };
+}
+
+function isFirebaseAvailable() {
+  return Boolean(auth && db);
+}
+
 // Google OAuth Configuration - configure platform-specific IDs in .env
 const DEFAULT_GOOGLE_CLIENT_ID =
   "1024739915849-mfbsap813iku307ui69toqo4ljnlo5k3.apps.googleusercontent.com";
@@ -42,17 +53,22 @@ const androidClientId = envAndroidClientId || webClientId;
 const expoClientId = envExpoClientId || webClientId;
 
 function getGoogleRedirectConfig() {
-  const isExpoGo =
-    Constants.appOwnership === "expo" ||
-    Constants.executionEnvironment === "storeClient";
+  try {
+    const isExpoGo =
+      Constants.appOwnership === "expo" ||
+      Constants.executionEnvironment === "storeClient";
 
-  // Expo Go must use proxy redirect URI.
-  const redirectUri = AuthSession.makeRedirectUri({
-    useProxy: isExpoGo,
-    scheme: "ghoomo",
-  });
+    // Expo Go must use proxy redirect URI.
+    const redirectUri = AuthSession.makeRedirectUri({
+      useProxy: isExpoGo,
+      scheme: "ghoomo",
+    });
 
-  return { isExpoGo, redirectUri };
+    return { isExpoGo, redirectUri };
+  } catch (error) {
+    console.error("[Google OAuth] Redirect URI generation failed:", error?.message || error);
+    return { isExpoGo: false, redirectUri: "ghoomo://auth" };
+  }
 }
 
 // Must be called directly in component body (it is a React hook).
@@ -67,23 +83,33 @@ export function useGoogleAuthRequest() {
     expoClientId,
   });
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId,
-    iosClientId,
-    androidClientId,
-    expoClientId,
-    redirectUri,
-    responseType: "id_token",
-    scopes: ["profile", "email"],
-  });
+  try {
+    const [request, response, promptAsync] = Google.useAuthRequest({
+      webClientId,
+      iosClientId,
+      androidClientId,
+      expoClientId,
+      redirectUri,
+      responseType: "id_token",
+      scopes: ["profile", "email"],
+    });
 
-  return { request, response, promptAsync };
+    return { request, response, promptAsync };
+  } catch (error) {
+    // In production, invalid OAuth config can throw during hook init and crash the screen.
+    console.error("[Google OAuth] useAuthRequest init failed:", error?.message || error);
+    return { request: null, response: null, promptAsync: null };
+  }
 }
 
 /**
  * Sign up user with email and password
  */
 export async function signUpWithEmail(email, password, displayName, role = "user") {
+  if (!isFirebaseAvailable()) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     // Create user in Firebase Auth
     console.log("[Firebase] Creating auth user for:", email);
@@ -154,13 +180,26 @@ export async function signUpWithEmail(email, password, displayName, role = "user
  * Sign in user with email and password
  */
 export async function signInWithEmail(email, password) {
+  if (!isFirebaseAvailable()) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Get user role from Firestore
-    const userDoc = await getDoc(doc(db, "users", user.uid));
-    const userData = userDoc.exists() ? userDoc.data() : { role: "user" };
+    let userData = { role: "user" };
+
+    try {
+      // Firestore can be temporarily unreachable on mobile networks.
+      // Do not block sign-in if profile lookup fails.
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (userDoc.exists()) {
+        userData = userDoc.data();
+      }
+    } catch (profileError) {
+      console.warn("[Firebase] Firestore profile fetch failed during login:", profileError?.message || profileError);
+    }
 
     return {
       success: true,
@@ -184,6 +223,10 @@ export async function signInWithEmail(email, password) {
  * Sign in with Google
  */
 export async function handleGoogleSignIn(promptAsync, selectedRole = "user") {
+  if (!isFirebaseAvailable()) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     if (!promptAsync) {
       throw new Error("Google auth not initialized");
@@ -276,6 +319,10 @@ export async function handleGoogleSignIn(promptAsync, selectedRole = "user") {
  * Get idToken for backend verification
  */
 export async function getFirebaseToken() {
+  if (!auth) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     const currentUser = auth.currentUser;
     if (!currentUser) {
@@ -301,6 +348,10 @@ export async function getFirebaseToken() {
  * Update user role
  */
 export async function updateUserRole(userId, newRole) {
+  if (!db) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     await updateDoc(doc(db, "users", userId), {
       role: newRole,
@@ -319,6 +370,10 @@ export async function updateUserRole(userId, newRole) {
  * Get user profile with role
  */
 export async function getUserProfile(uid) {
+  if (!db) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     const userDoc = await getDoc(doc(db, "users", uid));
     if (userDoc.exists()) {
@@ -344,6 +399,10 @@ export async function getUserProfile(uid) {
  * Update user profile
  */
 export async function updateUserProfile(uid, profileData) {
+  if (!db) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     await updateDoc(doc(db, "users", uid), {
       ...profileData,
@@ -362,6 +421,10 @@ export async function updateUserProfile(uid, profileData) {
  * Sign out
  */
 export async function signOutUser() {
+  if (!auth) {
+    return getFirebaseUnavailableResult();
+  }
+
   try {
     await signOut(auth);
     return { success: true };
@@ -377,12 +440,13 @@ export async function signOutUser() {
  * Get current user
  */
 export function getCurrentUser() {
-  return auth.currentUser;
+  return auth?.currentUser || null;
 }
 
 /**
  * Listen to auth state changes
  */
 export function onAuthStateChange(callback) {
+  if (!auth) return () => {};
   return auth.onAuthStateChanged(callback);
 }

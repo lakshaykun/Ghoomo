@@ -21,29 +21,40 @@ const firebaseConfig = {
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+let firebaseInitError = null;
+let app = null;
+
+try {
+  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+} catch (error) {
+  firebaseInitError = error;
+  console.error("[Firebase] App initialization failed:", error?.message || error);
+}
 
 // Initialize Auth with React Native persistence
 let authInstance;
 
-try {
-  authInstance = initializeAuth(app, {
-    persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-  });
-} catch (error) {
-  // Fast refresh can re-run module initialization while auth already exists.
-  if (error?.code === "auth/already-initialized") {
-    authInstance = getAuth(app);
-  } else {
-    throw error;
+if (app) {
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+    });
+  } catch (error) {
+    // Fast refresh can re-run module initialization while auth already exists.
+    if (error?.code === "auth/already-initialized") {
+      authInstance = getAuth(app);
+    } else {
+      firebaseInitError = firebaseInitError || error;
+      console.error("[Firebase] Auth initialization failed:", error?.message || error);
+      authInstance = null;
+    }
   }
 }
 
 export const auth = authInstance;
 
 // Initialize Firestore (optional, for storing user roles and profiles)
-export const db = getFirestore(app);
+export const db = app ? getFirestore(app) : null;
 
 // Initialize Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
@@ -51,5 +62,8 @@ export const googleProvider = new GoogleAuthProvider();
 // Set Google scopes for additional data
 googleProvider.addScope("profile");
 googleProvider.addScope("email");
+
+export const firebaseReady = Boolean(app && auth && db);
+export const getFirebaseInitError = () => firebaseInitError;
 
 export default app;
