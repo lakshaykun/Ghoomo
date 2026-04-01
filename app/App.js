@@ -4,7 +4,7 @@ import { Provider } from "react-redux";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, NativeModules, StyleSheet, View } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { enableScreens } from "react-native-screens";
 import { store } from "./src/store";
@@ -37,6 +37,16 @@ function AppBootstrap() {
 
 export default function App() {
   useEffect(() => {
+    // Load Vexo only when the iOS/Android native module is actually linked.
+    if (NativeModules.RNVexo && process.env.VEXO_API_KEY) {
+      try {
+        const { vexo } = require("vexo-analytics");
+        vexo(process.env.VEXO_API_KEY);
+      } catch (error) {
+        console.warn("[Vexo] Failed to initialize:", error?.message || error);
+      }
+    }
+
     initializeNotifications().catch(() => {});
 
     const updateTimer = setTimeout(() => {

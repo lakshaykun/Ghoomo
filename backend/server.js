@@ -4,7 +4,6 @@ const { URL } = require("url");
 const { WebSocketServer } = require("ws");
 const { createStorage } = require("./storage");
 
-require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
 const PORT = Number(process.env.PORT || 4000);
