@@ -1,7 +1,7 @@
 {
   "name": "ghoomo-platform",
   "version": "1.0.0",
-  "description": "Ghoomo - Professional Ride-Sharing Platform (Monorepo)",
+  "description": "Ghoomo — Ride-sharing platform (monorepo: app + backend + web)",
   "private": true,
   "workspaces": [
     "app",
@@ -9,21 +9,24 @@
     "web"
   ],
   "scripts": {
-    "install:all": "npm install && npm install --prefix app && npm install --prefix backend",
-    "start": "npm run start:app",
-    "start:app": "npm start --prefix app",
-    "start:backend": "npm start --prefix backend",
-    "start:web": "npm run serve --prefix web",
-    "start:all": "concurrently \"npm run start:app\" \"npm run start:backend\" \"npm run serve --prefix web\"",
+    "install:all": "npm install && npm install --prefix app && npm install --prefix backend && npm install --prefix web",
+
+    "dev": "concurrently --names \"backend,app,web\" --prefix-colors \"cyan,green,magenta\" \"npm run dev:backend\" \"npm run dev:app\" \"npm run dev:web\"",
+
+    "dev:backend": "npm start --prefix backend",
+    "dev:app": "npm start --prefix app",
+    "dev:web": "npm run dev --prefix web",
+
     "build:app": "npm run build --prefix app",
     "build:android": "npm run build:android:apk --prefix app",
     "build:ios": "npm run build:ios --prefix app",
     "build:backend": "npm run build --prefix backend",
     "build:web": "npm run build --prefix web",
-    "test": "npm test --prefix app && npm test --prefix backend",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx --ignore-path .gitignore",
     "format": "prettier --write .",
-    "clean": "rm -rf app/node_modules backend/node_modules node_modules && rm -rf app/.expo backend/.build"
+
+    "clean": "rm -rf node_modules app/node_modules backend/node_modules web/node_modules app/.expo backend/.build web/dist"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
@@ -33,23 +36,5 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  },
-  "keywords": [
-    "rideshare",
-    "ride-hailing",
-    "transportation",
-    "platform"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/ghoomo/platform.git"
-  },
-  "bugs": {
-    "url": "https://github.com/ghoomo/platform/issues"
-  },
-  "homepage": "https://ghoomo.com",
-  "dependencies": {
-    "expo-updates": "~29.0.16",
-    "vexo-analytics": "^1.5.4"
   }
 }

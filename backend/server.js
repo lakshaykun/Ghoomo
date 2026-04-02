@@ -4,7 +4,11 @@ const { URL } = require("url");
 const { WebSocketServer } = require("ws");
 const { createStorage } = require("./storage");
 
-require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+// Load environment from backend/.env (with fallback to root .env for backwards compat)
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
+if (!process.env.PORT && !process.env.SUPABASE_DB_URL && !process.env.DATABASE_URL) {
+  require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+}
 
 const PORT = Number(process.env.PORT || 4000);
 const DEFAULT_CITY = {

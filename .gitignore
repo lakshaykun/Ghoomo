@@ -1,73 +1,41 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-**/node_modules
-/.pnp
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+.pnp
 .pnp.js
 
-# testing
-/coverage
+# ── Build outputs ─────────────────────────────────────────────
+dist/
+build/
+.build/
+out/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-/web/dist
-
-# misc
-.DS_Store
-*.pem
-.expo/
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
+# ── Environment files ─────────────────────────────────────────
+# Each workspace keeps its own .env — never commit real secrets.
 .env
 .env.*
-/app/.env.local
-/app/.env
-/app/.env.*
-/app/.env.*.local
-
-/web/.env.local
-/web/.env
-/web/.env.*
-/web/.env.*.local
-
-# keep safe templates committed
-!.env.example
 !**/.env.example
 
-# secrets, keys, and credentials
-*.key
-*.pem
-*.p12
-*.pfx
-*.jks
-*.keystore
-*.mobileprovision
-*.cer
-*.crt
-*.der
-*.asc
-*.kdbx
-*.p8
+# ── Expo / React Native ───────────────────────────────────────
+.expo/
+*.orig.*
+web-build/
+
+# ── Native secrets ────────────────────────────────────────────
 google-services.json
 GoogleService-Info.plist
 *service-account*.json
 *service_account*.json
 *firebase*admin*.json
+*.key
+*.pem
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
 
-# vercel
+# ── Tooling ───────────────────────────────────────────────────
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+.DS_Store
+*.log
+.vscode/
+.idea/
