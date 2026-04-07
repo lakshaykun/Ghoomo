@@ -79,6 +79,14 @@ const listCandidateRequests = asyncHandler(async (req, res) => {
   });
 });
 
+const getActiveRide = asyncHandler(async (req, res) => {
+  const ride = await driverService.getActiveRide(req.user.id);
+  res.status(200).json({
+    success: true,
+    data: ride,
+  });
+});
+
 const respondToCandidate = asyncHandler(async (req, res) => {
   const validation = validateCandidateResponsePayload(req.body);
   if (!validation.isValid) {
@@ -100,5 +108,6 @@ module.exports = {
   updateLocation,
   getNearbyDrivers,
   listCandidateRequests,
+  getActiveRide,
   respondToCandidate,
 };

@@ -258,7 +258,14 @@ export const createBusSeatBooking = (payload) => async (dispatch) => {
   }
 };
 
-export const cancelBusSeatBooking = (bookingId) => async (dispatch) => {
+export const cancelBusSeatBooking = (bookingId) => async (dispatch, getState) => {
+  const role = String(getState().auth.user?.role || "").toLowerCase();
+  if (!["driver", "admin", "bus_driver"].includes(role)) {
+    const message = "The current backend allows bus-booking cancellation only for driver/admin roles.";
+    dispatch(requestFailure(message));
+    throw new Error(message);
+  }
+
   dispatch(requestStart());
   try {
     await api.cancelBusBooking(bookingId);
@@ -271,7 +278,14 @@ export const cancelBusSeatBooking = (bookingId) => async (dispatch) => {
   }
 };
 
-export const verifyBusTicketRemote = (bookingId, verifiedBy) => async (dispatch) => {
+export const verifyBusTicketRemote = (bookingId, verifiedBy) => async (dispatch, getState) => {
+  const role = String(getState().auth.user?.role || "").toLowerCase();
+  if (!["driver", "admin", "bus_driver"].includes(role)) {
+    const message = "The current backend allows bus ticket verification only for driver/admin roles.";
+    dispatch(requestFailure(message));
+    throw new Error(message);
+  }
+
   dispatch(requestStart());
   try {
     await api.verifyBusBooking(bookingId, verifiedBy);
@@ -315,10 +329,11 @@ export const createRideBooking = (payload) => async (dispatch) => {
   }
 };
 
-export const syncRideStatus = (rideId, status) => async (dispatch) => {
+export const syncRideStatus = (rideId, status) => async (dispatch, getState) => {
   dispatch(requestStart());
   try {
-    const { ride } = await api.updateRideStatus(rideId, status);
+    const userId = getState().auth.user?.id;
+    const { ride } = await api.updateRideStatus(rideId, status, { userId });
     await sendLocalNotification({
       key: `ride-status-${ride.id}-${ride.status}`,
       title:

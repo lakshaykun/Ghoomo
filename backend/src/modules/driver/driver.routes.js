@@ -11,6 +11,7 @@ router.use(authenticate);
 
 router.post("/register", controller.registerDriver);
 router.get("/me", requireRole("driver", "admin"), controller.getProfile);
+router.get("/me/active-ride", requireRole("driver", "admin"), controller.getActiveRide);
 router.patch("/me/availability", requireRole("driver", "admin"), controller.updateAvailability);
 router.patch("/me/location", requireRole("driver", "admin"), controller.updateLocation);
 router.get("/requests", requireRole("driver", "admin"), controller.listCandidateRequests);

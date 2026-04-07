@@ -4,7 +4,6 @@ import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput,
 import { Ionicons, AntDesign } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { registerUser, googleSignIn } from "../../store/slices/authSlice";
-import { fetchBusRoutes } from "../../store/slices/busRoutesSlice";
 import Button from "../../components/common/Button";
 import { COLORS, SPACING } from "../../constants";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,10 +15,8 @@ const ROLE_OPTIONS = [
 ];
 
 const DRIVER_TYPES = [
-  { key: "bike", label: "Bike" },
   { key: "auto", label: "Auto" },
   { key: "cab", label: "Cab" },
-  { key: "bus", label: "Bus" },
 ];
 
 function SimpleField({
@@ -65,8 +62,6 @@ function SimpleField({
 export default function RegisterScreen({ navigation }) {
   const dispatch = useDispatch();
   const { loading, error, isAuthenticated, user } = useSelector(s => s.auth);
-  const liveRoutes = useSelector((state) => state.busRoutes.routes);
-  const availableRoutes = liveRoutes;
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showGoogleSignUpModal, setShowGoogleSignUpModal] = useState(false);
   const [selectedRoleForGoogle, setSelectedRoleForGoogle] = useState("user");
@@ -81,16 +76,11 @@ export default function RegisterScreen({ navigation }) {
     vehicleType: "cab",
     vehicleNo: "",
     licenseNumber: "",
-    busRoute: "",
     password: "",
     confirm: "",
   });
 
   const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  useEffect(() => {
-    dispatch(fetchBusRoutes()).catch(() => {});
-  }, [dispatch]);
 
   // Watch for auth state changes for debugging
   useEffect(() => {
@@ -145,12 +135,8 @@ export default function RegisterScreen({ navigation }) {
         Alert.alert("Error", "Drivers must provide vehicle and license details");
         return;
       }
-      if (form.vehicleType === "bus" && !form.busRoute) {
-        Alert.alert("Error", "Bus drivers must select a route");
-        return;
-      }
-      if (form.vehicleType === "bus" && availableRoutes.length === 0) {
-        Alert.alert("Routes Unavailable", "Bus routes are not available right now. Please try again later.");
+      if (!["auto", "cab"].includes(form.vehicleType)) {
+        Alert.alert("Error", "Only auto and cab are currently supported for driver registration.");
         return;
       }
     }
@@ -165,7 +151,6 @@ export default function RegisterScreen({ navigation }) {
       vehicleType: form.role === "driver" ? form.vehicleType : undefined,
       vehicleNo: form.role === "driver" ? form.vehicleNo : undefined,
       licenseNumber: form.role === "driver" ? form.licenseNumber : undefined,
-      busRoute: form.role === "driver" && form.vehicleType === "bus" ? form.busRoute : undefined,
       password: form.password,
     }));
   };
@@ -315,30 +300,6 @@ export default function RegisterScreen({ navigation }) {
                   autoCorrect={false}
                   leftIcon={<Ionicons name="card" size={20} color={COLORS.gray} />}
                 />
-                {form.vehicleType === "bus" ? (
-                  <>
-                    <Text style={styles.inlineLabel}>Bus Route</Text>
-                    {availableRoutes.length === 0 ? (
-                      <View style={styles.routeEmpty}>
-                        <Ionicons name="alert-circle" size={18} color={COLORS.warning} />
-                        <Text style={styles.routeEmptyText}>No bus routes are available yet. Please contact support.</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.optionRow}>
-                        {availableRoutes.map((route) => (
-                          <TouchableOpacity
-                            key={route.id}
-                            style={[styles.routeChoice, form.busRoute === route.id && styles.routeChoiceActive]}
-                            onPress={() => update("busRoute", route.id)}
-                          >
-                            <Text style={styles.routeChoiceTitle}>{route.name}</Text>
-                            <Text style={styles.routeChoiceText}>{route.from} -> {route.to}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </>
-                ) : null}
               </>
             ) : null}
 

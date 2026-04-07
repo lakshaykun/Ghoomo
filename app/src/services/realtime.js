@@ -1,5 +1,11 @@
 import { getApiBaseUrl } from "./api";
 
+const ENABLE_REALTIME_WS = String(process.env.EXPO_PUBLIC_ENABLE_REALTIME_WS || "false").toLowerCase() === "true";
+
+function noopUnsubscribe() {
+  return () => {};
+}
+
 function toWebSocketUrl(httpUrl) {
   if (httpUrl.startsWith("https://")) {
     return httpUrl.replace("https://", "wss://");
@@ -11,8 +17,15 @@ function toWebSocketUrl(httpUrl) {
 }
 
 export function subscribeRideRealtime(rideId, { onRideUpdate, onError } = {}) {
+  void onRideUpdate;
+
   if (!rideId) {
     return () => {};
+  }
+
+  if (!ENABLE_REALTIME_WS) {
+    onError?.(new Error("Realtime websocket is disabled for this backend deployment."));
+    return noopUnsubscribe();
   }
 
   const baseUrl = getApiBaseUrl();
@@ -71,6 +84,13 @@ export function subscribeRideRealtime(rideId, { onRideUpdate, onError } = {}) {
 }
 
 export function subscribeBusRealtime({ onBusUpdate, onError } = {}) {
+  void onBusUpdate;
+
+  if (!ENABLE_REALTIME_WS) {
+    onError?.(new Error("Realtime websocket is disabled for this backend deployment."));
+    return noopUnsubscribe();
+  }
+
   const baseUrl = getApiBaseUrl();
   const wsUrl = `${toWebSocketUrl(baseUrl)}/ws`;
   let socket;

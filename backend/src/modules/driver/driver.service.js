@@ -79,6 +79,15 @@ async function listCandidateRequests(userId) {
   return repository.listCandidateRequestsByUserId(userId);
 }
 
+async function getActiveRide(userId) {
+  const driver = await repository.findDriverByUserId(userId);
+  if (!driver) {
+    throw new AppError("Driver profile not found", 404, "DRIVER_NOT_FOUND");
+  }
+
+  return repository.findActiveRideByUserId(userId);
+}
+
 async function respondToCandidate(userId, requestId, status) {
   const candidate = await repository.updateCandidateStatus({ userId, requestId, status });
   if (!candidate) {
@@ -99,5 +108,6 @@ module.exports = {
   updateLocation,
   getNearbyDrivers,
   listCandidateRequests,
+  getActiveRide,
   respondToCandidate,
 };

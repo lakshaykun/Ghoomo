@@ -62,7 +62,7 @@ function DriverTabs() {
 
 export default function DriverNavigator() {
   const user = useSelector(s => s.auth.user);
-  const isBusDriver = user?.vehicleType === "bus" || Boolean(user?.busRoute);
+  const isBusDriver = user?.role === "bus_driver" || user?.vehicleType === "bus" || Boolean(user?.busRoute);
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

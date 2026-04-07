@@ -40,6 +40,9 @@ export default function BusBookingScreen({ navigation }) {
   const [step, setStep] = useState("routes");
   const [lastBooking, setLastBooking] = useState(null);
   const [now, setNow] = useState(new Date());
+  const canUpdateBusBookingStatus = ["driver", "admin", "bus_driver"].includes(
+    String(user?.role || "").toLowerCase()
+  );
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 30000);
@@ -156,6 +159,14 @@ export default function BusBookingScreen({ navigation }) {
   };
 
   const handleCancel = (booking) => {
+    if (!canUpdateBusBookingStatus) {
+      Alert.alert(
+        "Cancellation Not Allowed",
+        "The current backend allows bus-booking cancellation only for driver/admin roles."
+      );
+      return;
+    }
+
     const route = routes.find((item) => item.id === booking.routeId);
     const bookingWindow = route ? getBookingWindow(route, now) : null;
     if (booking.verified) {
@@ -300,23 +311,33 @@ export default function BusBookingScreen({ navigation }) {
                   <TouchableOpacity
                     style={[
                       styles.cancelBtn,
-                      (bookingWindow && !bookingWindow.canCancel) || booking.verified ? styles.cancelBtnDisabled : null,
+                      (bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus
+                        ? styles.cancelBtnDisabled
+                        : null,
                     ]}
                     onPress={() => handleCancel(booking)}
-                    disabled={Boolean((bookingWindow && !bookingWindow.canCancel) || booking.verified)}
+                    disabled={Boolean((bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus)}
                   >
                     <Ionicons
                       name="close-circle"
                       size={16}
-                      color={(bookingWindow && !bookingWindow.canCancel) || booking.verified ? COLORS.gray : COLORS.error}
+                      color={
+                        (bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus
+                          ? COLORS.gray
+                          : COLORS.error
+                      }
                     />
                     <Text
                       style={[
                         styles.cancelBtnText,
-                        (bookingWindow && !bookingWindow.canCancel) || booking.verified ? styles.cancelBtnTextDisabled : null,
+                        (bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus
+                          ? styles.cancelBtnTextDisabled
+                          : null,
                       ]}
                     >
-                      {booking.verified
+                      {!canUpdateBusBookingStatus
+                        ? "Cancellation restricted by backend role policy"
+                        : booking.verified
                         ? "Verified • Cannot cancel"
                         : bookingWindow && !bookingWindow.canCancel
                           ? "Cancellation closed"

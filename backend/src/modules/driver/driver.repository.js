@@ -281,6 +281,42 @@ async function listCandidateRequestsByUserId(userId) {
   return result.rows;
 }
 
+async function findActiveRideByUserId(userId) {
+  const result = await query(
+    `
+    SELECT
+      r.id,
+      r.request_id,
+      r.student_id,
+      r.driver_id,
+      r.pickup_location,
+      r.drop_location,
+      r.pickup_latitude,
+      r.pickup_longitude,
+      r.drop_latitude,
+      r.drop_longitude,
+      r.fare,
+      r.distance,
+      r.status,
+      r.start_time,
+      r.end_time,
+      r.is_shared,
+      r.created_at,
+      r.updated_at
+    FROM rides r
+    INNER JOIN drivers d ON d.id = r.driver_id
+    WHERE
+      d.user_id = $1
+      AND r.status IN ('assigned', 'arriving', 'started')
+    ORDER BY r.updated_at DESC, r.created_at DESC
+    LIMIT 1
+    `,
+    [userId]
+  );
+
+  return result.rows[0] || null;
+}
+
 async function updateCandidateStatus({ userId, requestId, status }) {
   const result = await query(
     `
@@ -321,6 +357,7 @@ module.exports = {
   updateLocationByUserId,
   listNearbyDrivers,
   listCandidateRequestsByUserId,
+  findActiveRideByUserId,
   updateCandidateStatus,
   markRideRequestMatched,
 };

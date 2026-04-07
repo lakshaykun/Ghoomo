@@ -25,13 +25,16 @@ export default function DriverOtpScreen({ navigation, route }) {
 
   const rideIdFromParams = route?.params?.rideId || null;
   const ride = useMemo(() => {
-    const rides = dashboard?.assignedRides || [];
+    const rides = (dashboard?.assignedRides || []).filter((item) => item?.sourceType === "ride");
+    const activeRide = dashboard?.activeRide?.sourceType === "ride" ? dashboard.activeRide : null;
+
     if (rideIdFromParams) {
       const byId = rides.find((item) => item.id === rideIdFromParams);
       if (byId) return byId;
     }
+
     return (
-      dashboard?.activeRide ||
+      activeRide ||
       rides.find((item) => item.status === BOOKING_STATUS.ARRIVED) ||
       rides.find((item) => item.status === BOOKING_STATUS.ACCEPTED) ||
       null
@@ -52,7 +55,9 @@ export default function DriverOtpScreen({ navigation, route }) {
     try {
       await dispatch(
         driverUpdateRideStatus(user.id, ride.id, BOOKING_STATUS.IN_PROGRESS, {
+          actor: "driver",
           otp: enteredOtp.trim(),
+          sourceType: ride.sourceType,
         })
       );
       Alert.alert("Ride Started", "OTP verified. Trip is now in progress.", [

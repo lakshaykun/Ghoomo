@@ -186,17 +186,17 @@ async function updateRideStatus(rideId, status) {
     `
     UPDATE rides
     SET
-      status = $1,
+      status = $1::varchar,
       start_time = CASE
-        WHEN $1 = 'started' AND start_time IS NULL THEN NOW()
+        WHEN $1::text = 'started' AND start_time IS NULL THEN NOW()
         ELSE start_time
       END,
       end_time = CASE
-        WHEN $1 IN ('completed', 'cancelled') THEN NOW()
+        WHEN $1::text IN ('completed', 'cancelled') THEN NOW()
         ELSE end_time
       END,
       updated_at = NOW()
-    WHERE id = $2
+    WHERE id = $2::uuid
     RETURNING *
     `,
     [status, rideId]

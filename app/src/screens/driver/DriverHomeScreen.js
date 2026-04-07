@@ -127,9 +127,15 @@ export default function DriverHomeScreen({ navigation }) {
     );
   };
 
-  const handleAcceptRide = (rideId) => {
-    handleRideAction(rideId, BOOKING_STATUS.ACCEPTED, {
+  const handleAcceptRide = (ride) => {
+    if (ride?.sourceType !== "ride_request_candidate") {
+      Alert.alert("Action Not Allowed", "Only pending ride requests can be accepted.");
+      return;
+    }
+
+    handleRideAction(ride.id, BOOKING_STATUS.ACCEPTED, {
       actor: "driver",
+      sourceType: ride.sourceType,
       driverId: user?.id,
     });
   };
@@ -137,9 +143,9 @@ export default function DriverHomeScreen({ navigation }) {
   const assignedRides = dashboard?.assignedRides || [];
   const activeRide =
     dashboard?.activeRide ||
-    assignedRides.find((ride) => ride.status === BOOKING_STATUS.IN_PROGRESS) ||
-    assignedRides.find((ride) => ride.status === BOOKING_STATUS.ARRIVED) ||
-    assignedRides.find((ride) => ride.status === BOOKING_STATUS.ACCEPTED) ||
+    assignedRides.find((ride) => ride.sourceType === "ride" && ride.status === BOOKING_STATUS.IN_PROGRESS) ||
+    assignedRides.find((ride) => ride.sourceType === "ride" && ride.status === BOOKING_STATUS.ARRIVED) ||
+    assignedRides.find((ride) => ride.sourceType === "ride" && ride.status === BOOKING_STATUS.ACCEPTED) ||
     null;
   const completedRides = dashboard?.completedRides || [];
   const driverProfile = dashboard?.driver || user || {};
@@ -165,26 +171,42 @@ export default function DriverHomeScreen({ navigation }) {
     return () => clearInterval(intervalId);
   }, [activeRide?.id, activeRide?.isShare]);
 
-  const handleRejectRide = (rideId) => {
+  const handleRejectRide = (ride) => {
+    if (!ride?.id) {
+      Alert.alert("Action Not Allowed", "Ride details are missing. Please refresh and try again.");
+      return;
+    }
+
     Alert.alert("Reject Ride", "This ride will be reassigned to the next nearest driver if one is available.", [
       { text: "Keep Ride", style: "cancel" },
       {
         text: "Reject",
         style: "destructive",
         onPress: () =>
-          handleRideAction(rideId, BOOKING_STATUS.CANCELLED, {
+          handleRideAction(ride.id, BOOKING_STATUS.CANCELLED, {
             actor: "driver",
             driverId: user?.id,
             reason: "Driver rejected ride before pickup",
+            sourceType: ride.sourceType,
           }),
       },
     ]);
   };
 
-  const handleMarkArrived = async (rideId) => {
+  const handleMarkArrived = async (ride) => {
+    if (ride?.sourceType !== "ride") {
+      Alert.alert("Assignment Syncing", "This request is still syncing to an assigned ride. Pull to refresh and try again.");
+      return;
+    }
+
     try {
-      await dispatch(driverUpdateRideStatus(user.id, rideId, BOOKING_STATUS.ARRIVED));
-      navigation.getParent()?.navigate("DriverOtp", { rideId });
+      await dispatch(
+        driverUpdateRideStatus(user.id, ride.id, BOOKING_STATUS.ARRIVED, {
+          actor: "driver",
+          sourceType: ride.sourceType,
+        })
+      );
+      navigation.getParent()?.navigate("DriverOtp", { rideId: ride.id });
     } catch (rideError) {
       Alert.alert("Ride Update Failed", rideError.message);
     }
@@ -336,13 +358,13 @@ export default function DriverHomeScreen({ navigation }) {
                     <View style={styles.otpStartWrap}>
                       <Button
                         title="Mark Arrived"
-                        onPress={() => handleMarkArrived(activeRide.id)}
+                        onPress={() => handleMarkArrived(activeRide)}
                         variant="primary"
                         style={{ flex: 1 }}
                       />
                       <Button
                         title="Reject Ride"
-                        onPress={() => handleRejectRide(activeRide.id)}
+                        onPress={() => handleRejectRide(activeRide)}
                         variant="danger"
                         variant2="outline"
                         style={{ flex: 1 }}
@@ -360,7 +382,12 @@ export default function DriverHomeScreen({ navigation }) {
                   {activeRide.status === BOOKING_STATUS.IN_PROGRESS ? (
                     <Button
                       title="Reached"
-                      onPress={() => handleRideAction(activeRide.id, BOOKING_STATUS.COMPLETED)}
+                      onPress={() =>
+                        handleRideAction(activeRide.id, BOOKING_STATUS.COMPLETED, {
+                          actor: "driver",
+                          sourceType: activeRide.sourceType,
+                        })
+                      }
                       variant="success"
                       style={{ flex: 1 }}
                     />
@@ -405,11 +432,11 @@ export default function DriverHomeScreen({ navigation }) {
                     <Text style={styles.routeSubText}>Nearby request waiting for first driver acceptance</Text>
                   )}
                 </View>
-                {ride.status === BOOKING_STATUS.PENDING ? (
+                {ride.status === BOOKING_STATUS.PENDING && ride.sourceType === "ride_request_candidate" ? (
                   <View style={styles.pendingActionRow}>
                     <Button
                       title="Accept Ride"
-                      onPress={() => handleAcceptRide(ride.id)}
+                      onPress={() => handleAcceptRide(ride)}
                       variant="success"
                       style={{ flex: 1 }}
                     />

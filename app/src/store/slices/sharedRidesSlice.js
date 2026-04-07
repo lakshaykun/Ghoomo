@@ -97,7 +97,14 @@ export const joinSharedRideRequest = (requestId, userId) => async (dispatch) => 
   }
 };
 
-export const stopSharedRideRequest = (requestId, userId) => async (dispatch) => {
+export const stopSharedRideRequest = (requestId, userId, role = "user") => async (dispatch) => {
+  const normalizedRole = String(role || "").toLowerCase();
+  if (!["driver", "admin", "bus_driver"].includes(normalizedRole)) {
+    const message = "Only driver/admin accounts can close shared ride requests in the current backend.";
+    dispatch(sharedRequestFailure(message));
+    throw new Error(message);
+  }
+
   try {
     await api.closeSharedRide(requestId, userId);
     const payload = await api.getSharedRides(userId);

@@ -13,6 +13,7 @@ export default function SharedRidesScreen() {
   const user = useSelector((state) => state.auth.user);
   const activeBooking = useSelector((state) => state.booking.activeBooking);
   const { myRequests, availableRequests, loading } = useSelector((state) => state.sharedRides);
+  const canCloseSharedRide = ["driver", "admin", "bus_driver"].includes(String(user?.role || "").toLowerCase());
 
   useEffect(() => {
     if (!user?.id) return undefined;
@@ -32,13 +33,18 @@ export default function SharedRidesScreen() {
   };
 
   const handleStopSharedRide = (requestId) => {
+    if (!canCloseSharedRide) {
+      Alert.alert("Not Allowed", "Only driver/admin accounts can close shared ride requests in the current backend.");
+      return;
+    }
+
     Alert.alert("Stop Shared Request", "This shared ride request will be removed from the list.", [
       { text: "Keep", style: "cancel" },
       {
         text: "Stop",
         style: "destructive",
         onPress: () =>
-          dispatch(stopSharedRideRequest(requestId, user.id)).catch((error) =>
+          dispatch(stopSharedRideRequest(requestId, user.id, user?.role)).catch((error) =>
             Alert.alert("Unable to Stop", error.message)
           ),
       },
@@ -69,7 +75,11 @@ export default function SharedRidesScreen() {
               <Text style={styles.sharedMeta}>
                 {request.acceptedCount}/{request.requestedSeats} joined • {request.remainingSeats} seat{request.remainingSeats === 1 ? "" : "s"} left
               </Text>
-              <Button title="Stop Request" onPress={() => handleStopSharedRide(request.id)} variant="danger" variant2="outline" />
+              {canCloseSharedRide ? (
+                <Button title="Stop Request" onPress={() => handleStopSharedRide(request.id)} variant="danger" variant2="outline" />
+              ) : (
+                <Text style={styles.sharedHint}>Stop action is restricted to driver/admin by backend policy.</Text>
+              )}
             </Card>
           )) : (
             <Card elevated style={styles.sharedEmptyCard}>
@@ -132,6 +142,7 @@ const styles = StyleSheet.create({
   sharedTitle: { fontSize: 15, fontWeight: "800", color: COLORS.text, marginBottom: 4 },
   sharedRoute: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 18 },
   sharedMeta: { fontSize: 12, fontWeight: "700", color: COLORS.primary, marginBottom: 12 },
+  sharedHint: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "600" },
   sharedEmptyCard: { marginBottom: SPACING.sm },
   sharedEmptyTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text, marginBottom: 6 },
   sharedEmptyText: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 18 },

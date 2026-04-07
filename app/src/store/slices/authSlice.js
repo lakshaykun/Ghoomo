@@ -1,27 +1,42 @@
 
 import { createSlice } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { api } from "../../services/api";
+import { api, clearApiAuthToken, setApiAuthToken } from "../../services/api";
 import { registerPushTokenForUser, unregisterPushTokenForUser } from "../../services/notifications";
-import {
-  signUpWithEmail,
-  signInWithEmail,
-  handleGoogleSignIn,
-  signOutUser,
-  getFirebaseToken,
-} from "../../services/firebaseAuth";
 
 const AUTH_STORAGE_KEY = "ghoomo.auth.user";
 const APP_ADMIN_ROLE_BLOCK_MESSAGE = "Admin accounts are not supported in the mobile app. Please use the admin website.";
+const GOOGLE_LOGIN_NOT_AVAILABLE_MESSAGE =
+  "Google sign-in is temporarily unavailable because the modular backend does not implement social login endpoints yet.";
+
+function normalizeRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "rider" || normalized === "user") return "user";
+  if (normalized === "bus_driver") return "bus_driver";
+  return normalized || "user";
+}
+
+function normalizeDriverVehicleType(vehicleType) {
+  const normalized = String(vehicleType || "").trim().toLowerCase();
+  return normalized === "cab" ? "cab" : "auto";
+}
+
+function persistSessionPayload({ user, token, authMethod }) {
+  return {
+    ...user,
+    token,
+    authMethod,
+  };
+}
 
 const initialState = {
   user: null,
+  token: null,
   isAuthenticated: false,
   loading: false,
   error: null,
   hydrated: false,
-  firebaseUser: null,
-  authMethod: null, // 'email' or 'google'
+  authMethod: null,
 };
 
 const authSlice = createSlice({
@@ -31,9 +46,9 @@ const authSlice = createSlice({
     loginStart: (state) => { state.loading = true; state.error = null; },
     loginSuccess: (state, action) => {
       state.loading = false;
-      state.isAuthenticated = true;
       state.user = action.payload.user;
-      state.firebaseUser = action.payload.firebaseUser;
+      state.token = action.payload.token;
+      state.isAuthenticated = Boolean(action.payload.user && action.payload.token);
       state.authMethod = action.payload.authMethod;
       state.error = null;
       state.hydrated = true;
@@ -45,7 +60,7 @@ const authSlice = createSlice({
     },
     logout: (state) => {
       state.user = null;
-      state.firebaseUser = null;
+      state.token = null;
       state.isAuthenticated = false;
       state.error = null;
       state.hydrated = true;
@@ -55,11 +70,11 @@ const authSlice = createSlice({
       state.user = { ...state.user, ...action.payload };
     },
     restoreSession: (state, action) => {
-      const userData = action.payload;
-      state.user = userData ? { ...userData } : null;
-      state.firebaseUser = userData?.firebaseUser || null;
-      state.authMethod = userData?.authMethod || null;
-      state.isAuthenticated = Boolean(userData);
+      const session = action.payload;
+      state.user = session?.user ? { ...session.user } : null;
+      state.token = session?.token || null;
+      state.authMethod = session?.authMethod || null;
+      state.isAuthenticated = Boolean(session?.user && session?.token);
       state.loading = false;
       state.error = null;
       state.hydrated = true;
@@ -72,95 +87,30 @@ export const { loginStart, loginSuccess, loginFailure, logout, updateProfile, re
 export const loginUser = (email, password) => async (dispatch) => {
   dispatch(loginStart());
   try {
-    let backendUser = null;
-    let firebaseUser = null;
-    let authMethod = "email";
+    const { user, token } = await api.login(email, password, { timeoutMs: 12000 });
+    const normalizedUser = {
+      ...user,
+      role: normalizeRole(user?.role),
+    };
 
-    try {
-      // Backend remains source of truth for seeded test users.
-      const { user } = await api.login(email, password, { timeoutMs: 12000 });
-      backendUser = user;
-    } catch (error) {
-      const message = String(error?.message || "").toLowerCase();
-      const isCredentialMiss =
-        message.includes("invalid email or password") ||
-        message.includes("http 401");
-      const isNetworkOrTimeout =
-        error?.code === "TIMEOUT" ||
-        message.includes("network") ||
-        message.includes("failed to fetch") ||
-        message.includes("request timeout");
-
-      if (!isCredentialMiss && !isNetworkOrTimeout) {
-        throw error;
-      }
-
-      // If backend user record is missing (common after backend resets),
-      // sign in via Firebase and upsert backend profile for continuity.
-      const firebaseResult = await signInWithEmail(email, password);
-      if (!firebaseResult.success) {
-        throw new Error(firebaseResult.error || "Unable to sign in");
-      }
-
-      firebaseUser = firebaseResult.user;
-
-      const { user } = await api.firebaseLogin({
-        firebaseUid: firebaseUser.uid,
-        email: firebaseUser.email || email,
-        displayName: firebaseUser.displayName || email.split("@")[0],
-        photoURL: firebaseUser.photoURL || null,
-        role: "user",
-        authMethod: "email",
-      });
-
-      backendUser = user;
-    }
-
-    if (backendUser.role === "admin") {
+    if (normalizedUser.role === "admin") {
       throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
     }
 
-    // If backend user is linked to Firebase, Firebase auth must succeed.
-    // If not linked (e.g., seeded local dummy users), allow legacy backend login.
-    if (backendUser.firebaseUid) {
-      if (!firebaseUser) {
-        const firebaseResult = await signInWithEmail(email, password);
-        if (!firebaseResult.success) {
-          throw new Error(firebaseResult.error || "Unable to sign in with Firebase");
-        }
-        firebaseUser = firebaseResult.user;
-      }
-    } else {
-      authMethod = "legacy";
-    }
+    setApiAuthToken(token);
 
-    // Store combined user info
-    const combinedUser = {
-      id: backendUser.id,
-      uid: firebaseUser?.uid || backendUser.firebaseUid || null,
-      email: firebaseUser?.email || backendUser.email,
-      displayName: firebaseUser?.displayName || backendUser.name,
-      role: backendUser.role || firebaseUser?.role,
-      name: backendUser.name,
-      phone: backendUser.phone,
-      city: backendUser.city,
-      photoURL: firebaseUser?.photoURL || backendUser.photoURL || null,
-      vehicleType: backendUser.vehicleType || null,
-      vehicleNo: backendUser.vehicleNo || null,
-      licenseNumber: backendUser.licenseNumber || null,
-      busRoute: backendUser.busRoute || null,
-    };
+    dispatch(loginSuccess({ user: normalizedUser, token, authMethod: "password" }));
 
-    dispatch(loginSuccess({ user: combinedUser, firebaseUser, authMethod }));
-    await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-      ...combinedUser,
-      firebaseUser,
-      authMethod,
-    }));
-    registerPushTokenForUser(backendUser.id).catch((pushError) => {
+    await AsyncStorage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify(persistSessionPayload({ user: normalizedUser, token, authMethod: "password" }))
+    );
+
+    registerPushTokenForUser(normalizedUser.id).catch((pushError) => {
       console.warn("[Auth] Push token registration failed (non-blocking):", pushError?.message || pushError);
     });
   } catch (error) {
+    clearApiAuthToken();
     dispatch(loginFailure(error.message || "Unable to sign in"));
   }
 };
@@ -172,64 +122,52 @@ export const registerUser = (userData) => async (dispatch) => {
       throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
     }
 
-    // Sign up with Firebase
-    console.log("[Auth] Step 1: Starting Firebase signup for", userData.email);
-    const firebaseResult = await signUpWithEmail(
-      userData.email,
-      userData.password,
-      userData.name,
-      userData.role
-    );
+    const { user, token } = await api.register({
+      name: userData.name,
+      email: userData.email,
+      phone: userData.phone,
+      password: userData.password,
+      role: "user",
+    });
 
-    if (!firebaseResult.success) {
-      console.error("[Auth] Firebase signup failed:", firebaseResult.error);
-      throw new Error(`Firebase signup failed: ${firebaseResult.error}`);
-    }
+    setApiAuthToken(token);
 
-    console.log("[Auth] Step 1 ✓: Firebase signup successful, UID:", firebaseResult.user.uid);
-    const firebaseUser = firebaseResult.user;
-
-    // Call backend to create user record
-    console.log("[Auth] Step 2: Creating backend user record");
-    const { user } = await api.register(userData);
-    console.log("[Auth] Step 2 ✓: Backend user created, ID:", user.id);
-
-    // Store combined user info
-    const combinedUser = {
-      id: user.id,
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      role: user.role || firebaseUser.role,
-      name: user.name,
-      phone: user.phone,
-      city: user.city,
-      photoURL: firebaseUser.photoURL,
-      vehicleType: user.vehicleType || null,
-      vehicleNo: user.vehicleNo || null,
-      licenseNumber: user.licenseNumber || null,
-      busRoute: user.busRoute || null,
+    const normalizedUser = {
+      ...user,
+      role: normalizeRole(user?.role),
     };
 
-    console.log("[Auth] Step 3: Storing auth data locally");
-    dispatch(loginSuccess({ user: combinedUser, firebaseUser, authMethod: "email" }));
-    console.log("[Auth] Step 3 ✓: Redux state updated, isAuthenticated =", true);
-    
-    await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-      ...combinedUser,
-      firebaseUser,
-      authMethod: "email",
-    }));
-    
-    console.log("[Auth] Step 4: Registering push token");
+    if (userData.role === "driver") {
+      const vehicleNumber = String(userData.vehicleNo || userData.vehicleNumber || "").trim();
+      if (!vehicleNumber) {
+        throw new Error("Vehicle number is required for driver registration");
+      }
+
+      const vehicleType = normalizeDriverVehicleType(userData.vehicleType);
+      await api.registerDriverProfile({
+        vehicleNumber,
+        vehicleType,
+      });
+
+      normalizedUser.role = "driver";
+      normalizedUser.vehicleType = vehicleType;
+      normalizedUser.vehicleNo = vehicleNumber.toUpperCase();
+    }
+
+    dispatch(loginSuccess({ user: normalizedUser, token, authMethod: "password" }));
+
+    await AsyncStorage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify(persistSessionPayload({ user: normalizedUser, token, authMethod: "password" }))
+    );
+
     try {
-      await registerPushTokenForUser(user.id);
+      await registerPushTokenForUser(normalizedUser.id);
     } catch (tokenError) {
       console.warn("[Auth] Push token registration failed (non-blocking):", tokenError.message);
     }
-    console.log("[Auth] ✓ Registration complete!");
   } catch (error) {
-    console.error("[Auth] Registration error:", error.message, error.stack);
+    clearApiAuthToken();
     dispatch(loginFailure(error.message || "Unable to register"));
   }
 };
@@ -239,87 +177,49 @@ export const registerUser = (userData) => async (dispatch) => {
  */
 export const googleSignIn = (promptAsync, selectedRole = "user") => async (dispatch) => {
   dispatch(loginStart());
-  try {
-    if (selectedRole === "admin") {
-      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
-    }
-
-    // Sign in with Google via Firebase
-    const firebaseResult = await handleGoogleSignIn(promptAsync, selectedRole);
-
-    if (!firebaseResult.success) {
-      throw new Error(firebaseResult.error);
-    }
-
-    const firebaseUser = firebaseResult.user;
-
-    // Get Firebase ID token
-    const tokenResult = await getFirebaseToken();
-    if (!tokenResult.success) {
-      throw new Error("Failed to get Firebase token");
-    }
-
-    // Call backend to create/update user with Firebase auth
-    const { user } = await api.googleLogin({
-      firebaseUid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      photoURL: firebaseUser.photoURL,
-      role: selectedRole,
-      idToken: tokenResult.token,
-    });
-
-    if (user.role === "admin") {
-      await signOutUser();
-      throw new Error(APP_ADMIN_ROLE_BLOCK_MESSAGE);
-    }
-
-    // Store combined user info
-    const combinedUser = {
-      id: user.id,
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      role: user.role || firebaseUser.role,
-      name: user.name || firebaseUser.displayName,
-      phone: user.phone,
-      city: user.city,
-      photoURL: firebaseUser.photoURL,
-      vehicleType: user.vehicleType || null,
-      vehicleNo: user.vehicleNo || null,
-      licenseNumber: user.licenseNumber || null,
-      busRoute: user.busRoute || null,
-    };
-
-    dispatch(loginSuccess({ user: combinedUser, firebaseUser, authMethod: "google" }));
-    await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-      ...combinedUser,
-      firebaseUser,
-      authMethod: "google",
-    }));
-    await registerPushTokenForUser(user.id);
-  } catch (error) {
-    dispatch(loginFailure(error.message || "Unable to sign in with Google"));
-  }
+  void promptAsync;
+  void selectedRole;
+  dispatch(loginFailure(GOOGLE_LOGIN_NOT_AVAILABLE_MESSAGE));
 };
 
 export const logoutUser = () => async (dispatch, getState) => {
   const userId = getState().auth.user?.id;
   await unregisterPushTokenForUser(userId);
   await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-  await signOutUser();
+  clearApiAuthToken();
   dispatch(logout());
 };
 
 export const hydrateAuthSession = () => async (dispatch) => {
   try {
-    const storedUser = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-    const parsedUser = storedUser ? JSON.parse(storedUser) : null;
-    dispatch(restoreSession(parsedUser));
-    if (parsedUser?.id) {
-      await registerPushTokenForUser(parsedUser.id);
+    const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) : null;
+
+    if (parsed?.token && parsed?.id) {
+      const sessionUser = {
+        ...parsed,
+      };
+
+      delete sessionUser.token;
+      delete sessionUser.authMethod;
+
+      setApiAuthToken(parsed.token);
+      dispatch(
+        restoreSession({
+          user: sessionUser,
+          token: parsed.token,
+          authMethod: parsed.authMethod || "password",
+        })
+      );
+
+      await registerPushTokenForUser(sessionUser.id);
+      return;
     }
+
+    clearApiAuthToken();
+    dispatch(restoreSession(null));
   } catch (_error) {
+    clearApiAuthToken();
     dispatch(restoreSession(null));
   }
 };

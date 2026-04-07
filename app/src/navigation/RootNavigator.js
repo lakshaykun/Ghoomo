@@ -20,6 +20,7 @@ export default function RootNavigator() {
     }
     switch (user?.role) {
       case "driver":
+      case "bus_driver":
         console.log("[RootNavigator] Rendering DriverNavigator");
         return <DriverNavigator />;
       default:

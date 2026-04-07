@@ -353,6 +353,13 @@ const endpointDefinitions = [
     auth: true,
   },
   {
+    path: "/api/drivers/me/active-ride",
+    method: "get",
+    tags: ["Drivers"],
+    summary: "Get the active ride for the driver",
+    auth: true,
+  },
+  {
     path: "/api/drivers/me/availability",
     method: "patch",
     tags: ["Drivers"],

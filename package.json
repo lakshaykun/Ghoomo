@@ -13,7 +13,7 @@
 
     "dev": "concurrently --names \"backend,app,admin\" --prefix-colors \"cyan,green,magenta\" \"npm run dev:backend\" \"npm run dev:app\" \"npm run dev:admin\"",
 
-    "dev:backend": "npm start --prefix backend",
+    "dev:backend": "npm run dev --prefix backend",
     "dev:app": "npm start --prefix app",
     "dev:admin": "npm run dev --prefix admin",
 

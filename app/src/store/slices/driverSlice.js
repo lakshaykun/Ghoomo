@@ -134,7 +134,10 @@ export const updateDriverLocation = (driverId, location) => async (dispatch) => 
 export const driverUpdateRideStatus = (driverId, rideId, status, extra = {}) => async (dispatch) => {
   dispatch(driverRequestStart());
   try {
-    await api.updateRideStatus(rideId, status, extra);
+    await api.updateRideStatus(rideId, status, {
+      ...extra,
+      driverId,
+    });
     const dashboard = await api.getDriverDashboard(driverId);
     if (status === BOOKING_STATUS.IN_PROGRESS) {
       await sendLocalNotification({
