@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://backend-fawn-seven-41.vercel.app/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,35 +9,29 @@ const api = axios.create({
   },
 });
 
-function shouldSendAuthHeader() {
-  if (typeof window === 'undefined') return true;
-  const host = window.location.hostname;
-  return host === 'localhost' || host === '127.0.0.1';
-}
-
-// Add token to requests
 api.interceptors.request.use((config) => {
-  if (!shouldSendAuthHeader()) {
-    delete config.headers.Authorization;
-    return config;
-  }
-
   const token = localStorage.getItem('admin_token');
+
   if (token) {
+    config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-// Handle errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('admin_token');
       localStorage.removeItem('admin_user');
-      window.location.href = '/#/login';
+
+      if (typeof window !== 'undefined' && window.location.hash !== '#/login') {
+        window.location.hash = '#/login';
+      }
     }
+
     return Promise.reject(error);
   }
 );

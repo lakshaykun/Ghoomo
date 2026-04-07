@@ -6,7 +6,7 @@ Monorepo for the Ghoomo ride-sharing platform. Three independent workspaces — 
 ghoomo/
 ├── app/          # Mobile app — Expo + React Native (riders & drivers)
 ├── backend/      # API server — Node.js HTTP + WebSocket
-├── web/          # Admin dashboard — React + Vite
+├── admin/        # Admin dashboard — React + Vite
 └── package.json  # Root workspace: shared dev tooling + convenience scripts
 ```
 
@@ -41,7 +41,7 @@ cp backend/.env.example backend/.env
 cp app/.env.example app/.env
 
 # Admin web
-cp web/.env.example web/.env
+cp admin/.env.example admin/.env
 ```
 
 Edit each file and fill in real values. The table below shows which variables matter most for a first run:
@@ -52,7 +52,7 @@ Edit each file and fill in real values. The table below shows which variables ma
 | `backend/.env` | `JWT_SECRET` | Signing secret for issued tokens |
 | `app/.env` | `EXPO_PUBLIC_API_BASE_URL` | URL of the running backend |
 | `app/.env` | `EXPO_PUBLIC_FIREBASE_*` | Firebase project credentials |
-| `web/.env` | `VITE_API_URL` | URL of the running backend API |
+| `admin/.env` | `VITE_API_URL` | URL of the running backend API |
 
 See each workspace's `.env.example` for the full variable reference.
 
@@ -70,7 +70,7 @@ npm run dev:backend
 npm run dev:app
 
 # Terminal C — admin dashboard (http://localhost:5173)
-npm run dev:web
+npm run dev:admin
 
 # Or all three at once with colour-coded output:
 npm run dev
@@ -101,7 +101,7 @@ Single-file Node.js server (`server.js`). No framework — raw `http` module wit
 
 → See [`backend/README.md`](./backend/README.md) for the full API reference.
 
-### `web/` — Admin Dashboard
+### `admin/` — Admin Dashboard
 
 React + Vite SPA for administrators to monitor rides, manage drivers, users, and bus routes.
 
@@ -109,7 +109,7 @@ React + Vite SPA for administrators to monitor rides, manage drivers, users, and
 - **Styling:** Tailwind CSS
 - **Deploy:** GitHub Pages
 
-→ See [`web/README.md`](./web/README.md) for build and deployment instructions.
+→ See [`admin/README.md`](./admin/README.md) for build and deployment instructions.
 
 ---
 
@@ -120,10 +120,10 @@ React + Vite SPA for administrators to monitor rides, manage drivers, users, and
 npm run dev              # all three workspaces concurrently
 npm run dev:backend
 npm run dev:app
-npm run dev:web
+npm run dev:admin
 
 # Building
-npm run build:web        # web/dist/
+npm run build:admin      # admin/dist/
 npm run build:android    # EAS preview APK
 npm run build:ios        # EAS iOS build
 
@@ -141,7 +141,7 @@ npm run clean            # wipe all node_modules + build artefacts
 |---|---|---|
 | `backend/` | `backend/.env` | `dotenv` in `server.js` |
 | `app/` | `app/.env` | Expo CLI (variables must be `EXPO_PUBLIC_*`) |
-| `web/` | `web/.env` | Vite (`envDir: '.'`; variables must be `VITE_*`) |
+| `admin/` | `admin/.env` | Vite (`envDir: '.'`; variables must be `VITE_*`) |
 
 Each workspace is completely self-contained. Changing a variable in `backend/.env` has no effect on the app or web builds, and vice versa.
 
@@ -155,8 +155,8 @@ Add `SUPABASE_DB_URL` (or `DATABASE_URL`) to `backend/.env`.
 **Mobile app cannot reach backend**  
 When testing on a physical device set `EXPO_PUBLIC_API_BASE_URL` to your LAN IP, e.g. `http://192.168.1.x:4000`.
 
-**Web dashboard login fails or data doesn't load**  
-Verify `VITE_API_URL=http://localhost:4000/api` in `web/.env` and confirm the backend responds at `/health`.
+**Admin dashboard login fails or data doesn't load**
+Verify `VITE_API_URL=http://localhost:4000/api` in `admin/.env` and confirm the backend responds at `/health`.
 
 **Expo `EXPO_PUBLIC_*` variables not picked up**  
 Variables are baked in at bundle time. Restart the Expo Dev Server after editing `app/.env`.

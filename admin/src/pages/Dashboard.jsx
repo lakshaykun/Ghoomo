@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Overview from '../components/Overview';
 import Users from '../components/Users';
 import Drivers from '../components/Drivers';
 import Rides from '../components/Rides';
-import Routes_Component from '../components/Routes';
+import BusRoutes from '../components/Routes';
 import Sidebar from '../components/Sidebar';
 import '../styles/Dashboard.css';
 
@@ -16,7 +16,7 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -35,7 +35,7 @@ export default function Dashboard() {
             </button>
             <div>
               <p className="header-kicker">Admin Workspace</p>
-              <h2>Ghoomo Operations Console</h2>
+              <h2>Ghoomo Admin Console</h2>
             </div>
           </div>
           <div className="header-right">
@@ -53,7 +53,7 @@ export default function Dashboard() {
             <Route path="/users" element={<Users />} />
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/rides" element={<Rides />} />
-            <Route path="/routes" element={<Routes_Component />} />
+            <Route path="/routes" element={<BusRoutes />} />
             <Route path="*" element={<Navigate to="overview" replace />} />
           </Routes>
         </main>

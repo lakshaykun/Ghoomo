@@ -18,7 +18,7 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate('/dashboard/overview', { replace: true });
     } catch (err) {
       setError(err?.message || 'Login failed');
     } finally {
@@ -34,7 +34,7 @@ export default function Login() {
       <div className="login-card">
         <p className="login-eyebrow">Control Center</p>
         <h1 className="login-title">Ghoomo Admin Portal</h1>
-        <p className="login-subtitle">Manage users, drivers, rides, and routes from one secure workspace.</p>
+        <p className="login-subtitle">Manage users, drivers, rides, and routes from one secure workspace backed by the API server.</p>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
@@ -44,7 +44,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ops@ghoomo.com"
+              placeholder="admin@ghoomo.com"
               required
             />
           </div>

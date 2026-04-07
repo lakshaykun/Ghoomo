@@ -1,6 +1,6 @@
-# Ghoomo — Admin Web Dashboard
+# Ghoomo — Admin Dashboard
 
-React + Vite admin panel for managing rides, drivers, users, and bus routes. Connects to the Ghoomo backend over REST.
+React + Vite admin panel for managing rides, drivers, users, and bus routes. The app talks to the backend REST API only.
 
 ## Tech stack
 
@@ -13,13 +13,12 @@ React + Vite admin panel for managing rides, drivers, users, and bus routes. Con
 | Charts | Recharts |
 | Styling | Tailwind CSS + per-component CSS |
 | Icons | Lucide React |
-| DB client | Supabase JS (optional direct access) |
 | Deploy | GitHub Pages (`gh-pages`) |
 
 ## Directory layout
 
 ```
-web/
+admin/
 ├── index.html
 ├── main.jsx                  # App mount
 ├── vite.config.js            # Vite + proxy config
@@ -41,17 +40,16 @@ web/
     │   ├── Drivers.jsx
     │   ├── Users.jsx
     │   └── Routes.jsx        # Bus routes management
-    ├── services/
+    └── services/
     │   ├── api.js            # Axios instance + auth interceptors
-    │   ├── dashboardAPI.js   # All dashboard data-fetch functions
-    │   └── supabaseClient.js # Supabase client (optional direct queries)
+    │   └── dashboardAPI.js   # Backend data-fetch helpers
     └── styles/               # Per-component CSS modules
 ```
 
 ## Environment setup
 
 ```bash
-cd web
+cd admin
 cp .env.example .env
 # Edit .env
 ```
@@ -62,12 +60,9 @@ cp .env.example .env
 # URL of the running Ghoomo backend
 VITE_API_URL=http://localhost:4000/api
 
-# Only needed if you use Supabase direct access in dashboardAPI.js
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
 ```
 
-Vite loads `.env` from the `web/` directory. Variables prefixed `VITE_` are bundled into the client; `SUPABASE_*` variables remain server-side (used via Vite's SSR or build-time injection only).
+Vite loads `.env` from the `admin/` directory. Variables prefixed `VITE_` are bundled into the client.
 
 ## Running locally
 
@@ -81,7 +76,7 @@ The Vite dev server proxies `/api/*` to `http://localhost:4000` automatically, s
 ## Building for production
 
 ```bash
-npm run build      # outputs to web/dist/
+npm run build      # outputs to admin/dist/
 npm run preview    # serves the built dist locally
 ```
 
@@ -102,4 +97,3 @@ The admin dashboard uses a simple token-based auth:
 3. All subsequent API requests attach `Authorization: Bearer <token>`.
 4. On 401, the token is cleared and the user is redirected to `/login`.
 
-> The `shouldSendAuthHeader()` guard in `services/api.js` only sends the header from `localhost` / `127.0.0.1`. Remove or adjust this if you deploy the admin panel to a custom domain.

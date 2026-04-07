@@ -1,7 +1,7 @@
 {
-  "name": "ghoomo-admin-web",
+  "name": "ghoomo-admin",
   "version": "1.0.0",
-  "description": "Ghoomo Admin Dashboard - React Web Application",
+  "description": "Ghoomo Admin Dashboard - React Vite Application",
   "type": "module",
   "private": true,
   "scripts": {

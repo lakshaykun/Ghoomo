@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   envDir: '.',
-  envPrefix: ['VITE_', 'SUPABASE_'],
+  envPrefix: ['VITE_'],
   server: {
     port: 5173,
     proxy: {

@@ -10,7 +10,7 @@ export default function Sidebar({ open, onToggle }) {
     { icon: '👥', label: 'Users', path: '/dashboard/users' },
     { icon: '👨‍💼', label: 'Drivers', path: '/dashboard/drivers' },
     { icon: '🚗', label: 'Rides', path: '/dashboard/rides' },
-    { icon: '🗺️', label: 'Routes', path: '/dashboard/routes' },
+    { icon: '🚌', label: 'Bus Routes', path: '/dashboard/routes' },
   ];
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
@@ -19,7 +19,7 @@ export default function Sidebar({ open, onToggle }) {
     <>
       <div className={`sidebar ${open ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
-          <h1 className="sidebar-logo">Ghoomo</h1>
+          <h1 className="sidebar-logo">Ghoomo Admin</h1>
           <span className="admin-badge">Admin Portal</span>
         </div>
 

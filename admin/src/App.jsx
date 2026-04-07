@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -11,7 +10,7 @@ function PrivateRoute({ children }) {
     return <div className="loading">Checking admin session...</div>;
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -28,8 +27,8 @@ export default function App() {
               </PrivateRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard/overview" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard/overview" replace />} />
         </Routes>
       </Router>
     </AuthProvider>
