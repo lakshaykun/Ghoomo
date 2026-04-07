@@ -1,110 +1,103 @@
-# Ghoomo — Backend
+# Ghoomo Backend (Modular Architecture)
 
-Node.js HTTP + WebSocket server. Serves the REST API consumed by the mobile app and admin dashboard, and drives real-time ride/bus events over a persistent WebSocket connection.
+Backend is a feature-modular Express + PostgreSQL backend aligned with the canonical schema.
 
-## Tech stack
+## Structure
 
-| Concern | Library |
-|---|---|
-| HTTP server | Node.js `http` (no Express) |
-| Real-time | `ws` (WebSocket) |
-| Database | PostgreSQL via `pg` (Supabase-compatible) |
-| Auth tokens | Firebase ID-token verification + custom JWT |
-| Config | `dotenv` |
-| Deploy | Vercel (serverless, `api/index.js` entry) |
-
-## Directory layout
-
-```
+```text
 backend/
-├── server.js          # Main entry — HTTP router + WS server
-├── storage.js         # DB abstraction (Postgres pool + JSON fallback)
+├── src/
+│   ├── config/
+│   │   ├── db.js
+│   │   └── env.js
+│   ├── common/
+│   │   ├── middleware/
+│   │   │   ├── auth.middleware.js
+│   │   │   └── error.middleware.js
+│   │   └── utils/
+│   │       ├── helpers.js
+│   │       └── logger.js
+│   ├── docs/
+│   │   ├── docs.routes.js
+│   │   └── openapi.js
+│   ├── db/
+│   │   ├── schema.sql
+│   │   ├── migrate.js
+│   │   └── migrations/
+│   ├── modules/
+│   │   ├── auth/
+│   │   ├── user/
+│   │   ├── driver/
+│   │   ├── ride/
+│   │   ├── sharedRide/
+│   │   ├── bus/
+│   │   └── admin/
+│   ├── app.js
+│   └── server.js
 ├── api/
-│   └── index.js       # Vercel serverless entry (wraps server.js)
-├── scripts/
-│   └── seed-role-users.js  # One-off seeding helper
-├── supabase/
-│   └── schema.sql     # Reference DDL for the Supabase project
-├── data/
-│   └── store.json     # Local JSON fallback (dev only, git-ignored in prod)
-├── .env.example       # ← copy to .env and fill in
-└── vercel.json        # Vercel routing config
+│   └── index.js
+├── server.js
+└── package.json
 ```
 
-## Environment setup
+Each module follows:
 
-```bash
-cp .env.example .env
-# Edit .env — at minimum set SUPABASE_DB_URL (or DATABASE_URL)
+```text
+<module>/
+├── <module>.controller.js
+├── <module>.service.js
+├── <module>.repository.js
+├── <module>.routes.js
+└── <module>.schema.js
 ```
 
-The server loads `backend/.env` first. If it finds neither `PORT` nor a DB URL there it will also attempt to read the root `.env` (backwards-compat for existing setups).
+## Environment
 
-### Minimum required variables
+Copy `.env.example` to `.env` and set at least one DB URL:
 
-```env
-# One of:
-SUPABASE_DB_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME
-```
+- `SUPABASE_DB_URL`
+- `DATABASE_URL`
 
-For local Postgres without SSL:
-```env
-PGSSL=false
-```
-
-See `.env.example` for the full reference.
-
-## Running locally
+## Run
 
 ```bash
 npm install
-npm start          # node server.js → http://localhost:4000
+npm run db:migrate
+npm start
 ```
+
+Demo data:
+
+```bash
+npm run seed:demo
+```
+
+Test logins use the password `DemoPass123!` with these accounts:
+
+- `demo.student@ghoomo.test` - rider
+- `demo.passenger@ghoomo.test` - rider
+- `demo.driver1@ghoomo.test` - driver
+- `demo.driver2@ghoomo.test` - driver
+- `demo.busdriver@ghoomo.test` - bus_driver
+- `demo.admin@ghoomo.test` - admin
 
 Health check:
-```
-GET http://localhost:4000/health
-```
 
-WebSocket endpoint:
-```
-ws://localhost:4000/ws
-```
+- `GET /health`
 
-## API reference
+Docs:
 
-See [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md) for the full endpoint list.
+- `GET /docs`
+- `GET /openapi.json`
 
-Quick summary:
+## Notes
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/login` | Email/password login |
-| POST | `/api/auth/register` | New user registration |
-| POST | `/api/auth/google-login` | Google OAuth login |
-| POST | `/api/auth/firebase-login` | Firebase ID-token login |
-| GET | `/api/bus-routes` | List bus routes |
-| POST | `/api/bus-routes` | Create bus route |
-| GET | `/api/bus-bookings` | List bus bookings |
-| POST | `/api/bus-bookings` | Create bus booking |
-| POST | `/api/rides/quote` | Get fare quote |
-| POST | `/api/rides` | Create ride |
-| GET | `/api/rides/:id` | Get ride |
-| GET | `/api/rides/history/:userId` | Ride history |
-| GET | `/api/drivers/nearby` | Nearby drivers |
-| GET | `/api/admin/dashboard` | Admin stats |
-
-## Deploying to Vercel
-
-```bash
-npm run deploy:vercel
-```
-
-The `vercel.json` routes all traffic through `api/index.js` which re-uses the same `server.js` logic.
-
-## Seeding
-
-```bash
-npm run seed:roles   # creates demo user/driver/admin accounts
-```
+- Legacy compatibility paths are preserved for key endpoints such as:
+  - `/api/auth/register`
+  - `/api/auth/login`
+  - `/api/bus-routes`
+  - `/api/bus-bookings`
+  - `/api/rides`
+  - `/api/admin/dashboard`
+- Legacy `user` roles are normalized to `rider`; driver profiles now store vehicle and location data in separate tables.
+- Root `server.js` now acts as a compatibility wrapper and exports `vercelHandler` for `api/index.js`.

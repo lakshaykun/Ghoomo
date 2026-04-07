@@ -1,0 +1,3 @@
+-- Migration 001: PostgreSQL extensions
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS citext;
