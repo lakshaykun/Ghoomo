@@ -90,7 +90,20 @@
   color: #065F46;
 }
 
+.status-badge.assigned,
+.status-badge.arriving,
+.status-badge.started {
+  background: #E0E7FF;
+  color: #3730A3;
+}
+
 .status-badge.pending {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.status-badge.searching,
+.status-badge.matched {
   background: #FEF3C7;
   color: #92400E;
 }
@@ -142,6 +155,7 @@
 @media (max-width: 768px) {
   .data-table {
     font-size: 12px;
+    min-width: 940px;
   }
 
   .data-table th,

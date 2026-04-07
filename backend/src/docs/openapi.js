@@ -641,6 +641,26 @@ const endpointDefinitions = [
     auth: true,
   },
   {
+    path: "/api/admin/analytics",
+    method: "get",
+    tags: ["Admin"],
+    summary: "Get monitoring analytics",
+    description: "Returns live queue metrics, trend series, leaderboards, and recent operational activity for the admin console.",
+    auth: true,
+    parameters: [
+      queryParam("days", "Lookback window in days", "integer", 7),
+      queryParam("limit", "Number of rows to return in each leaderboard section", "integer", 5),
+    ],
+  },
+  {
+    path: "/api/admin/health",
+    method: "get",
+    tags: ["Admin"],
+    summary: "Get admin health snapshot",
+    description: "Returns database connectivity and process uptime information for the admin monitoring view.",
+    auth: true,
+  },
+  {
     path: "/api/admin/users",
     method: "get",
     tags: ["Admin"],

@@ -4,7 +4,7 @@ import StatCard from './StatCard';
 import '../styles/Overview.css';
 
 export default function Overview() {
-  const [overview, setOverview] = useState({ stats: null, recentUsers: [], recentRides: [], routes: [] });
+  const [overview, setOverview] = useState({ stats: null, recentUsers: [], recentRides: [], routes: [], live: {}, health: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -29,24 +29,35 @@ export default function Overview() {
   if (error) return <div className="error">{error}</div>;
 
   const summary = overview.stats || {};
+  const live = overview.live || {};
+  const health = overview.health || {};
   const recentUsers = overview.recentUsers || [];
   const recentRides = overview.recentRides || [];
   const routes = overview.routes || [];
   const completionRate = summary.totalRides > 0 ? Math.round((summary.completedRides / summary.totalRides) * 100) : 0;
-  const activeRideShare = summary.totalRides > 0 ? Math.round((summary.activeRides / summary.totalRides) * 100) : 0;
+  const availabilityRate = summary.totalDrivers > 0 ? Math.round((summary.availableDrivers / summary.totalDrivers) * 100) : 0;
+  const queuePressure = (live.pendingRideRequests || 0) + (live.pendingCandidateOffers || 0);
   const totalRevenue = new Intl.NumberFormat('en-IN', {
     maximumFractionDigits: 0,
   }).format(summary.totalRevenue || 0);
 
   return (
     <div className="overview">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '24px' }}>
+      <div className="overview-hero">
         <div>
+          <p className="overview-eyebrow">Executive Summary</p>
           <h2 className="page-title">Operations Dashboard</h2>
-          <p style={{ maxWidth: '720px', color: 'var(--ink-600)', lineHeight: 1.6 }}>
+          <p className="overview-subtitle">
             Live platform summary built from the backend database. Review ride throughput, user growth,
             active drivers, and bus route coverage from one place.
           </p>
+          <div className="overview-chips">
+            <span className={`overview-chip ${health.status === 'healthy' ? 'healthy' : 'warning'}`}>
+              {health.status || 'unknown'}
+            </span>
+            <span className="overview-chip">{health.environment || 'unknown'}</span>
+            <span className="overview-chip">Updated {overview.generatedAt ? new Date(overview.generatedAt).toLocaleString() : '-'}</span>
+          </div>
         </div>
 
         <button onClick={fetchOverview} className="refresh-btn">
@@ -68,16 +79,10 @@ export default function Overview() {
           color="#f97316"
         />
         <StatCard
-          title="Bus Drivers"
-          value={summary.totalBusDrivers || 0}
-          icon="🚌"
-          color="#155e75"
-        />
-        <StatCard
-          title="Ride Requests"
-          value={summary.totalRideRequests || 0}
-          icon="📨"
-          color="#8b5cf6"
+          title="Available Drivers"
+          value={summary.availableDrivers || 0}
+          icon="🟢"
+          color="#16a34a"
         />
         <StatCard
           title="Active Rides"
@@ -86,10 +91,22 @@ export default function Overview() {
           color="#d97706"
         />
         <StatCard
+          title="Pending Requests"
+          value={summary.searchingRideRequests || 0}
+          icon="📨"
+          color="#8b5cf6"
+        />
+        <StatCard
           title="Revenue"
           value={`₹${totalRevenue}`}
           icon="💰"
           color="#16a34a"
+        />
+        <StatCard
+          title="Bus Bookings"
+          value={summary.totalBusBookings || 0}
+          icon="🚌"
+          color="#155e75"
         />
       </div>
 
@@ -100,9 +117,14 @@ export default function Overview() {
           <span>Completed rides out of all tracked rides</span>
         </div>
         <div className="insight-card">
-          <p>Active Ride Share</p>
-          <h3>{activeRideShare}%</h3>
-          <span>{summary.activeRides || 0} active rides out of {summary.totalRides || 0}</span>
+          <p>Driver Availability</p>
+          <h3>{availabilityRate}%</h3>
+          <span>{summary.availableDrivers || 0} available drivers out of {summary.totalDrivers || 0}</span>
+        </div>
+        <div className="insight-card">
+          <p>Queue Pressure</p>
+          <h3>{queuePressure}</h3>
+          <span>Open ride requests and candidate offers waiting on action</span>
         </div>
         <div className="insight-card">
           <p>Bus Coverage</p>
@@ -124,7 +146,11 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              {recentUsers.map((user) => (
+              {recentUsers.length === 0 ? (
+                <tr>
+                  <td colSpan="4">No recent users yet.</td>
+                </tr>
+              ) : recentUsers.map((user) => (
                 <tr key={user.id}>
                   <td>{user.name || '-'}</td>
                   <td>{user.email || '-'}</td>
@@ -144,6 +170,8 @@ export default function Overview() {
                 <th>Ride</th>
                 <th>Student</th>
                 <th>Driver</th>
+                <th>Pickup</th>
+                <th>Drop</th>
                 <th>Fare</th>
                 <th>Distance</th>
                 <th>Status</th>
@@ -151,11 +179,17 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              {recentRides.map((ride) => (
+              {recentRides.length === 0 ? (
+                <tr>
+                  <td colSpan="9">No recent rides yet.</td>
+                </tr>
+              ) : recentRides.map((ride) => (
                 <tr key={ride.id}>
                   <td>{ride.requestId || ride.id}</td>
-                  <td>{ride.studentId || '-'}</td>
-                  <td>{ride.driverId || '-'}</td>
+                  <td>{ride.studentName || ride.studentId || '-'}</td>
+                  <td>{ride.driverName || ride.driverId || '-'}</td>
+                  <td>{ride.pickupLocation || '-'}</td>
+                  <td>{ride.dropLocation || '-'}</td>
                   <td>{ride.fare !== null ? `₹${Number(ride.fare).toLocaleString('en-IN')}` : '-'}</td>
                   <td>{ride.distance !== null ? `${Number(ride.distance).toFixed(1)} km` : '-'}</td>
                   <td><span className={`status-badge ${ride.status}`}>{ride.status}</span></td>
@@ -179,7 +213,11 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              {routes.map((route) => (
+              {routes.length === 0 ? (
+                <tr>
+                  <td colSpan="5">No bus routes are available yet.</td>
+                </tr>
+              ) : routes.map((route) => (
                 <tr key={route.id}>
                   <td>{route.name}</td>
                   <td>{route.departureTime || '-'}</td>

@@ -7,6 +7,8 @@ const router = express.Router();
 router.use(authenticate, requireRole("admin"));
 
 router.get("/dashboard", controller.getDashboardStats);
+router.get("/analytics", controller.getAnalytics);
+router.get("/health", controller.getHealth);
 router.get("/users", controller.getUsers);
 router.get("/rides", controller.getRides);
 

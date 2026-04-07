@@ -19,6 +19,27 @@ function validatePaginationQuery(query = {}) {
   };
 }
 
+function validateAnalyticsQuery(query = {}) {
+  const days = Number(query.days || 7);
+  const limit = Number(query.limit || 5);
+
+  const errors = [];
+  if (!Number.isInteger(days) || days < 1 || days > 30) {
+    errors.push({ field: "days", message: "days must be a positive integer between 1 and 30" });
+  }
+
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+    errors.push({ field: "limit", message: "limit must be a positive integer between 1 and 20" });
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    days,
+    limit,
+  };
+}
+
 function validateDriverStatusPayload(payload = {}) {
   const errors = [];
 
@@ -34,5 +55,6 @@ function validateDriverStatusPayload(payload = {}) {
 
 module.exports = {
   validatePaginationQuery,
+  validateAnalyticsQuery,
   validateDriverStatusPayload,
 };

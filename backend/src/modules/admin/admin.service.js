@@ -5,6 +5,14 @@ async function getDashboardStats() {
   return repository.getDashboardStats();
 }
 
+async function getAnalytics({ days, limit }) {
+  return repository.getAnalytics({ days, limit });
+}
+
+async function getHealthSnapshot() {
+  return repository.getHealthSnapshot();
+}
+
 async function getUsers({ page, limit, role }) {
   const offset = (page - 1) * limit;
   return repository.listUsers({ limit, offset, role: normalizeRole(role) || null });
@@ -33,6 +41,8 @@ async function suspendUserByUserId(userId) {
 
 module.exports = {
   getDashboardStats,
+  getAnalytics,
+  getHealthSnapshot,
   getUsers,
   getRides,
   updateDriverStatusByDriverId,

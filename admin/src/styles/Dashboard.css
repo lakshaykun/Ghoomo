@@ -25,7 +25,7 @@
 
 .header-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
 }
 
@@ -38,6 +38,14 @@
   margin-bottom: 4px;
 }
 
+.header-copy {
+  color: var(--ink-600);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 720px;
+  margin-top: 4px;
+}
+
 .menu-toggle {
   display: none;
   background: none;
@@ -45,6 +53,7 @@
   font-size: 24px;
   cursor: pointer;
   color: var(--gray-600);
+  margin-top: 2px;
 }
 
 .dashboard-header h2 {

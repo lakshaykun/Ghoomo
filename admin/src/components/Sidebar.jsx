@@ -7,6 +7,7 @@ export default function Sidebar({ open, onToggle }) {
 
   const menuItems = [
     { icon: '📊', label: 'Overview', path: '/dashboard/overview' },
+    { icon: '📡', label: 'Monitoring', path: '/dashboard/monitoring' },
     { icon: '👥', label: 'Users', path: '/dashboard/users' },
     { icon: '👨‍💼', label: 'Drivers', path: '/dashboard/drivers' },
     { icon: '🚗', label: 'Rides', path: '/dashboard/rides' },

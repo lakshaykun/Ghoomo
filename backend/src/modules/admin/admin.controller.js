@@ -1,5 +1,5 @@
 const { AppError, asyncHandler } = require("../../common/utils/helpers");
-const { validatePaginationQuery, validateDriverStatusPayload } = require("./admin.schema");
+const { validatePaginationQuery, validateAnalyticsQuery, validateDriverStatusPayload } = require("./admin.schema");
 const service = require("./admin.service");
 
 const getDashboardStats = asyncHandler(async (req, res) => {
@@ -7,6 +7,31 @@ const getDashboardStats = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: stats,
+  });
+});
+
+const getAnalytics = asyncHandler(async (req, res) => {
+  const validation = validateAnalyticsQuery(req.query);
+  if (!validation.isValid) {
+    throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
+  }
+
+  const analytics = await service.getAnalytics({
+    days: validation.days,
+    limit: validation.limit,
+  });
+
+  res.status(200).json({
+    success: true,
+    data: analytics,
+  });
+});
+
+const getHealth = asyncHandler(async (req, res) => {
+  const health = await service.getHealthSnapshot();
+  res.status(200).json({
+    success: true,
+    data: health,
   });
 });
 
@@ -79,6 +104,8 @@ const suspendUser = asyncHandler(async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  getAnalytics,
+  getHealth,
   getUsers,
   getRides,
   updateDriverStatus,

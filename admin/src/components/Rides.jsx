@@ -6,12 +6,9 @@ const PAGE_SIZE = 20;
 
 const FILTERS = [
   'all',
-  'pending',
-  'matched',
   'assigned',
   'arriving',
   'started',
-  'in_progress',
   'completed',
   'cancelled',
 ];
@@ -113,6 +110,8 @@ export default function Rides() {
               <th>Request</th>
               <th>Student</th>
               <th>Driver</th>
+              <th>Pickup</th>
+              <th>Drop</th>
               <th>Fare</th>
               <th>Distance</th>
               <th>Status</th>
@@ -122,14 +121,16 @@ export default function Rides() {
           <tbody>
             {rides.length === 0 ? (
               <tr>
-                <td colSpan="8">No rides found for the selected filter.</td>
+                <td colSpan="10">No rides found for the selected filter.</td>
               </tr>
             ) : rides.map((ride) => (
               <tr key={ride.id}>
                 <td>{ride.id}</td>
                 <td>{ride.requestId || '-'}</td>
-                <td>{ride.studentId || '-'}</td>
-                <td>{ride.driverId || '-'}</td>
+                <td>{ride.studentName || ride.studentId || '-'}</td>
+                <td>{ride.driverName || ride.driverId || '-'}</td>
+                <td>{ride.pickupLocation || '-'}</td>
+                <td>{ride.dropLocation || '-'}</td>
                 <td>{ride.fare !== null ? `₹${Number(ride.fare).toLocaleString('en-IN')}` : '-'}</td>
                 <td>{ride.distance !== null ? `${Number(ride.distance).toFixed(1)} km` : '-'}</td>
                 <td><span className={`status-badge ${ride.status}`}>{ride.status}</span></td>
