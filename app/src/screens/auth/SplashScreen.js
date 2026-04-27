@@ -1,7 +1,6 @@
-
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Animated, Dimensions } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../constants";
 
@@ -21,18 +20,30 @@ export default function SplashScreen({ navigation }) {
       Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
 
-    // Keep splash snappy; auth hydration happens in background.
+    const checkOnboarding = async () => {
+      try {
+        const hasOnboarded = await AsyncStorage.getItem("has_onboarded");
+        if (hasOnboarded) {
+          navigation.replace("Login");
+        } else {
+          navigation.replace("Onboarding");
+        }
+      } catch (e) {
+        navigation.replace("Login");
+      }
+    };
+
     const timer = setTimeout(() => {
-      navigation.replace("Login");
+      checkOnboarding();
     }, 800);
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <LinearGradient colors={[COLORS.primary, COLORS.primaryDark, "#3B2FB5"]} style={styles.container}>
+    <View style={styles.container}>
       <Animated.View style={[styles.logoWrap, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
         <View style={styles.iconCircle}>
-          <Ionicons name="car" size={52} color={COLORS.white} />
+          <Ionicons name="car" size={52} color={COLORS.primary} />
         </View>
         <Animated.Text style={[styles.appName, { transform: [{ translateY: slideAnim }], opacity: opacityAnim }]}>
           Ghoomo
@@ -41,22 +52,14 @@ export default function SplashScreen({ navigation }) {
           Your Ride, Your Way
         </Animated.Text>
       </Animated.View>
-      <Animated.View style={[styles.bottom, { opacity: opacityAnim }]}>
-        <View style={styles.dot} />
-        <View style={[styles.dot, styles.dotActive]} />
-        <View style={styles.dot} />
-      </Animated.View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center" },
+  container: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.primary },
   logoWrap: { alignItems: "center" },
-  iconCircle: { width: 110, height: 110, borderRadius: 55, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 24, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)" },
-  appName: { fontSize: 48, fontWeight: "900", color: COLORS.white, letterSpacing: 2 },
+  iconCircle: { width: 110, height: 110, borderRadius: 55, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center", marginBottom: 24, shadowColor: COLORS.text, shadowOpacity: 0.1, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
+  appName: { fontSize: 48, fontWeight: "900", color: COLORS.surface, letterSpacing: 2 },
   tagline: { fontSize: 16, color: "rgba(255,255,255,0.8)", marginTop: 8, letterSpacing: 1 },
-  bottom: { position: "absolute", bottom: 60, flexDirection: "row", gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.4)" },
-  dotActive: { width: 24, backgroundColor: COLORS.white },
 });

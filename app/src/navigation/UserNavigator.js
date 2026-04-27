@@ -1,10 +1,9 @@
-
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, StyleSheet } from "react-native";
-import { COLORS } from "../constants";
+import { StyleSheet, Platform } from "react-native";
+import { COLORS, TYPOGRAPHY, SHADOWS } from "../constants";
 
 import HomeScreen from "../screens/user/HomeScreen";
 import RideTypeSelectionScreen from "../screens/user/RideTypeSelectionScreen";
@@ -39,7 +38,7 @@ export default function UserNavigator() {
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.gray,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarLabelStyle: styles.tabLabel,
         tabBarIcon: ({ focused, color, size }) => {
           const icons = {
@@ -48,7 +47,7 @@ export default function UserNavigator() {
             History: focused ? "time" : "time-outline",
             Profile: focused ? "person" : "person-outline",
           };
-          return <Ionicons name={icons[route.name]} size={22} color={color} />;
+          return <Ionicons name={icons[route.name]} size={24} color={color} />;
         },
       })}
     >
@@ -62,16 +61,12 @@ export default function UserNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderTopWidth: 0,
-    height: 60,
-    paddingBottom: 8,
-    paddingTop: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 10,
+    height: Platform.OS === "ios" ? 85 : 65,
+    paddingBottom: Platform.OS === "ios" ? 25 : 8,
+    paddingTop: 8,
+    ...SHADOWS.card,
   },
-  tabLabel: { fontSize: 11, fontWeight: "600" },
+  tabLabel: { ...TYPOGRAPHY.caption, fontWeight: "700", marginTop: 2 },
 });

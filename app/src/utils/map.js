@@ -58,7 +58,7 @@ export function buildTileGrid(region, rows = 3, cols = 3) {
         y,
         left: x * TILE_SIZE - originX,
         top: y * TILE_SIZE - originY,
-        url: `https://tile.openstreetmap.org/${region.zoom}/${x}/${y}.png`,
+        url: `https://basemaps.cartocdn.com/rastertiles/voyager/${region.zoom}/${x}/${y}.png`,
       });
     }
   }

@@ -1,16 +1,16 @@
-
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
+import { Platform } from "react-native";
 import DriverHomeScreen from "../screens/driver/DriverHomeScreen";
 import BusDriverScreen from "../screens/driver/BusDriverScreen";
 import BusDriverRouteScreen from "../screens/driver/BusDriverRouteScreen";
 import DriverHistoryScreen from "../screens/driver/DriverHistoryScreen";
 import DriverProfileScreen from "../screens/driver/DriverProfileScreen";
 import DriverOtpScreen from "../screens/driver/DriverOtpScreen";
-import { COLORS } from "../constants";
+import { COLORS, TYPOGRAPHY, SHADOWS } from "../constants";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -21,15 +21,16 @@ function DriverTabs() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.grayDark,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarStyle: {
-          backgroundColor: COLORS.white,
-          borderTopWidth: 1,
-          borderTopColor: COLORS.border,
-          height: 62,
-          paddingTop: 6,
+          backgroundColor: COLORS.surface,
+          borderTopWidth: 0,
+          height: Platform.OS === "ios" ? 85 : 65,
+          paddingBottom: Platform.OS === "ios" ? 25 : 8,
+          paddingTop: 8,
+          ...SHADOWS.card,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+        tabBarLabelStyle: { ...TYPOGRAPHY.caption, fontWeight: "700", marginTop: 2 },
       }}
     >
       <Tab.Screen
@@ -37,7 +38,7 @@ function DriverTabs() {
         component={DriverHomeScreen}
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => <Ionicons name="car-sport" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="car-sport" size={24} color={color} />,
         }}
       />
       <Tab.Screen
@@ -45,7 +46,7 @@ function DriverTabs() {
         component={DriverHistoryScreen}
         options={{
           title: "History",
-          tabBarIcon: ({ color, size }) => <Ionicons name="time" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="time" size={24} color={color} />,
         }}
       />
       <Tab.Screen
@@ -53,7 +54,7 @@ function DriverTabs() {
         component={DriverProfileScreen}
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={24} color={color} />,
         }}
       />
     </Tab.Navigator>

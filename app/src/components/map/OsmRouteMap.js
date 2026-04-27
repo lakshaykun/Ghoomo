@@ -28,15 +28,29 @@ function Marker({ point, color, region, grid }) {
 
 export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) {
   const { width: windowWidth } = useWindowDimensions();
-  const allPoints = [pickup, drop, driver, ...routePoints].filter(Boolean);
-  const autoRegion = useMemo(() => getMapRegion(allPoints), [pickup, drop, driver, routePoints]);
+
+  const normalizePoint = (p) => {
+    if (!p) return null;
+    if (Array.isArray(p) && p.length >= 2) return { latitude: Number(p[1]), longitude: Number(p[0]) };
+    if (p.lat !== undefined && p.lng !== undefined) return { latitude: Number(p.lat), longitude: Number(p.lng) };
+    if (p.latitude !== undefined && p.longitude !== undefined) return { latitude: Number(p.latitude), longitude: Number(p.longitude) };
+    return null;
+  };
+
+  const normPickup = useMemo(() => normalizePoint(pickup), [pickup]);
+  const normDrop = useMemo(() => normalizePoint(drop), [drop]);
+  const normDriver = useMemo(() => normalizePoint(driver), [driver]);
+  const normRoutePoints = useMemo(() => (routePoints || []).map(normalizePoint).filter(Boolean), [routePoints]);
+
+  const allPoints = [normPickup, normDrop, normDriver, ...normRoutePoints].filter(Boolean);
+  const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
   const [zoom, setZoom] = useState(() => autoRegion.zoom || 13);
   const region = useMemo(
     () => ({ ...autoRegion, zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)) }),
     [autoRegion, zoom]
   );
   const grid = useMemo(() => buildTileGrid(region), [region]);
-  const path = useMemo(() => buildPath(routePoints, region, grid), [routePoints, region, grid]);
+  const path = useMemo(() => buildPath(normRoutePoints, region, grid), [normRoutePoints, region, grid]);
   const [tileLoadFailures, setTileLoadFailures] = useState(0);
   const [tileLoadSuccess, setTileLoadSuccess] = useState(0);
   const supportsRemoteTiles = Platform.OS !== "web";
@@ -68,9 +82,9 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) 
 
         <Svg width={grid.width} height={grid.height} style={styles.overlay}>
           {path ? <Path d={path} stroke={COLORS.primary} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" fill="none" /> : null}
-          {driver ? <Marker point={driver} color={COLORS.accentOrange} region={region} grid={grid} /> : null}
-          {pickup ? <Marker point={pickup} color={COLORS.success} region={region} grid={grid} /> : null}
-          {drop ? <Marker point={drop} color={COLORS.error} region={region} grid={grid} /> : null}
+          {normDriver ? <Marker point={normDriver} color={COLORS.accentOrange} region={region} grid={grid} /> : null}
+          {normPickup ? <Marker point={normPickup} color={COLORS.success} region={region} grid={grid} /> : null}
+          {normDrop ? <Marker point={normDrop} color={COLORS.error} region={region} grid={grid} /> : null}
         </Svg>
       </View>
       </View>
@@ -83,7 +97,7 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) 
       ) : null}
 
       <View style={styles.attribution}>
-        <Text style={styles.attributionText}>Map data © OpenStreetMap contributors</Text>
+        <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
       </View>
 
       <View style={styles.zoomControls}>

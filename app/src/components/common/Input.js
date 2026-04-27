@@ -1,8 +1,7 @@
-
 import React, { useEffect, useState } from "react";
 import { View, TextInput, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS, RADIUS, SHADOWS, SPACING } from "../../constants";
+import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from "../../constants";
 
 function Input({
   label,
@@ -77,27 +76,27 @@ export default React.memo(Input);
 
 const styles = StyleSheet.create({
   container: { marginBottom: SPACING.md },
-  label: { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 8, letterSpacing: 0.2 },
+  label: { ...TYPOGRAPHY.label, marginBottom: 8 },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.inputBg,
     borderRadius: RADIUS.md,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: COLORS.border,
   },
   focused: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     ...SHADOWS.soft,
   },
   errorBorder: { borderColor: COLORS.error },
   disabled: { opacity: 0.6 },
-  input: { flex: 1, paddingVertical: 15, paddingHorizontal: 16, fontSize: 15, color: COLORS.text },
+  input: { flex: 1, paddingVertical: 14, paddingHorizontal: 16, ...TYPOGRAPHY.body },
   inputWithLeft: { paddingLeft: 8 },
   inputWithRight: { paddingRight: 8 },
   multiline: { minHeight: 96, textAlignVertical: "top" },
   leftIcon: { paddingLeft: 14 },
   rightIcon: { paddingRight: 14 },
-  error: { fontSize: 12, color: COLORS.error, marginTop: 6, marginLeft: 4, fontWeight: "600" },
+  error: { ...TYPOGRAPHY.label, color: COLORS.error, marginTop: 6, marginLeft: 4 },
 });

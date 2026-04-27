@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -21,7 +20,9 @@ import { createRideBooking, fetchRideQuote } from "../../store/slices/bookingSli
 import Header from "../../components/common/Header";
 import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
-import { COLORS, SPACING, FARES } from "../../constants";
+import Skeleton from "../../components/common/Skeleton";
+import OsmRouteMap from "../../components/map/OsmRouteMap";
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, FARES, SHADOWS } from "../../constants";
 import { api } from "../../services/api";
 
 const RIDE_OPTIONS = [
@@ -37,29 +38,11 @@ const PAYMENT_OPTIONS = [
   { key: "wallet", label: "Wallet", icon: "wallet" },
 ];
 
-const SCHEDULE_OPTIONS = [
-  { key: "now", label: "Now", minutes: 0 },
-  { key: "15", label: "In 15 min", minutes: 15 },
-  { key: "30", label: "In 30 min", minutes: 30 },
-];
-
-function SimpleField({
-  label,
-  leftIcon,
-  rightIcon,
-  value,
-  onChangeText,
-  placeholder,
-  autoCorrect,
-  autoCapitalize,
-  returnKeyType,
-  inputRef,
-}) {
+function SimpleField({ label, leftIcon, rightIcon, value, onChangeText, placeholder, autoCorrect, autoCapitalize, returnKeyType, inputRef }) {
   return (
     <View style={styles.field}>
-      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
       <View style={styles.inputWrap}>
-        {leftIcon ? <View style={styles.iconLeft}>{leftIcon}</View> : null}
+        {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
         <TextInput
           ref={inputRef}
           style={styles.input}
@@ -71,7 +54,7 @@ function SimpleField({
           autoCapitalize={autoCapitalize}
           returnKeyType={returnKeyType}
         />
-        {rightIcon ? <View style={styles.iconRight}>{rightIcon}</View> : null}
+        {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
       </View>
     </View>
   );
@@ -79,13 +62,14 @@ function SimpleField({
 
 export default function BookRideScreen({ navigation, route }) {
   const dispatch = useDispatch();
-  const scrollRef = useRef(null);
   const dropInputRef = useRef(null);
-  const user = useSelector(s => s.auth.user);
-  const { currentQuote, loading, error } = useSelector(s => s.booking);
-  const { rideType: initType = "cab", presetPickup = null, presetDrop = null } = route.params || {};
+  const user = useSelector((s) => s.auth.user);
+  const { currentQuote, loading, error } = useSelector((s) => s.booking);
+  const { rideType: initType = "cab", presetPickup = null, presetDrop = null, destination = null } = route.params || {};
+
+  const [step, setStep] = useState(1); // 1: Location, 2: Confirm, 3: Searching
   const [pickupInput, setPickupInput] = useState("");
-  const [dropInput, setDropInput] = useState("");
+  const [dropInput, setDropInput] = useState(destination || "");
   const [pickupPlace, setPickupPlace] = useState(null);
   const [dropPlace, setDropPlace] = useState(null);
   const [isShare, setIsShare] = useState(false);
@@ -95,11 +79,9 @@ export default function BookRideScreen({ navigation, route }) {
   const [currentCoords, setCurrentCoords] = useState(null);
   const [sharedSeatsWanted, setSharedSeatsWanted] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [scheduleKey, setScheduleKey] = useState("now");
-  const [savedLocations, setSavedLocations] = useState([]);
+  const [selectedType, setSelectedType] = useState(initType);
 
-  const selectedType = initType;
-  const currentRide = RIDE_OPTIONS.find(r => r.type === selectedType) || RIDE_OPTIONS[2];
+  const currentRide = RIDE_OPTIONS.find((r) => r.type === selectedType) || RIDE_OPTIONS[2];
   const fareKey = isShare && currentRide?.shareable ? selectedType + "Share" : selectedType;
   const fareInfo = FARES[fareKey] || FARES[selectedType];
   const estimate = currentQuote?.estimate;
@@ -107,23 +89,12 @@ export default function BookRideScreen({ navigation, route }) {
   const hasAvailableDriver = Boolean(currentQuote?.availability?.available);
   const estDist = estimate?.distanceKm || 0;
   const estFare = estimate?.fare || fareInfo.base;
-  const nonSharedEstimate = Math.round((FARES[selectedType]?.base || 0) + (FARES[selectedType]?.perKm || 0) * estDist);
-  const sharedSavings = isShare && currentRide?.shareable ? Math.max(0, nonSharedEstimate - estFare) : 0;
-  const surgeAmount = estimate?.surgeAmount || 0;
-  const surgeMultiplier = estimate?.surgeMultiplier || 1;
-  const scheduledAt = (() => {
-    const option = SCHEDULE_OPTIONS.find((item) => item.key === scheduleKey);
-    if (!option || option.minutes <= 0) return null;
-    return new Date(Date.now() + option.minutes * 60 * 1000).toISOString();
-  })();
-  const estTime = estimate?.durationMinutes || (selectedType === "bike" ? 12 : selectedType === "auto" ? 18 : 20);
 
   useEffect(() => {
     if (presetPickup) {
       setPickupPlace(presetPickup);
       setPickupInput(presetPickup.name || presetPickup.address || "");
     }
-
     if (presetDrop) {
       setDropPlace(presetDrop);
       setDropInput(presetDrop.name || presetDrop.address || "");
@@ -132,72 +103,29 @@ export default function BookRideScreen({ navigation, route }) {
 
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       if (!mounted) return;
-      const coords = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
+      const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
       setCurrentCoords(coords);
-
       try {
         const { place } = await api.reverseGeocode(coords);
         if (!mounted) return;
-        if (!presetPickup) {
+        if (!presetPickup && !pickupPlace) {
           setPickupPlace(place);
           setPickupInput(place.name);
         }
       } catch (_error) {
         if (!mounted) return;
-        if (!presetPickup) {
+        if (!presetPickup && !pickupPlace) {
           setPickupPlace(coords);
         }
       }
     })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [presetPickup]);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadSavedLocations = async () => {
-      if (!user?.id) {
-        if (active) {
-          setSavedLocations([]);
-        }
-        return;
-      }
-
-      try {
-        const { locations } = await api.getSavedLocations();
-        if (active) {
-          setSavedLocations(locations || []);
-        }
-      } catch {
-        if (active) {
-          setSavedLocations([]);
-        }
-      }
-    };
-
-    const unsubscribe = navigation.addListener("focus", loadSavedLocations);
-    loadSavedLocations();
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [navigation, user?.id]);
+    return () => { mounted = false; };
+  }, [presetPickup, pickupPlace]);
 
   useEffect(() => {
     if (!pickupPlace || !dropPlace) return;
@@ -206,9 +134,9 @@ export default function BookRideScreen({ navigation, route }) {
       isShare: isShare && currentRide?.shareable,
       pickup: pickupPlace,
       drop: dropPlace,
-      scheduledAt,
+      scheduledAt: null,
     })).catch(() => {});
-  }, [dispatch, dropPlace, currentRide?.shareable, isShare, pickupPlace, scheduledAt, selectedType]);
+  }, [dispatch, dropPlace, currentRide?.shareable, isShare, pickupPlace, selectedType]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -216,18 +144,12 @@ export default function BookRideScreen({ navigation, route }) {
         setPickupResults([]);
         return;
       }
-
       setSearching("pickup");
-      api.searchPlaces({
-        query: pickupInput.trim(),
-        latitude: currentCoords?.latitude,
-        longitude: currentCoords?.longitude,
-      })
+      api.searchPlaces({ query: pickupInput.trim(), latitude: currentCoords?.latitude, longitude: currentCoords?.longitude })
         .then(({ places }) => setPickupResults(places))
         .catch(() => setPickupResults([]))
         .finally(() => setSearching(null));
     }, 350);
-
     return () => clearTimeout(timeout);
   }, [currentCoords?.latitude, currentCoords?.longitude, pickupInput, pickupPlace]);
 
@@ -237,31 +159,42 @@ export default function BookRideScreen({ navigation, route }) {
         setDropResults([]);
         return;
       }
-
       setSearching("drop");
-      api.searchPlaces({
-        query: dropInput.trim(),
-        latitude: currentCoords?.latitude,
-        longitude: currentCoords?.longitude,
-      })
+      api.searchPlaces({ query: dropInput.trim(), latitude: currentCoords?.latitude, longitude: currentCoords?.longitude })
         .then(({ places }) => setDropResults(places))
         .catch(() => setDropResults([]))
         .finally(() => setSearching(null));
     }, 350);
-
     return () => clearTimeout(timeout);
   }, [currentCoords?.latitude, currentCoords?.longitude, dropInput, dropPlace]);
 
-  const handleBook = () => {
-    if (!pickupPlace || !dropPlace) {
-      Alert.alert("Missing Info", "Please choose pickup and drop locations from search");
+  const applyPlace = (type, place) => {
+    if (type === "pickup") {
+      setPickupPlace(place);
+      setPickupInput(place.name);
+      setPickupResults([]);
+      setTimeout(() => dropInputRef.current?.focus?.(), 150);
       return;
     }
+    setDropPlace(place);
+    setDropInput(place.name);
+    setDropResults([]);
+  };
+
+  const handleNextStep = () => {
+    if (!pickupPlace || !dropPlace) {
+      Alert.alert("Missing Info", "Please choose pickup and drop locations.");
+      return;
+    }
+    setStep(2);
+  };
+
+  const handleBook = () => {
     if (!hasAvailableDriver) {
       Alert.alert("No Driver Available", availability?.message || "No nearby online driver is available right now.");
       return;
     }
-
+    setStep(3); // Go to searching state
     dispatch(createRideBooking({
       rideType: selectedType,
       pickup: pickupPlace,
@@ -270,318 +203,173 @@ export default function BookRideScreen({ navigation, route }) {
       isShare: isShare && currentRide?.shareable,
       sharedSeatsWanted: isShare && currentRide?.shareable ? sharedSeatsWanted : 0,
       paymentMethod,
-      scheduledAt,
     }))
       .then(() => navigation.navigate("RideTracking"))
-      .catch((bookingError) => Alert.alert("Booking Failed", bookingError.message || "Unable to create ride"));
-  };
-
-  const applyPlace = (type, place) => {
-    if (type === "pickup") {
-      setPickupPlace(place);
-      setPickupInput(place.name);
-      setPickupResults([]);
-      setTimeout(() => {
-        dropInputRef.current?.focus?.();
-      }, 150);
-      return;
-    }
-
-    setDropPlace(place);
-    setDropInput(place.name);
-    setDropResults([]);
-  };
-
-  const useCurrentLocation = async () => {
-    if (!currentCoords) return;
-    try {
-      const { place } = await api.reverseGeocode(currentCoords);
-      applyPlace("pickup", place);
-    } catch (_error) {
-      applyPlace("pickup", {
-        name: "Current Location",
-        ...currentCoords,
+      .catch((bookingError) => {
+        Alert.alert("Booking Failed", bookingError.message || "Unable to create ride");
+        setStep(2); // Retry
       });
-    }
   };
+
+  if (step === 3) {
+    return (
+      <SafeAreaView style={styles.searchingSafe}>
+        <View style={styles.searchingContent}>
+          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: SPACING.xl }} />
+          <Text style={styles.searchingTitle}>Finding your ride...</Text>
+          <Text style={styles.searchingSub}>Contacting nearby {currentRide.label} drivers</Text>
+        </View>
+        <Button title="Cancel Search" variant="secondary" onPress={() => setStep(2)} style={styles.cancelBtn} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <Header title={`${currentRide.label} Booking`} subtitle="Step 2 of 2" onBack={() => navigation.goBack()} />
-      <KeyboardAvoidingView
-        style={styles.contentWrap}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
-      >
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scroll}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          contentContainerStyle={styles.scrollContent}
-        >
-
-        <View style={styles.section}>
-          <Card elevated style={styles.vehicleSummaryCard}>
-            <View style={[styles.vehicleIcon, { backgroundColor: currentRide.color + "18" }]}>
-              <Ionicons name={currentRide.icon} size={28} color={currentRide.color} />
-            </View>
-            <View style={styles.vehicleSummaryInfo}>
-              <Text style={styles.vehicleSummaryTitle}>{currentRide.label}</Text>
-              <Text style={styles.vehicleSummaryText}>{currentRide.desc}</Text>
-            </View>
-            <TouchableOpacity onPress={() => navigation.navigate("RideTypeSelection")} style={styles.changeVehicleBtn}>
-              <Text style={styles.changeVehicleText}>Change</Text>
-            </TouchableOpacity>
-          </Card>
-        </View>
-
-        {/* Share Toggle */}
-        {currentRide?.shareable && (
-          <View style={styles.section}>
-            <Card style={styles.shareCard}>
-              <View style={styles.shareRow}>
-                <View style={styles.shareLeft}>
-                  <Ionicons name="people" size={22} color={COLORS.success} />
-                  <View style={{ marginLeft: 12 }}>
-                    <Text style={styles.shareTitle}>Share Ride</Text>
-                    <Text style={styles.shareSub}>Save up to 40% by sharing with others</Text>
-                  </View>
-                </View>
-                <Switch value={isShare} onValueChange={setIsShare} trackColor={{ false: COLORS.border, true: COLORS.success }} thumbColor={COLORS.white} />
+      <Header
+        title={step === 1 ? "Select Locations" : "Confirm Ride"}
+        onBack={() => {
+          if (step === 2) setStep(1);
+          else navigation.goBack();
+        }}
+      />
+      <KeyboardAvoidingView style={styles.contentWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          
+          {step === 1 && (
+            <>
+              <View style={styles.mapPreview}>
+                <OsmRouteMap pickup={pickupPlace || currentCoords} drop={dropPlace} />
               </View>
-              {isShare && (
-                <>
-                  <View style={styles.savingBadge}>
-                    <Text style={styles.savingText}>You save about ₹{sharedSavings} on this trip!</Text>
-                  </View>
-                  <View style={styles.shareCountWrap}>
-                    <Text style={styles.shareCountLabel}>Looking for how many co-riders?</Text>
-                    <View style={styles.shareCountRow}>
-                      {[1, 2, 3].map((count) => (
-                        <TouchableOpacity
-                          key={count}
-                          style={[styles.shareCountChip, sharedSeatsWanted === count && styles.shareCountChipActive]}
-                          onPress={() => setSharedSeatsWanted(count)}
-                        >
-                          <Text style={[styles.shareCountText, sharedSeatsWanted === count && styles.shareCountTextActive]}>
-                            {count} {count === 1 ? "person" : "people"}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </>
-              )}
-            </Card>
-          </View>
-        )}
-
-        {/* Location Inputs */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Locations</Text>
-          <Card elevated>
-            <SimpleField
-              label="Pickup Location"
-              placeholder="Search pickup point"
-              value={pickupInput}
-              onChangeText={(value) => { setPickupInput(value); setPickupPlace(null); }}
-              autoCorrect={false}
-              autoCapitalize="words"
-              returnKeyType="search"
-              leftIcon={<Ionicons name="ellipse" size={16} color={COLORS.success} />}
-              rightIcon={searching === "pickup" ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
-            />
-            <View style={styles.locationActions}>
-              <TouchableOpacity style={styles.locationButton} onPress={useCurrentLocation}>
-                <Ionicons name="locate" size={14} color={COLORS.primary} />
-                <Text style={styles.locationButtonText}>Use current location</Text>
-              </TouchableOpacity>
-            </View>
-            {pickupResults.map((place) => (
-              <TouchableOpacity key={place.id} style={styles.resultRow} onPress={() => applyPlace("pickup", place)}>
-                <Ionicons name="location-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.resultText} numberOfLines={2}>{place.name}</Text>
-              </TouchableOpacity>
-            ))}
-            <View style={styles.swapLine} />
-            <SimpleField
-              label="Drop Location"
-              placeholder="Search destination"
-              value={dropInput}
-              onChangeText={(value) => { setDropInput(value); setDropPlace(null); }}
-              inputRef={dropInputRef}
-              autoCorrect={false}
-              autoCapitalize="words"
-              returnKeyType="search"
-              leftIcon={<Ionicons name="location" size={16} color={COLORS.error} />}
-              rightIcon={searching === "drop" ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
-            />
-            {dropResults.map((place) => (
-              <TouchableOpacity key={place.id} style={styles.resultRow} onPress={() => applyPlace("drop", place)}>
-                <Ionicons name="location-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.resultText} numberOfLines={2}>{place.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </Card>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Saved Places</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("SavedLocations", { rideType: selectedType })}>
-              <Text style={styles.manageSavedText}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-          {savedLocations.length > 0 ? (
-            <View style={styles.savedList}>
-              {savedLocations.slice(0, 4).map((location) => (
-                <Card key={location.id} elevated style={styles.savedCard}>
-                  <View style={styles.savedCardTop}>
-                    <View style={styles.savedCardIconWrap}>
-                      <Ionicons name="bookmark" size={16} color={COLORS.primary} />
-                    </View>
-                    <View style={styles.savedCardBody}>
-                      <Text style={styles.savedCardTitle}>{location.name}</Text>
-                      <Text style={styles.savedCardAddress} numberOfLines={2}>{location.address}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.savedCardActions}>
-                    <TouchableOpacity style={styles.savedActionButton} onPress={() => applyPlace("pickup", location)}>
-                      <Ionicons name="ellipse" size={12} color={COLORS.success} />
-                      <Text style={styles.savedActionText}>Pickup</Text>
+              <View style={styles.section}>
+                <Card>
+                  <SimpleField
+                    placeholder="Pickup Location"
+                    value={pickupInput}
+                    onChangeText={(val) => { setPickupInput(val); setPickupPlace(null); }}
+                    leftIcon={<Ionicons name="ellipse" size={16} color={COLORS.success} />}
+                    rightIcon={searching === "pickup" ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
+                  />
+                  {pickupResults.map((place) => (
+                    <TouchableOpacity key={place.id} style={styles.resultRow} onPress={() => applyPlace("pickup", place)}>
+                      <Ionicons name="location-outline" size={16} color={COLORS.primary} />
+                      <Text style={styles.resultText} numberOfLines={2}>{place.name}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.savedActionButton} onPress={() => applyPlace("drop", location)}>
-                      <Ionicons name="location" size={12} color={COLORS.error} />
-                      <Text style={styles.savedActionText}>Drop</Text>
+                  ))}
+                  <View style={styles.swapLine} />
+                  <SimpleField
+                    placeholder="Drop Location"
+                    value={dropInput}
+                    onChangeText={(val) => { setDropInput(val); setDropPlace(null); }}
+                    inputRef={dropInputRef}
+                    leftIcon={<Ionicons name="location" size={16} color={COLORS.error} />}
+                    rightIcon={searching === "drop" ? <ActivityIndicator size="small" color={COLORS.primary} /> : null}
+                  />
+                  {dropResults.map((place) => (
+                    <TouchableOpacity key={place.id} style={styles.resultRow} onPress={() => applyPlace("drop", place)}>
+                      <Ionicons name="location-outline" size={16} color={COLORS.primary} />
+                      <Text style={styles.resultText} numberOfLines={2}>{place.name}</Text>
                     </TouchableOpacity>
+                  ))}
+                </Card>
+              </View>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              {/* Vehicle Selection */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Ride Type</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.md }}>
+                  {RIDE_OPTIONS.map((ride) => (
+                    <TouchableOpacity
+                      key={ride.type}
+                      style={[styles.rideTypeCard, selectedType === ride.type && styles.rideTypeCardActive]}
+                      onPress={() => setSelectedType(ride.type)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name={ride.icon} size={28} color={selectedType === ride.type ? COLORS.primary : COLORS.grayDark} />
+                      <Text style={[styles.rideTypeLabel, selectedType === ride.type && styles.rideTypeLabelActive]}>{ride.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Map Preview for Confirmation */}
+              <View style={[styles.mapPreview, { marginHorizontal: SPACING.lg, borderRadius: RADIUS.lg, height: 160 }]}>
+                 <OsmRouteMap pickup={pickupPlace} drop={dropPlace} />
+              </View>
+
+              {/* Payment & Summary */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Payment</Text>
+                <Card>
+                  <View style={styles.choiceRow}>
+                    {PAYMENT_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[styles.choiceChip, paymentMethod === option.key && styles.choiceChipActive]}
+                        onPress={() => setPaymentMethod(option.key)}
+                      >
+                        <Ionicons
+                          name={option.icon}
+                          size={16}
+                          color={paymentMethod === option.key ? COLORS.primary : COLORS.textSecondary}
+                        />
+                        <Text style={[styles.choiceText, paymentMethod === option.key && styles.choiceTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </Card>
-              ))}
-            </View>
-          ) : (
-            <Card style={styles.savedEmptyCard}>
-              <Text style={styles.savedEmptyTitle}>No saved places yet</Text>
-              <Text style={styles.savedEmptyText}>Save home, office, or campus from your profile to book faster.</Text>
-            </Card>
+              </View>
+
+              <View style={styles.section}>
+                <Card>
+                  <Text style={styles.fareSummaryTitle}>Estimate</Text>
+                  {loading && !currentQuote ? (
+                    <Skeleton width="100%" height={24} style={{ marginTop: 8 }} />
+                  ) : (
+                    <>
+                      <View style={styles.fareRow}>
+                        <Text style={styles.fareKey}>Total Distance</Text>
+                        <Text style={styles.fareVal}>{estDist || "--"} km</Text>
+                      </View>
+                      <View style={styles.divider} />
+                      <View style={styles.fareRow}>
+                        <Text style={styles.fareTotalKey}>Estimated Fare</Text>
+                        <Text style={styles.fareTotalVal}>₹{estFare}</Text>
+                      </View>
+                      {!hasAvailableDriver && availability?.message && (
+                        <Text style={styles.errorText}>{availability.message}</Text>
+                      )}
+                    </>
+                  )}
+                </Card>
+              </View>
+            </>
           )}
-        </View>
 
-        {/* Popular Locations */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Popular Destinations</Text>
-          <View style={styles.popularGrid}>
-            {["Railway Station", "Airport", "Bus Stand", "Mall", "Hospital", "University"].map(loc => (
-              <TouchableOpacity
-                key={loc}
-                style={styles.popularChip}
-                onPress={() => {
-                  setPickupResults([]);
-                  setDropResults([]);
-                  setDropPlace(null);
-                  setDropInput(loc);
-                  setTimeout(() => {
-                    dropInputRef.current?.focus?.();
-                  }, 50);
-                }}
-              >
-                <Ionicons name="location" size={12} color={COLORS.primary} />
-                <Text style={styles.popularText}>{loc}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment</Text>
-          <Card elevated>
-            <View style={styles.choiceRow}>
-              {PAYMENT_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.key}
-                  style={[styles.choiceChip, paymentMethod === option.key && styles.choiceChipActive]}
-                  onPress={() => setPaymentMethod(option.key)}
-                >
-                  <Ionicons
-                    name={option.icon}
-                    size={14}
-                    color={paymentMethod === option.key ? COLORS.primary : COLORS.textSecondary}
-                  />
-                  <Text style={[styles.choiceText, paymentMethod === option.key && styles.choiceTextActive]}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </Card>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Schedule</Text>
-          <Card elevated>
-            <View style={styles.choiceRow}>
-              {SCHEDULE_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.key}
-                  style={[styles.choiceChip, scheduleKey === option.key && styles.choiceChipActive]}
-                  onPress={() => setScheduleKey(option.key)}
-                >
-                  <Ionicons
-                    name={option.key === "now" ? "flash" : "calendar"}
-                    size={14}
-                    color={scheduleKey === option.key ? COLORS.primary : COLORS.textSecondary}
-                  />
-                  <Text style={[styles.choiceText, scheduleKey === option.key && styles.choiceTextActive]}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {scheduledAt ? (
-              <Text style={styles.scheduleNote}>
-                Pickup time: {new Date(scheduledAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
-              </Text>
-            ) : (
-              <Text style={styles.scheduleNote}>Instant trip request with nearest online driver</Text>
-            )}
-          </Card>
-        </View>
-
-        {/* Fare Summary */}
-        <View style={styles.section}>
-          <Card style={styles.fareCard} elevated>
-            <Text style={styles.fareSummaryTitle}>Fare Summary</Text>
-            <View style={styles.fareRow}><Text style={styles.fareKey}>Base fare</Text><Text style={styles.fareVal}>₹{fareInfo.base}</Text></View>
-            <View style={styles.fareRow}><Text style={styles.fareKey}>Distance ({estDist || "--"} km)</Text><Text style={styles.fareVal}>₹{Math.round(fareInfo.perKm * estDist)}</Text></View>
-            <View style={styles.fareRow}><Text style={styles.fareKey}>Surge ({surgeMultiplier.toFixed(2)}x)</Text><Text style={styles.fareVal}>₹{surgeAmount}</Text></View>
-            <View style={styles.fareRow}><Text style={styles.fareKey}>Travel time</Text><Text style={styles.fareVal}>{estTime} min</Text></View>
-            <View style={styles.fareRow}>
-              <Text style={styles.fareKey}>Driver availability</Text>
-              <Text style={[styles.fareVal, !hasAvailableDriver && styles.unavailableText]}>
-                {hasAvailableDriver
-                  ? currentQuote?.driver
-                    ? `${currentQuote.driver.name} • ${currentQuote.driver.distanceKm} km away`
-                    : availability?.message || "Nearby drivers have received your request"
-                  : "No nearby online driver"}
-              </Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.fareRow}><Text style={styles.fareTotalKey}>Total Estimate</Text><Text style={styles.fareTotalVal}>₹{estFare}</Text></View>
-            <View style={styles.fareRow}><Text style={styles.fareKey}>Payment mode</Text><Text style={styles.fareVal}>{paymentMethod.toUpperCase()}</Text></View>
-            <Text style={styles.fareNote}>{currentQuote ? "* Based on live OpenStreetMap route data" : "* Search both locations to load live route pricing"}</Text>
-            {availability?.message ? <Text style={[styles.fareNote, !hasAvailableDriver && styles.unavailableText]}>{availability.message}</Text> : null}
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          </Card>
-        </View>
-
+          <View style={{ height: 100 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View style={styles.bookBtnWrap}>
-        <Button
-          title={loading ? "Loading live route..." : `Book ${currentRide?.label}${isShare ? " (Shared)" : ""} • ₹${estFare}`}
-          onPress={handleBook}
-          disabled={!currentQuote || loading || !hasAvailableDriver}
-          size="lg"
-          icon={<Ionicons name={currentRide?.icon || "car"} size={20} color={COLORS.white} />}
-        />
+      <View style={styles.bottomBar}>
+        {step === 1 ? (
+          <Button
+            title="Next: Confirm Details"
+            onPress={handleNextStep}
+            disabled={!pickupPlace || !dropPlace}
+            size="lg"
+          />
+        ) : (
+          <Button
+            title={loading ? "Calculating..." : `Confirm & Book • ₹${estFare}`}
+            onPress={handleBook}
+            disabled={loading || !hasAvailableDriver}
+            size="lg"
+          />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -589,97 +377,77 @@ export default function BookRideScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  searchingSafe: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center" },
+  searchingContent: { alignItems: "center" },
+  searchingTitle: { ...TYPOGRAPHY.title, color: COLORS.text, marginBottom: 8 },
+  searchingSub: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
+  cancelBtn: { position: "absolute", bottom: SPACING.xxl, width: "90%" },
   contentWrap: { flex: 1 },
   scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 140 },
-  section: { paddingHorizontal: SPACING.md, marginTop: SPACING.md },
-  sectionTitle: { fontSize: 16, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm },
-  field: { marginBottom: SPACING.md },
-  fieldLabel: { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 8, letterSpacing: 0.2 },
+  section: { paddingHorizontal: SPACING.lg, marginTop: SPACING.lg },
+  sectionTitle: { ...TYPOGRAPHY.subtitle, marginBottom: SPACING.sm },
+  mapPreview: { height: 200, width: "100%", overflow: "hidden", backgroundColor: COLORS.surface },
+  field: { marginBottom: SPACING.sm },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.inputBg,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    minHeight: 48,
   },
-  input: { flex: 1, fontSize: 15, color: COLORS.text },
+  input: { flex: 1, ...TYPOGRAPHY.body },
   iconLeft: { marginRight: 10 },
   iconRight: { marginLeft: 10 },
-  vehicleSummaryCard: { flexDirection: "row", alignItems: "center" },
-  vehicleIcon: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  vehicleSummaryInfo: { flex: 1, marginLeft: 14 },
-  vehicleSummaryTitle: { fontSize: 16, fontWeight: "800", color: COLORS.text },
-  vehicleSummaryText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 3 },
-  changeVehicleBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  changeVehicleText: { fontSize: 12, fontWeight: "800", color: COLORS.primary },
-  shareCard: {},
-  shareRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  shareLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
-  shareTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text },
-  shareSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  savingBadge: { backgroundColor: COLORS.success + "15", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginTop: 10 },
-  savingText: { color: COLORS.success, fontWeight: "700", fontSize: 13 },
-  shareCountWrap: { marginTop: 12 },
-  shareCountLabel: { fontSize: 13, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
-  shareCountRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  shareCountChip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: COLORS.white },
-  shareCountChipActive: { borderColor: COLORS.success, backgroundColor: "#ECFDF5" },
-  shareCountText: { fontSize: 12, fontWeight: "700", color: COLORS.textSecondary },
-  shareCountTextActive: { color: COLORS.success },
-  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  swapLine: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
+  resultRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
+  resultText: { flex: 1, ...TYPOGRAPHY.body, color: COLORS.textSecondary },
+  rideTypeCard: {
+    width: 100,
+    height: 100,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    ...SHADOWS.soft,
+  },
+  rideTypeCardActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight + "30" },
+  rideTypeLabel: { ...TYPOGRAPHY.label, marginTop: 8 },
+  rideTypeLabelActive: { color: COLORS.primary, fontWeight: "700" },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   choiceChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.white,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  choiceChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "12" },
-  choiceText: { fontSize: 12, fontWeight: "700", color: COLORS.textSecondary },
-  choiceTextActive: { color: COLORS.primary },
-  scheduleNote: { fontSize: 12, color: COLORS.textSecondary, marginTop: 10, fontWeight: "600" },
-  locationActions: { marginTop: -8, marginBottom: 8 },
-  locationButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#EEF2FF", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  locationButtonText: { fontSize: 12, fontWeight: "700", color: COLORS.primary },
-  resultRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.border },
-  resultText: { flex: 1, fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
-  swapLine: { height: 1, backgroundColor: COLORS.border, marginVertical: 4 },
-  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: SPACING.sm },
-  manageSavedText: { fontSize: 12, fontWeight: "800", color: COLORS.primary },
-  savedList: { gap: 10 },
-  savedCard: { marginBottom: 0 },
-  savedCardTop: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  savedCardIconWrap: { width: 34, height: 34, borderRadius: 11, backgroundColor: COLORS.primary + "12", alignItems: "center", justifyContent: "center" },
-  savedCardBody: { flex: 1 },
-  savedCardTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text },
-  savedCardAddress: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4, lineHeight: 18 },
-  savedCardActions: { flexDirection: "row", gap: 10, marginTop: 12 },
-  savedActionButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 999, paddingVertical: 10, backgroundColor: COLORS.white },
-  savedActionText: { fontSize: 12, fontWeight: "800", color: COLORS.text },
-  savedEmptyCard: { alignItems: "center" },
-  savedEmptyTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text },
-  savedEmptyText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 6, textAlign: "center", lineHeight: 18 },
-  popularGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  popularChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.white, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: COLORS.border },
-  popularText: { fontSize: 12, fontWeight: "600", color: COLORS.text },
-  fareCard: {},
-  fareSummaryTitle: { fontSize: 15, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm },
-  fareRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-  fareKey: { fontSize: 14, color: COLORS.textSecondary },
-  fareVal: { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 8 },
-  fareTotalKey: { fontSize: 15, fontWeight: "800", color: COLORS.text },
-  fareTotalVal: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
-  fareNote: { fontSize: 11, color: COLORS.textSecondary, marginTop: 6 },
-  unavailableText: { color: COLORS.error },
-  errorText: { fontSize: 12, color: COLORS.error, marginTop: 8, fontWeight: "600" },
-  bookBtnWrap: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, paddingBottom: 28, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 10 },
+  choiceChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight + "30" },
+  choiceText: { ...TYPOGRAPHY.label },
+  choiceTextActive: { color: COLORS.primary, fontWeight: "700" },
+  fareSummaryTitle: { ...TYPOGRAPHY.subtitle, marginBottom: SPACING.md },
+  fareRow: { flexDirection: "row", justifyContent: "space-between", marginVertical: 4 },
+  fareKey: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
+  fareVal: { ...TYPOGRAPHY.body, fontWeight: "600" },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
+  fareTotalKey: { ...TYPOGRAPHY.body, fontWeight: "800" },
+  fareTotalVal: { ...TYPOGRAPHY.title, color: COLORS.primary },
+  errorText: { ...TYPOGRAPHY.label, color: COLORS.error, marginTop: SPACING.md, fontWeight: "600" },
+  bottomBar: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    paddingBottom: Platform.OS === "ios" ? 34 : SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    ...SHADOWS.card,
+  },
 });

@@ -1,11 +1,10 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, Modal, TextInput, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { finalizeBooking, rateRideBooking, refreshActiveRide, setActiveBooking, syncRideStatus } from "../../store/slices/bookingSlice";
-import { COLORS, SPACING, BOOKING_STATUS } from "../../constants";
+import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS, BOOKING_STATUS } from "../../constants";
 import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import OsmRouteMap from "../../components/map/OsmRouteMap";
@@ -13,16 +12,16 @@ import { api } from "../../services/api";
 import { subscribeRideRealtime } from "../../services/realtime";
 
 const STATUS_STEPS = [
-  { key: BOOKING_STATUS.PENDING, label: "Waiting For Driver", icon: "time", color: "#F59E0B" },
-  { key: BOOKING_STATUS.ACCEPTED, label: "Driver Assigned", icon: "person", color: "#3B82F6" },
-  { key: BOOKING_STATUS.ARRIVED, label: "Driver Arrived", icon: "pin", color: "#0EA5E9" },
-  { key: BOOKING_STATUS.IN_PROGRESS, label: "Ride in Progress", icon: "navigate", color: "#10B981" },
-  { key: BOOKING_STATUS.COMPLETED, label: "Completed", icon: "checkmark-circle", color: "#10B981" },
+  { key: BOOKING_STATUS.PENDING, label: "Finding Driver", icon: "search", color: COLORS.warning },
+  { key: BOOKING_STATUS.ACCEPTED, label: "Driver Assigned", icon: "person", color: COLORS.primary },
+  { key: BOOKING_STATUS.ARRIVED, label: "Driver Arrived", icon: "pin", color: COLORS.success },
+  { key: BOOKING_STATUS.IN_PROGRESS, label: "On Trip", icon: "navigate", color: COLORS.success },
+  { key: BOOKING_STATUS.COMPLETED, label: "Completed", icon: "checkmark-circle", color: COLORS.success },
 ];
 
 export default function RideTrackingScreen({ navigation }) {
   const dispatch = useDispatch();
-  const booking = useSelector(s => s.booking.activeBooking);
+  const booking = useSelector((s) => s.booking.activeBooking);
   const lastBookingRef = useRef(null);
   const isRedirectingRef = useRef(false);
   const [sharedRequest, setSharedRequest] = useState(null);
@@ -35,10 +34,7 @@ export default function RideTrackingScreen({ navigation }) {
   const goHomeFast = () => {
     if (isRedirectingRef.current) return;
     isRedirectingRef.current = true;
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "UserHome" }],
-    });
+    navigation.reset({ index: 0, routes: [{ name: "UserHome" }] });
   };
 
   useEffect(() => {
@@ -48,24 +44,20 @@ export default function RideTrackingScreen({ navigation }) {
         goHomeFast();
         return;
       }
-
       if (booking.status === BOOKING_STATUS.COMPLETED) {
         setCompletionRide(booking);
       }
       return;
     }
-
     const lastBooking = lastBookingRef.current;
     if (!lastBooking) {
       goHomeFast();
       return;
     }
-
     if (lastBooking.status === BOOKING_STATUS.COMPLETED) {
       setCompletionRide(lastBooking);
       return;
     }
-
     if (lastBooking.status === BOOKING_STATUS.CANCELLED) {
       goHomeFast();
     }
@@ -92,7 +84,6 @@ export default function RideTrackingScreen({ navigation }) {
           dispatch(setActiveBooking(ride));
           return;
         }
-
         if (ride.status === BOOKING_STATUS.CANCELLED) {
           goHomeFast();
           dispatch(finalizeBooking(ride));
@@ -100,20 +91,12 @@ export default function RideTrackingScreen({ navigation }) {
         }
         dispatch(setActiveBooking(ride));
       },
-      onError: () => {
-        // Fallback refresh on socket issues.
-        refresh();
-      },
+      onError: () => refresh(),
     });
 
-    api.getSharedRideByRide(booking.id)
-      .then(({ request }) => setSharedRequest(request))
-      .catch(() => setSharedRequest(null));
-
+    api.getSharedRideByRide(booking.id).then(({ request }) => setSharedRequest(request)).catch(() => setSharedRequest(null));
     const intervalId = setInterval(() => {
-      api.getSharedRideByRide(booking.id)
-        .then(({ request }) => setSharedRequest(request))
-        .catch(() => setSharedRequest(null));
+      api.getSharedRideByRide(booking.id).then(({ request }) => setSharedRequest(request)).catch(() => setSharedRequest(null));
     }, 7000);
 
     return () => {
@@ -122,17 +105,18 @@ export default function RideTrackingScreen({ navigation }) {
     };
   }, [booking?.id, dispatch]);
 
-  if (!booking) return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.emptyState}>
-        <Ionicons name="car-outline" size={42} color={COLORS.gray} />
-        <Text style={styles.emptyTitle}>Ride status updated</Text>
-        <Text style={styles.emptyText}>Redirecting to Home...</Text>
-      </View>
-    </SafeAreaView>
-  );
+  if (!booking) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.emptyState}>
+          <Ionicons name="car-outline" size={42} color={COLORS.grayDark} />
+          <Text style={styles.emptyTitle}>Updating...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const statusIdx = STATUS_STEPS.findIndex(s => s.key === booking.status);
+  const statusIdx = STATUS_STEPS.findIndex((s) => s.key === booking.status);
   const currentStep = STATUS_STEPS[statusIdx] || STATUS_STEPS[0];
 
   const handleCancel = () => {
@@ -143,9 +127,7 @@ export default function RideTrackingScreen({ navigation }) {
         style: "destructive",
         onPress: () => {
           dispatch(syncRideStatus(booking.id, BOOKING_STATUS.CANCELLED))
-            .then(() => {
-              navigation.navigate("UserHome");
-            })
+            .then(() => navigation.navigate("UserHome"))
             .catch((error) => Alert.alert("Cancel Failed", error.message));
         },
       },
@@ -153,48 +135,24 @@ export default function RideTrackingScreen({ navigation }) {
   };
 
   const handleShareOtp = () => {
-    Alert.alert(
-      "Share OTP With Driver",
-      `Tell this OTP to your driver to start the ride: ${booking.otp}`
-    );
+    Alert.alert("Share OTP", `Tell this OTP to your driver: ${booking.otp}`);
   };
 
-  const driverPhone =
-    booking?.driver?.phone ||
-    booking?.driver?.phoneNumber ||
-    booking?.driver?.mobile ||
-    booking?.driver?.mobileNumber ||
-    null;
+  const driverPhone = booking?.driver?.phone || booking?.driver?.phoneNumber || booking?.driver?.mobile || booking?.driver?.mobileNumber || null;
 
   const handleCallDriver = () => {
     if (!driverPhone) return;
-    Linking.openURL(`tel:${driverPhone}`).catch(() => {
-      Alert.alert("Call Failed", "Unable to open the phone dialer on this device.");
-    });
-  };
-
-  const handleSmsDriver = () => {
-    if (!driverPhone) return;
-    Linking.openURL(`sms:${driverPhone}`).catch(() => {
-      Alert.alert("SMS Failed", "Unable to open the messaging app on this device.");
-    });
+    Linking.openURL(`tel:${driverPhone}`).catch(() => Alert.alert("Call Failed", "Unable to open dialer."));
   };
 
   const rideForRating = completionRide || (booking?.status === BOOKING_STATUS.COMPLETED ? booking : null);
 
   const handleSubmitRating = async () => {
     if (!rideForRating) return;
-
     setRatingSubmitting(true);
     setRatingError(null);
-
     try {
-      await dispatch(
-        rateRideBooking(rideForRating.id, {
-          rating: ratingValue,
-          reviewText: ratingComment.trim(),
-        })
-      );
+      await dispatch(rateRideBooking(rideForRating.id, { rating: ratingValue, reviewText: ratingComment.trim() }));
       dispatch(finalizeBooking(rideForRating));
       setCompletionRide(null);
       goHomeFast();
@@ -206,49 +164,62 @@ export default function RideTrackingScreen({ navigation }) {
   };
 
   const handleSkipRating = () => {
-    if (rideForRating) {
-      dispatch(finalizeBooking(rideForRating));
-    }
+    if (rideForRating) dispatch(finalizeBooking(rideForRating));
     setCompletionRide(null);
     goHomeFast();
+  };
+
+  const renderPrimaryAction = () => {
+    if (booking.status === BOOKING_STATUS.PENDING) {
+      return <Button title="Cancel Search" onPress={handleCancel} variant="danger" size="lg" />;
+    }
+    if (booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) {
+      return <Button title={`Share OTP: ${booking.otp}`} onPress={handleShareOtp} variant="primary" size="lg" />;
+    }
+    if (booking.status === BOOKING_STATUS.IN_PROGRESS) {
+      return (
+        <View style={styles.etaContainer}>
+          <Text style={styles.etaLabel}>Arriving in</Text>
+          <Text style={styles.etaValue}>{booking.durationMinutes} min</Text>
+        </View>
+      );
+    }
+    return null;
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.mapArea}>
-        <OsmRouteMap
-          pickup={booking.pickup}
-          drop={booking.drop}
-          driver={booking.driver}
-          routePoints={booking.route?.geometry || []}
-        />
+        <OsmRouteMap pickup={booking.pickup} drop={booking.drop} driver={booking.driver} routePoints={booking.route?.geometry || []} />
       </View>
 
       <View style={styles.bottomSheet}>
+        <View style={styles.sheetHandle} />
+        
+        {/* Status Header */}
         <View style={styles.statusHeader}>
           <View style={[styles.statusIcon, { backgroundColor: currentStep.color + "20" }]}>
-            <Ionicons name={currentStep.icon} size={22} color={currentStep.color} />
+            <Ionicons name={currentStep.icon} size={24} color={currentStep.color} />
           </View>
           <View style={styles.statusInfo}>
             <Text style={styles.statusLabel}>{currentStep.label}</Text>
             <Text style={styles.statusSub}>
-              {booking.status === BOOKING_STATUS.PENDING
-                ? `${booking.requestedDrivers?.length || 0} nearby drivers can accept this ride request`
-                : booking.status === BOOKING_STATUS.ACCEPTED
-                ? `${booking.driver?.name} will reach you in about ${booking.driver?.etaMinutes} min`
-                : booking.status === BOOKING_STATUS.ARRIVED
-                  ? "Your driver has reached pickup. Share OTP to start the trip"
-                : booking.status === BOOKING_STATUS.IN_PROGRESS
-                  ? "Trip is live and synced with the backend"
-                  : "Trip completed"}
+              {booking.status === BOOKING_STATUS.PENDING ? "Searching for nearby drivers"
+                : booking.status === BOOKING_STATUS.ACCEPTED ? `${booking.driver?.name} is on the way`
+                : booking.status === BOOKING_STATUS.ARRIVED ? "Driver is waiting at pickup"
+                : booking.status === BOOKING_STATUS.IN_PROGRESS ? `Heading to ${booking.drop?.name}`
+                : "Trip completed"}
             </Text>
           </View>
-          <View style={styles.otpWrap}>
-            <Text style={styles.otpLabel}>OTP</Text>
-            <Text style={styles.otpCode}>{booking.status === BOOKING_STATUS.PENDING ? "--" : booking.otp}</Text>
-          </View>
+          {booking.status === BOOKING_STATUS.ACCEPTED && (
+            <View style={styles.etaPill}>
+              <Text style={styles.etaPillVal}>{booking.driver?.etaMinutes || "--"}</Text>
+              <Text style={styles.etaPillLabel}>MIN</Text>
+            </View>
+          )}
         </View>
 
+        {/* Progress Bar */}
         <View style={styles.progressRow}>
           {STATUS_STEPS.map((step, i) => (
             <React.Fragment key={step.key}>
@@ -258,140 +229,80 @@ export default function RideTrackingScreen({ navigation }) {
           ))}
         </View>
 
+        {/* Driver Info */}
         {booking.driver && booking.status !== BOOKING_STATUS.PENDING && (
-          <Card style={styles.driverCard}>
-            <View style={styles.driverRow}>
-              <View style={styles.driverAvatar}>
-                <Text style={styles.driverAvatarText}>{booking.driver.name[0]}</Text>
-              </View>
-              <View style={styles.driverInfo}>
-                <Text style={styles.driverName}>{booking.driver.name}</Text>
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={14} color="#F59E0B" />
-                  <Text style={styles.ratingText}>{booking.driver.rating} • {booking.driver.vehicleType} • {booking.driver.distanceKm} km away</Text>
-                </View>
-                <Text style={styles.vehicleNo}>{booking.driver.vehicleNo}</Text>
-              </View>
-              {driverPhone ? (
-                <View style={styles.driverActions}>
-                  <TouchableOpacity style={styles.callBtn} onPress={handleCallDriver}>
-                    <Ionicons name="call" size={20} color={COLORS.success} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.msgBtn} onPress={handleSmsDriver}>
-                    <Ionicons name="chatbubble" size={20} color={COLORS.primary} />
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+          <View style={styles.driverSection}>
+            <View style={styles.driverAvatar}>
+              <Text style={styles.driverAvatarText}>{booking.driver.name[0]}</Text>
             </View>
-          </Card>
+            <View style={styles.driverInfo}>
+              <Text style={styles.driverName}>{booking.driver.name}</Text>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={14} color={COLORS.warning} />
+                <Text style={styles.ratingText}>{booking.driver.rating} • {booking.driver.vehicleType}</Text>
+              </View>
+            </View>
+            <View style={styles.vehicleInfo}>
+              <Text style={styles.vehicleNo}>{booking.driver.vehicleNo}</Text>
+            </View>
+            {driverPhone && (
+              <TouchableOpacity style={styles.callBtn} onPress={handleCallDriver}>
+                <Ionicons name="call" size={20} color={COLORS.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
-        <Card style={styles.tripCard}>
-          <View style={styles.tripRow}>
-            <View style={styles.tripLoc}>
-              <Ionicons name="ellipse" size={10} color={COLORS.success} />
-              <Text style={styles.tripLocText} numberOfLines={1}>{booking.pickup?.name}</Text>
-            </View>
-            <View style={styles.tripLoc}>
-              <Ionicons name="location" size={12} color={COLORS.error} />
-              <Text style={styles.tripLocText} numberOfLines={1}>{booking.drop?.name}</Text>
-            </View>
-          </View>
-          <View style={styles.fareRow}>
-            <Text style={styles.fareLabel}>Estimated Fare</Text>
-            <Text style={styles.fareVal}>₹{booking.fare}</Text>
-          </View>
-          <View style={styles.fareRow}>
-            <Text style={styles.fareLabel}>Payment</Text>
-            <Text style={styles.tripMeta}>{String(booking.paymentMethod || "cash").toUpperCase()}</Text>
-          </View>
-          {booking.scheduledAt ? (
-            <View style={styles.fareRow}>
-              <Text style={styles.fareLabel}>Scheduled</Text>
-              <Text style={styles.tripMeta}>
-                {new Date(booking.scheduledAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
-              </Text>
-            </View>
-          ) : null}
-          <View style={styles.fareRow}>
-            <Text style={styles.fareLabel}>Distance / ETA</Text>
-            <Text style={styles.tripMeta}>{booking.distance} km • {booking.durationMinutes} min</Text>
-          </View>
-        </Card>
-
+        {/* Shared Ride Info */}
         {booking.isShare && sharedRequest ? (
-          <Card style={styles.participantsCard}>
-            <View style={styles.participantsHeader}>
-              <Ionicons name="people" size={18} color={COLORS.success} />
-              <Text style={styles.participantsTitle}>Shared Ride Participants</Text>
-            </View>
+          <View style={styles.sharedSection}>
+            <Text style={styles.sharedTitle}>Shared Ride ({sharedRequest.acceptedCount}/{sharedRequest.requestedSeats} joined)</Text>
             <View style={styles.chipsRow}>
-              <View style={[styles.participantChip, styles.ownerChip]}>
-                <Text style={styles.ownerChipText}>You</Text>
-              </View>
-              {sharedRequest.acceptedUsers.map((participant) => (
-                <View key={participant.userId} style={styles.participantChip}>
-                  <Text style={styles.participantChipText}>{participant.name}</Text>
-                </View>
+              <View style={[styles.participantChip, styles.ownerChip]}><Text style={styles.ownerChipText}>You</Text></View>
+              {sharedRequest.acceptedUsers.map((p) => (
+                <View key={p.userId} style={styles.participantChip}><Text style={styles.participantChipText}>{p.name}</Text></View>
               ))}
             </View>
-            <Text style={styles.participantsMeta}>
-              {sharedRequest.acceptedCount}/{sharedRequest.requestedSeats} joined
-            </Text>
-          </Card>
+          </View>
         ) : null}
 
+        {/* Primary Action */}
         <View style={styles.actionsRow}>
-          {(booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) ? <Button title="Share OTP" onPress={handleShareOtp} variant="success" style={{ flex: 1 }} /> : null}
-          {(booking.status === BOOKING_STATUS.PENDING || booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) ? (
-            <Button title="Cancel Ride" onPress={handleCancel} variant="danger" variant2="outline" style={{ flex: 1 }} />
-          ) : null}
+          {renderPrimaryAction()}
         </View>
+
+        {/* Secondary Action (Cancel) */}
+        {(booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) && (
+          <TouchableOpacity style={styles.secondaryAction} onPress={handleCancel}>
+            <Text style={styles.secondaryActionText}>Cancel Ride</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Modal visible={Boolean(rideForRating)} transparent animationType="fade" onRequestClose={handleSkipRating}>
         <View style={styles.ratingBackdrop}>
           <View style={styles.ratingSheet}>
-            <View style={styles.ratingHeader}>
-              <View style={styles.ratingIconWrap}>
-                <Ionicons name="star" size={22} color={COLORS.warning} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.ratingTitle}>Rate your ride</Text>
-                <Text style={styles.ratingSubtitle}>
-                  {rideForRating?.driver?.name ? `How was ${rideForRating.driver.name}?` : "Tell us how your trip went."}
-                </Text>
-              </View>
-            </View>
-
+            <Text style={styles.ratingTitle}>Rate your trip</Text>
+            <Text style={styles.ratingSubtitle}>How was your ride with {rideForRating?.driver?.name}?</Text>
             <View style={styles.starRow}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <Pressable key={star} onPress={() => setRatingValue(star)} style={styles.starButton}>
-                  <Ionicons name={star <= ratingValue ? "star" : "star-outline"} size={30} color={star <= ratingValue ? COLORS.warning : COLORS.gray} />
+                  <Ionicons name={star <= ratingValue ? "star" : "star-outline"} size={36} color={star <= ratingValue ? COLORS.warning : COLORS.borderStrong} />
                 </Pressable>
               ))}
             </View>
-
             <TextInput
               value={ratingComment}
               onChangeText={setRatingComment}
-              placeholder="Add a short review (optional)"
-              placeholderTextColor={COLORS.gray}
+              placeholder="Add a review (optional)"
+              placeholderTextColor={COLORS.textSecondary}
               multiline
               style={styles.ratingInput}
             />
-
-            {ratingError ? <Text style={styles.ratingError}>{ratingError}</Text> : null}
-
+            {ratingError && <Text style={styles.ratingError}>{ratingError}</Text>}
             <View style={styles.ratingActions}>
-              <Button title="Skip" onPress={handleSkipRating} variant="outline" style={{ flex: 1 }} />
-              <Button
-                title={ratingSubmitting ? "Saving..." : "Submit Rating"}
-                onPress={handleSubmitRating}
-                loading={ratingSubmitting}
-                disabled={ratingSubmitting}
-                style={{ flex: 1 }}
-              />
+              <Button title="Skip" onPress={handleSkipRating} variant="secondary" style={{ flex: 1 }} />
+              <Button title={ratingSubmitting ? "Submitting..." : "Submit"} onPress={handleSubmitRating} disabled={ratingSubmitting} style={{ flex: 1 }} />
             </View>
           </View>
         </View>
@@ -402,61 +313,59 @@ export default function RideTrackingScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: SPACING.lg },
-  emptyTitle: { fontSize: 18, fontWeight: "800", color: COLORS.text },
-  emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: "center" },
+  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  emptyTitle: { ...TYPOGRAPHY.title, color: COLORS.textSecondary },
   mapArea: { flex: 1 },
-  bottomSheet: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.md, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 10 },
-  statusHeader: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.md },
-  statusIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  statusInfo: { flex: 1, marginLeft: 12 },
-  statusLabel: { fontSize: 16, fontWeight: "800", color: COLORS.text },
-  statusSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  otpWrap: { alignItems: "center", backgroundColor: COLORS.primary + "15", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-  otpLabel: { fontSize: 10, color: COLORS.primary, fontWeight: "600" },
-  otpCode: { fontSize: 20, fontWeight: "900", color: COLORS.primary },
-  progressRow: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.md },
-  progressDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.border },
-  progressLine: { flex: 1, height: 3, backgroundColor: COLORS.border, marginHorizontal: 2 },
-  driverCard: { marginBottom: SPACING.sm },
-  driverRow: { flexDirection: "row", alignItems: "center" },
-  driverAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
-  driverAvatarText: { fontSize: 18, fontWeight: "800", color: COLORS.white },
-  driverInfo: { flex: 1, marginLeft: 12 },
-  driverName: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  bottomSheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    paddingTop: SPACING.md,
+    ...SHADOWS.card,
+  },
+  sheetHandle: { width: 40, height: 4, backgroundColor: COLORS.borderStrong, borderRadius: 2, alignSelf: "center", marginBottom: SPACING.md },
+  statusHeader: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.lg },
+  statusIcon: { width: 48, height: 48, borderRadius: RADIUS.pill, alignItems: "center", justifyContent: "center" },
+  statusInfo: { flex: 1, marginLeft: SPACING.md },
+  statusLabel: { ...TYPOGRAPHY.title },
+  statusSub: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginTop: 2 },
+  etaPill: { alignItems: "center", backgroundColor: COLORS.primaryLight + "30", borderRadius: RADIUS.md, paddingHorizontal: 12, paddingVertical: 8 },
+  etaPillVal: { ...TYPOGRAPHY.title, color: COLORS.primary },
+  etaPillLabel: { fontSize: 10, fontWeight: "800", color: COLORS.primary },
+  progressRow: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.lg },
+  progressDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.borderStrong },
+  progressLine: { flex: 1, height: 2, backgroundColor: COLORS.borderStrong, marginHorizontal: 4 },
+  driverSection: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.background, padding: SPACING.md, borderRadius: RADIUS.lg, marginBottom: SPACING.lg },
+  driverAvatar: { width: 48, height: 48, borderRadius: RADIUS.pill, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
+  driverAvatarText: { fontSize: 20, fontWeight: "800", color: COLORS.surface },
+  driverInfo: { flex: 1, marginLeft: SPACING.md },
+  driverName: { ...TYPOGRAPHY.subtitle },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  ratingText: { fontSize: 12, color: COLORS.textSecondary },
-  vehicleNo: { fontSize: 12, color: COLORS.primary, fontWeight: "600", marginTop: 2 },
-  driverActions: { flexDirection: "row", gap: 10 },
-  callBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.success + "15", alignItems: "center", justifyContent: "center" },
-  msgBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.primary + "15", alignItems: "center", justifyContent: "center" },
-  tripCard: { marginBottom: SPACING.sm },
-  participantsCard: { marginBottom: SPACING.sm },
-  participantsHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  participantsTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text },
+  ratingText: { ...TYPOGRAPHY.label },
+  vehicleInfo: { alignItems: "flex-end", marginRight: SPACING.md },
+  vehicleNo: { ...TYPOGRAPHY.label, fontWeight: "700", backgroundColor: COLORS.surface, paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border },
+  callBtn: { width: 40, height: 40, borderRadius: RADIUS.pill, backgroundColor: COLORS.primaryLight + "30", alignItems: "center", justifyContent: "center" },
+  sharedSection: { marginBottom: SPACING.lg },
+  sharedTitle: { ...TYPOGRAPHY.label, marginBottom: 8 },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  participantChip: { backgroundColor: COLORS.grayLight, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  participantChipText: { fontSize: 12, fontWeight: "700", color: COLORS.text },
-  ownerChip: { backgroundColor: COLORS.success + "15" },
-  ownerChipText: { fontSize: 12, fontWeight: "800", color: COLORS.success },
-  participantsMeta: { marginTop: 10, fontSize: 12, fontWeight: "700", color: COLORS.primary },
-  tripRow: { marginBottom: 8 },
-  tripLoc: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  tripLocText: { fontSize: 13, color: COLORS.text, flex: 1 },
-  fareRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  fareLabel: { fontSize: 13, color: COLORS.textSecondary },
-  fareVal: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
-  tripMeta: { fontSize: 14, fontWeight: "700", color: COLORS.text },
-  actionsRow: { flexDirection: "row", gap: 10 },
-  ratingBackdrop: { flex: 1, backgroundColor: "rgba(15,23,42,0.55)", justifyContent: "center", padding: SPACING.md },
-  ratingSheet: { backgroundColor: COLORS.white, borderRadius: 24, padding: SPACING.lg, gap: 16 },
-  ratingHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  ratingIconWrap: { width: 46, height: 46, borderRadius: 16, backgroundColor: COLORS.warning + "15", alignItems: "center", justifyContent: "center" },
-  ratingTitle: { fontSize: 18, fontWeight: "900", color: COLORS.text },
-  ratingSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4, lineHeight: 18 },
-  starRow: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  participantChip: { backgroundColor: COLORS.background, borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border },
+  participantChipText: { ...TYPOGRAPHY.label },
+  ownerChip: { backgroundColor: COLORS.success + "15", borderColor: COLORS.success },
+  ownerChipText: { ...TYPOGRAPHY.label, color: COLORS.success, fontWeight: "700" },
+  actionsRow: { marginTop: SPACING.sm },
+  etaContainer: { alignItems: "center", paddingVertical: SPACING.md },
+  etaLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary },
+  etaValue: { fontSize: 32, fontWeight: "900", color: COLORS.primary },
+  secondaryAction: { alignItems: "center", marginTop: SPACING.md, paddingVertical: SPACING.sm },
+  secondaryActionText: { ...TYPOGRAPHY.body, color: COLORS.error, fontWeight: "600" },
+  ratingBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: SPACING.lg },
+  ratingSheet: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.xl, alignItems: "center" },
+  ratingTitle: { ...TYPOGRAPHY.title, marginBottom: 4 },
+  ratingSubtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: SPACING.lg, textAlign: "center" },
+  starRow: { flexDirection: "row", gap: SPACING.md, marginBottom: SPACING.lg },
   starButton: { padding: 4 },
-  ratingInput: { minHeight: 90, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: COLORS.text, textAlignVertical: "top" },
-  ratingError: { fontSize: 12, fontWeight: "700", color: COLORS.error },
-  ratingActions: { flexDirection: "row", gap: 10 },
+  ratingInput: { width: "100%", minHeight: 100, backgroundColor: COLORS.background, borderRadius: RADIUS.md, padding: SPACING.md, ...TYPOGRAPHY.body, textAlignVertical: "top", marginBottom: SPACING.lg },
+  ratingError: { ...TYPOGRAPHY.label, color: COLORS.error, marginBottom: SPACING.md },
+  ratingActions: { flexDirection: "row", gap: SPACING.md, width: "100%" },
 });

@@ -110,7 +110,15 @@ export default function DriverDiscoveryMap({
   const [center, setCenter] = useState(null); // { latitude, longitude }
   const lastPan = useRef({ x: 0, y: 0 });
 
-  const allPoints = useMemo(() => [pickup, ...renderDrivers].filter(Boolean), [pickup, renderDrivers]);
+  const normPickup = useMemo(() => {
+    if (!pickup) return null;
+    if (Array.isArray(pickup) && pickup.length >= 2) return { latitude: Number(pickup[1]), longitude: Number(pickup[0]) };
+    if (pickup.lat !== undefined && pickup.lng !== undefined) return { latitude: Number(pickup.lat), longitude: Number(pickup.lng) };
+    if (pickup.latitude !== undefined && pickup.longitude !== undefined) return { latitude: Number(pickup.latitude), longitude: Number(pickup.longitude) };
+    return null;
+  }, [pickup]);
+
+  const allPoints = useMemo(() => [normPickup, ...renderDrivers].filter(Boolean), [normPickup, renderDrivers]);
   const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
   const [zoom, setZoom] = useState(() => autoRegion.zoom || 13);
   // If user has panned, use center; else use autoRegion
@@ -233,7 +241,7 @@ export default function DriverDiscoveryMap({
           ))}
 
           <Svg width={grid.width} height={grid.height} style={styles.overlay}>
-            {pickup ? <DriverDot point={projectToGrid(pickup, region, grid)} color={COLORS.success} /> : null}
+            {normPickup ? <DriverDot point={projectToGrid(normPickup, region, grid)} color={COLORS.success} /> : null}
             {clusters.map((cluster, index) =>
               cluster.count > 1 ? (
                 <ClusterDot key={`cluster-${index}`} point={cluster.point} count={cluster.count} />
@@ -270,7 +278,7 @@ export default function DriverDiscoveryMap({
       ) : null}
 
       <View style={styles.attribution}>
-        <Text style={styles.attributionText}>Map data © OpenStreetMap contributors</Text>
+        <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
       </View>
 
       <View style={styles.zoomControls}>
