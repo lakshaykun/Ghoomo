@@ -28,10 +28,10 @@ const createRequest = asyncHandler(async (req, res) => {
     throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
   }
 
-  const row = await rideService.createRideRequest(req.user.id, normalizedPayload);
+  const row = await rideService.createRide(req.user.id, normalizedPayload);
   res.status(201).json({
     success: true,
-    message: "Ride request created",
+    message: "Ride created and nearest driver assigned",
     data: row,
   });
 });
@@ -43,10 +43,10 @@ const createLegacyRide = asyncHandler(async (req, res) => {
     throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
   }
 
-  const row = await rideService.createRideRequest(req.user.id, normalizedPayload);
+  const row = await rideService.createRide(req.user.id, normalizedPayload);
   res.status(201).json({
     success: true,
-    message: "Ride request created",
+    message: "Ride created and nearest driver assigned",
     data: row,
   });
 });

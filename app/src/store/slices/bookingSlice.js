@@ -22,6 +22,7 @@ const resequenceWaitingList = (bookings, routeId) => {
 
 const initialState = {
   activeBooking: null,
+  assignedDriver: null,
   bookingHistory: [],
   busBookings: [],
   currentQuote: null,
@@ -49,6 +50,7 @@ const bookingSlice = createSlice({
     setActiveBooking: (state, action) => {
       state.loading = false;
       state.activeBooking = action.payload;
+      state.assignedDriver = action.payload?.driver || null;
       state.currentQuote = action.payload
         ? {
             pickup: action.payload.pickup,
@@ -81,6 +83,7 @@ const bookingSlice = createSlice({
       }
       state.activeBooking = null;
       state.currentQuote = null;
+      state.assignedDriver = null;
     },
     updateBookingStatus: (state, action) => {
       if (state.activeBooking) {
@@ -89,6 +92,7 @@ const bookingSlice = createSlice({
           state.bookingHistory.unshift({ ...state.activeBooking });
           state.activeBooking = null;
           state.currentQuote = null;
+          state.assignedDriver = null;
         }
       }
     },
@@ -195,6 +199,7 @@ const bookingSlice = createSlice({
         state.bookingHistory.unshift({ ...state.activeBooking });
         state.activeBooking = null;
         state.currentQuote = null;
+        state.assignedDriver = null;
       }
     },
     setHistory: (state, action) => {

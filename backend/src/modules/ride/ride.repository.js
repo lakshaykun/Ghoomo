@@ -1,6 +1,38 @@
 const { query, withTransaction } = require("../../config/db");
 const { AppError } = require("../../common/utils/helpers");
 
+const RIDE_DETAIL_SELECT = `
+  SELECT
+    r.*,
+    student.name AS student_name,
+    driver_user.id AS driver_user_id,
+    driver_user.name AS driver_name,
+    driver_user.phone AS driver_phone,
+    d.rating AS driver_rating,
+    d.status AS driver_status,
+    d.is_available AS driver_is_available,
+    loc.current_latitude AS driver_latitude,
+    loc.current_longitude AS driver_longitude,
+    vehicle.vehicle_number AS driver_vehicle_number,
+    vehicle.vehicle_type AS driver_vehicle_type
+  `;
+
+const RIDE_DETAIL_FROM = `
+  FROM rides r
+  INNER JOIN users student ON student.id = r.student_id
+  INNER JOIN drivers d ON d.id = r.driver_id
+  INNER JOIN users driver_user ON driver_user.id = d.user_id
+  LEFT JOIN driver_locations loc ON loc.driver_id = d.id
+  LEFT JOIN LATERAL (
+    SELECT v.vehicle_number, v.vehicle_type
+    FROM driver_vehicles dv
+    INNER JOIN vehicles v ON v.id = dv.vehicle_id
+    WHERE dv.driver_id = d.id AND dv.is_active = TRUE
+    ORDER BY v.created_at DESC
+    LIMIT 1
+  ) vehicle ON TRUE
+`;
+
 async function createRideRequest({
   studentId,
   pickupLocation,
@@ -93,6 +125,20 @@ async function createRideFromRequest({ requestId, driverId, fare, distance }) {
       throw new AppError("Ride request is no longer active", 400, "RIDE_REQUEST_NOT_ACTIVE");
     }
 
+    const driverUpdateResult = await client.query(
+      `
+      UPDATE drivers
+      SET is_available = FALSE, updated_at = NOW()
+      WHERE id = $1 AND is_available = TRUE AND status = 'approved'
+      RETURNING id
+      `,
+      [driverId]
+    );
+
+    if (!driverUpdateResult.rows[0]) {
+      throw new AppError("Driver is no longer available", 409, "DRIVER_NOT_AVAILABLE");
+    }
+
     const rideInsertResult = await client.query(
       `
       INSERT INTO rides (
@@ -152,26 +198,15 @@ async function createRideFromRequest({ requestId, driverId, fare, distance }) {
       [request.id]
     );
 
-    await client.query(
-      `
-      UPDATE drivers
-      SET is_available = FALSE, updated_at = NOW()
-      WHERE id = $1
-      `,
-      [driverId]
-    );
-
-    return rideInsertResult.rows[0];
+    return fetchRideById(rideInsertResult.rows[0].id, client.query.bind(client));
   });
 }
 
-async function getRideById(rideId) {
-  const result = await query(
+async function fetchRideById(rideId, executor = query) {
+  const result = await executor(
     `
-    SELECT r.*, u.name AS student_name, d.user_id AS driver_user_id
-    FROM rides r
-    INNER JOIN users u ON u.id = r.student_id
-    INNER JOIN drivers d ON d.id = r.driver_id
+    ${RIDE_DETAIL_SELECT}
+    ${RIDE_DETAIL_FROM}
     WHERE r.id = $1
     LIMIT 1
     `,
@@ -179,6 +214,10 @@ async function getRideById(rideId) {
   );
 
   return result.rows[0] || null;
+}
+
+async function getRideById(rideId) {
+  return fetchRideById(rideId);
 }
 
 async function updateRideStatus(rideId, status) {
@@ -202,16 +241,16 @@ async function updateRideStatus(rideId, status) {
     [status, rideId]
   );
 
-  return result.rows[0] || null;
+  return result.rows[0] ? fetchRideById(rideId) : null;
 }
 
 async function listRideHistoryForUser(userId) {
   const result = await query(
     `
-    SELECT *
-    FROM rides
-    WHERE student_id = $1
-    ORDER BY created_at DESC
+    ${RIDE_DETAIL_SELECT}
+    ${RIDE_DETAIL_FROM}
+    WHERE r.student_id = $1
+    ORDER BY r.created_at DESC
     `,
     [userId]
   );

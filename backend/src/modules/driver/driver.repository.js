@@ -30,6 +30,44 @@ const DRIVER_PROFILE_SELECT = `
   ) vehicle ON TRUE
 `;
 
+async function getAvailableDrivers(db = null) {
+  const executor = typeof db?.query === "function" ? db.query.bind(db) : query;
+  const result = await executor(
+    `
+    SELECT
+      d.id,
+      d.user_id,
+      d.status,
+      d.is_available,
+      d.rating,
+      u.name,
+      u.phone,
+      loc.current_latitude AS latitude,
+      loc.current_longitude AS longitude,
+      vehicle.vehicle_number,
+      vehicle.vehicle_type
+    FROM drivers d
+    INNER JOIN users u ON u.id = d.user_id
+    INNER JOIN driver_locations loc ON loc.driver_id = d.id
+    LEFT JOIN LATERAL (
+      SELECT v.vehicle_number, v.vehicle_type
+      FROM driver_vehicles dv
+      INNER JOIN vehicles v ON v.id = dv.vehicle_id
+      WHERE dv.driver_id = d.id AND dv.is_active = TRUE
+      ORDER BY v.created_at DESC
+      LIMIT 1
+    ) vehicle ON TRUE
+    WHERE
+      d.is_available = TRUE
+      AND d.status = 'approved'
+      AND loc.current_latitude IS NOT NULL
+      AND loc.current_longitude IS NOT NULL
+    `
+  );
+
+  return result.rows;
+}
+
 async function findDriverByUserId(userId) {
   const result = await query(
     `
@@ -352,6 +390,7 @@ async function markRideRequestMatched(requestId) {
 module.exports = {
   findDriverByUserId,
   findDriverById,
+  getAvailableDrivers,
   registerDriver,
   updateAvailabilityByUserId,
   updateLocationByUserId,

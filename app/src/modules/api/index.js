@@ -27,6 +27,7 @@ import {
   fetchRideQuote,
   getRideByIdOrRequest,
   getRideHistoryForCurrentUser,
+  requestRide,
   updateRideStatusRemote,
 } from "./features/rideApi";
 import {
@@ -75,6 +76,7 @@ export const api = {
   getNearbyDrivers: (params) => getNearbyDrivers(params),
   fetchQuote: (payload) => fetchRideQuote(payload),
   createRide: (payload) => createRideRequest(payload),
+  requestRide: (payload) => requestRide(payload),
   getRide: (rideId) => getRideByIdOrRequest(rideId),
   updateRideStatus: (rideId, status, extra = {}) => updateRideStatusRemote(rideId, status, extra),
   getRideHistory: (userId) => getRideHistoryForCurrentUser(userId),

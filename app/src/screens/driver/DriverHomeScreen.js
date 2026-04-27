@@ -36,6 +36,7 @@ export default function DriverHomeScreen({ navigation }) {
   const user = useSelector((state) => state.auth.user);
   const { dashboard, loading, error } = useSelector((state) => state.driver);
   const watchSubscriptionRef = useRef(null);
+  const webWatchIdRef = useRef(null);
   const [sharedRequest, setSharedRequest] = useState(null);
 
   useEffect(() => {
@@ -57,7 +58,9 @@ export default function DriverHomeScreen({ navigation }) {
     const startTracking = async () => {
       if (!dashboard?.online || !user?.id) return;
       try {
-        await ensureDriverBackgroundLocation();
+        if (Platform.OS !== "web") {
+          await ensureDriverBackgroundLocation();
+        }
       } catch (permissionError) {
         if (mounted) {
           Alert.alert("Location Permission Required", permissionError.message);
@@ -76,6 +79,32 @@ export default function DriverHomeScreen({ navigation }) {
             longitude: current.coords.longitude,
           })
         ).catch(() => {});
+      }
+
+      if (Platform.OS === "web" && globalThis.navigator?.geolocation?.watchPosition) {
+        const watchId = globalThis.navigator.geolocation.watchPosition(
+          (position) => {
+            dispatch(
+              updateDriverLocation(user.id, {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              })
+            ).catch(() => {});
+          },
+          () => {},
+          {
+            enableHighAccuracy: false,
+            maximumAge: 5000,
+            timeout: 10000,
+          }
+        );
+
+        if (mounted) {
+          webWatchIdRef.current = watchId;
+        } else {
+          globalThis.navigator.geolocation.clearWatch(watchId);
+        }
+        return;
       }
 
       const subscription = await Location.watchPositionAsync(
@@ -97,7 +126,11 @@ export default function DriverHomeScreen({ navigation }) {
       if (mounted) {
         watchSubscriptionRef.current = subscription;
       } else {
-        subscription.remove();
+        try {
+          subscription.remove?.();
+        } catch (_error) {
+          // Some web shims expose a broken subscription cleanup API.
+        }
       }
     };
 
@@ -105,8 +138,16 @@ export default function DriverHomeScreen({ navigation }) {
 
     return () => {
       mounted = false;
+      if (webWatchIdRef.current !== null && globalThis.navigator?.geolocation?.clearWatch) {
+        globalThis.navigator.geolocation.clearWatch(webWatchIdRef.current);
+        webWatchIdRef.current = null;
+      }
       if (watchSubscriptionRef.current) {
-        watchSubscriptionRef.current.remove();
+        try {
+          watchSubscriptionRef.current.remove?.();
+        } catch (_error) {
+          // Ignore cleanup failures from Expo web location shims.
+        }
         watchSubscriptionRef.current = null;
       }
     };

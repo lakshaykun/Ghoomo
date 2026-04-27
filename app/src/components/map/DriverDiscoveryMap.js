@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder } from "react-native";
-import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions } from "react-native";
+import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions, Platform } from "react-native";
 import Svg, { Circle, Text as SvgText } from "react-native-svg";
 import { COLORS } from "../../constants";
 import { buildTileGrid, getMapRegion, projectToGrid } from "../../utils/map";
@@ -161,8 +161,10 @@ export default function DriverDiscoveryMap({
     [renderDrivers, region, grid]
   );
 
+  const supportsRemoteTiles = Platform.OS !== "web";
+  const tiles = supportsRemoteTiles ? grid.tiles : [];
   const scale = Math.min(1, Math.max(0.42, (windowWidth - 32) / grid.width));
-  const showTileFallback = tileLoadFailures >= grid.tiles.length && tileLoadSuccess === 0;
+  const showTileFallback = !supportsRemoteTiles || (tileLoadFailures >= grid.tiles.length && tileLoadSuccess === 0);
   const canZoomIn = zoom < MAX_ZOOM;
   const canZoomOut = zoom > MIN_ZOOM;
 
@@ -214,7 +216,7 @@ export default function DriverDiscoveryMap({
     <View style={styles.wrapper} {...panResponder.panHandlers}>
       <View style={[styles.canvasWrap, { transform: [{ scale }] }]}> 
         <View style={styles.canvas}>
-          {grid.tiles.map((tile) => (
+          {tiles.map((tile) => (
             <Image
               key={tile.key}
               source={{

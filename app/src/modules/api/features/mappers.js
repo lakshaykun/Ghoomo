@@ -279,30 +279,50 @@ export function normalizeRide(row = {}, overrides = {}) {
   );
 
   const driverOverride = overrides.driver || null;
-  const hasDriver = Boolean(row.driver_id || driverOverride?.id || row.driver);
+  const driverLatitude = toNumber(
+    row.driver?.latitude ?? row.driver_latitude ?? row.driverLatitude,
+    toNumber(driverOverride?.latitude, null)
+  );
+  const driverLongitude = toNumber(
+    row.driver?.longitude ?? row.driver_longitude ?? row.driverLongitude,
+    toNumber(driverOverride?.longitude, null)
+  );
+  const driverDistanceFallback =
+    driverLatitude !== null && driverLongitude !== null
+      ? haversineDistanceKm(pickup, {
+          latitude: driverLatitude,
+          longitude: driverLongitude,
+        })
+      : 0;
+  const driverDistanceKm = toNumber(
+    row.driver?.distanceKm ?? row.driver_distance_km ?? row.driverDistanceKm,
+    toNumber(driverOverride?.distanceKm, driverDistanceFallback)
+  );
+  const driverEtaMinutes = toNumber(
+    row.driver?.etaMinutes ?? row.driver_eta_minutes ?? row.driverEtaMinutes,
+    toNumber(driverOverride?.etaMinutes, estimateDurationMinutes(driverDistanceKm))
+  );
+  const hasDriver = Boolean(
+    row.driver_id ||
+      row.driver_user_id ||
+      row.driver_name ||
+      row.driver_vehicle_number ||
+      row.driver
+  );
 
   const driver = hasDriver
     ? {
         id: row.driver_id || row.driver?.id || driverOverride?.id || null,
-        name: row.driver?.name || driverOverride?.name || "Driver",
-        phone:
-          row.driver?.phone ||
-          driverOverride?.phone ||
-          row.driver?.phoneNumber ||
-          null,
+        name: row.driver?.name || row.driver_name || driverOverride?.name || "Driver",
+        phone: row.driver?.phone || row.driver_phone || driverOverride?.phone || row.driver?.phoneNumber || null,
         vehicleType:
-          row.driver?.vehicleType ||
-          driverOverride?.vehicleType ||
-          "cab",
-        vehicleNo:
-          row.driver?.vehicleNo ||
-          driverOverride?.vehicleNo ||
-          null,
-        rating: toNumber(row.driver?.rating, toNumber(driverOverride?.rating, 0)),
-        distanceKm: toNumber(row.driver?.distanceKm, toNumber(driverOverride?.distanceKm, 0)),
-        etaMinutes: toNumber(row.driver?.etaMinutes, toNumber(driverOverride?.etaMinutes, 0)),
-        latitude: toNumber(row.driver?.latitude, toNumber(driverOverride?.latitude, null)),
-        longitude: toNumber(row.driver?.longitude, toNumber(driverOverride?.longitude, null)),
+          row.driver?.vehicleType || row.driver_vehicle_type || driverOverride?.vehicleType || "cab",
+        vehicleNo: row.driver?.vehicleNo || row.driver_vehicle_number || driverOverride?.vehicleNo || null,
+        rating: toNumber(row.driver?.rating, toNumber(row.driver_rating, toNumber(driverOverride?.rating, 0))),
+        distanceKm: driverDistanceKm,
+        etaMinutes: driverEtaMinutes,
+        latitude: driverLatitude,
+        longitude: driverLongitude,
       }
     : null;
 

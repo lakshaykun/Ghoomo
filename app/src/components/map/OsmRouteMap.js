@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions } from "react-native";
+import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions, Platform } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { COLORS } from "../../constants";
 import { buildTileGrid, getMapRegion, projectToGrid } from "../../utils/map";
@@ -39,8 +39,10 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) 
   const path = useMemo(() => buildPath(routePoints, region, grid), [routePoints, region, grid]);
   const [tileLoadFailures, setTileLoadFailures] = useState(0);
   const [tileLoadSuccess, setTileLoadSuccess] = useState(0);
+  const supportsRemoteTiles = Platform.OS !== "web";
+  const tiles = supportsRemoteTiles ? grid.tiles : [];
   const scale = Math.min(1, Math.max(0.42, (windowWidth - 32) / grid.width));
-  const showTileFallback = tileLoadFailures >= grid.tiles.length && tileLoadSuccess === 0;
+  const showTileFallback = !supportsRemoteTiles || (tileLoadFailures >= grid.tiles.length && tileLoadSuccess === 0);
   const canZoomIn = zoom < MAX_ZOOM;
   const canZoomOut = zoom > MIN_ZOOM;
 
@@ -48,7 +50,7 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) 
     <View style={styles.wrapper}>
       <View style={[styles.canvasWrap, { transform: [{ scale }] }]}>
       <View style={styles.canvas}>
-        {grid.tiles.map((tile) => (
+        {tiles.map((tile) => (
           <Image
             key={tile.key}
             source={{

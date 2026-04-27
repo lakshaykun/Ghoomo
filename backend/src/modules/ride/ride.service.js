@@ -1,5 +1,6 @@
 const { AppError, calculateDistanceKm, toFiniteNumber } = require("../../common/utils/helpers");
 const driverRepository = require("../driver/driver.repository");
+const { findNearestDriver } = require("../driver/driver.service");
 const repository = require("./ride.repository");
 
 const FARE_TABLE = {
@@ -18,6 +19,7 @@ function normalizeRideRequestPayload(payload = {}) {
     pickupLongitude: payload.pickupLongitude ?? pickup.longitude,
     dropLatitude: payload.dropLatitude ?? drop.latitude,
     dropLongitude: payload.dropLongitude ?? drop.longitude,
+    vehicleType: payload.vehicleType || payload.rideType || null,
     isShared: Boolean(payload.isShared),
     expiresAt: payload.expiresAt || null,
   };
@@ -52,19 +54,51 @@ async function getQuote(payload) {
 }
 
 async function createRideRequest(studentId, payload) {
-  const normalized = normalizeRideRequestPayload(payload);
+  return createRide(studentId, payload);
+}
 
-  return repository.createRideRequest({
+async function createRide(studentId, payload) {
+  const normalized = normalizeRideRequestPayload(payload);
+  const pickupLatitude = Number(normalized.pickupLatitude);
+  const pickupLongitude = Number(normalized.pickupLongitude);
+  const tripQuote = getQuote({
+    pickupLatitude,
+    pickupLongitude,
+    dropLatitude: normalized.dropLatitude,
+    dropLongitude: normalized.dropLongitude,
+    vehicleType: normalized.vehicleType || "auto",
+    isShared: Boolean(normalized.isShared),
+  });
+
+  const request = await repository.createRideRequest({
     studentId,
     pickupLocation: String(normalized.pickupLocation).trim(),
     dropLocation: String(normalized.dropLocation).trim(),
-    pickupLatitude: Number(normalized.pickupLatitude),
-    pickupLongitude: Number(normalized.pickupLongitude),
+    pickupLatitude,
+    pickupLongitude,
     dropLatitude: Number(normalized.dropLatitude),
     dropLongitude: Number(normalized.dropLongitude),
     isShared: Boolean(normalized.isShared),
     expiresAt: normalized.expiresAt,
   });
+
+  const nearestDriver = await findNearestDriver(null, pickupLatitude, pickupLongitude);
+  if (!nearestDriver) {
+    await repository.cancelRideRequest(request.id, studentId).catch(() => null);
+    throw new AppError("No drivers available", 409, "NO_DRIVERS_AVAILABLE");
+  }
+
+  try {
+    return await repository.createRideFromRequest({
+      requestId: request.id,
+      driverId: nearestDriver.id,
+      fare: tripQuote.estimatedFare,
+      distance: tripQuote.distanceKm,
+    });
+  } catch (error) {
+    await repository.cancelRideRequest(request.id, studentId).catch(() => null);
+    throw error;
+  }
 }
 
 async function getRideRequest(requestId) {
@@ -87,6 +121,10 @@ async function assignDriver(requestId, payload) {
   const driver = await driverRepository.findDriverById(payload.driverId);
   if (!driver) {
     throw new AppError("Driver not found", 404, "DRIVER_NOT_FOUND");
+  }
+
+  if (!driver.is_available || driver.status !== "approved") {
+    throw new AppError("Driver is not available", 409, "DRIVER_NOT_AVAILABLE");
   }
 
   return repository.createRideFromRequest({
@@ -143,6 +181,7 @@ module.exports = {
   normalizeRideRequestPayload,
   getQuote,
   createRideRequest,
+  createRide,
   getRideRequest,
   cancelRideRequest,
   assignDriver,

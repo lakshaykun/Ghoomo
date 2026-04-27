@@ -61,6 +61,10 @@ function updateDriverRuntime(driverId, ride) {
   setDriverActiveRide(driverId, ride);
 }
 
+export async function requestRide(payload = {}) {
+  return createRideRequest(payload);
+}
+
 export async function fetchRideQuote(payload = {}) {
   const { pickup, drop } = toPickupDrop(payload);
   const vehicleType = toBackendVehicleType(payload.rideType || payload.vehicleType);
@@ -140,19 +144,33 @@ export async function createRideRequest(payload = {}) {
       pickupLongitude: pickup?.longitude,
       dropLatitude: drop?.latitude,
       dropLongitude: drop?.longitude,
+      vehicleType,
       isShared: Boolean(payload.isShare),
       expiresAt: payload.scheduledAt || null,
     },
   });
 
-  const ride = normalizeRideRequest(row, {
-    isShare: Boolean(payload.isShare),
-    paymentMethod: payload.paymentMethod,
-    scheduledAt: payload.scheduledAt,
-    distance: distanceKm,
-    fare,
-    userId: payload.userId,
-  });
+  const isRideResponse = Boolean(
+    row?.driver_id || row?.driver_user_id || row?.driver_name || row?.driver_vehicle_number || row?.driver
+  );
+
+  const ride = isRideResponse
+    ? normalizeRide(row, {
+        isShare: Boolean(payload.isShare),
+        paymentMethod: payload.paymentMethod,
+        scheduledAt: payload.scheduledAt,
+        distance: distanceKm,
+        fare,
+        userId: payload.userId,
+      })
+    : normalizeRideRequest(row, {
+        isShare: Boolean(payload.isShare),
+        paymentMethod: payload.paymentMethod,
+        scheduledAt: payload.scheduledAt,
+        distance: distanceKm,
+        fare,
+        userId: payload.userId,
+      });
 
   return {
     ride,

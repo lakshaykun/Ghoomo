@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const env = require("../../config/env");
+const { haversineDistance } = require("./distance");
 
 class AppError extends Error {
   constructor(message, statusCode = 500, code = "APP_ERROR", details = null) {
@@ -167,18 +168,7 @@ function sanitizeUser(user) {
 }
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-  const toRadians = (degrees) => (Number(degrees) * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
+  return haversineDistance(lat1, lon1, lat2, lon2);
 }
 
 function toFiniteNumber(value, fallback = null) {

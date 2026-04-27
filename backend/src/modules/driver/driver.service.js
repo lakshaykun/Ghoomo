@@ -1,4 +1,5 @@
 const { AppError, normalizeRole, toFiniteNumber } = require("../../common/utils/helpers");
+const { haversineDistance } = require("../../common/utils/distance");
 const userRepository = require("../user/user.repository");
 const repository = require("./driver.repository");
 
@@ -75,6 +76,39 @@ async function getNearbyDrivers(payload = {}) {
   });
 }
 
+async function findNearestDriver(db, userLat, userLng) {
+  const latitude = toFiniteNumber(userLat);
+  const longitude = toFiniteNumber(userLng);
+
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  const drivers = await repository.getAvailableDrivers(db);
+  const driversWithDistance = drivers
+    .map((driver) => {
+      const driverLatitude = toFiniteNumber(driver.latitude);
+      const driverLongitude = toFiniteNumber(driver.longitude);
+
+      if (driverLatitude === null || driverLongitude === null) {
+        return null;
+      }
+
+      const distanceKm = haversineDistance(latitude, longitude, driverLatitude, driverLongitude);
+      const etaMinutes = Number.isFinite(distanceKm) ? Math.max(1, Math.round((distanceKm / 28) * 60)) : null;
+
+      return {
+        ...driver,
+        distanceKm: Number(distanceKm.toFixed(3)),
+        etaMinutes,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  return driversWithDistance[0] || null;
+}
+
 async function listCandidateRequests(userId) {
   return repository.listCandidateRequestsByUserId(userId);
 }
@@ -107,6 +141,7 @@ module.exports = {
   updateAvailability,
   updateLocation,
   getNearbyDrivers,
+  findNearestDriver,
   listCandidateRequests,
   getActiveRide,
   respondToCandidate,
