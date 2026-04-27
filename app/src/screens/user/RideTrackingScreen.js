@@ -1,10 +1,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, Modal, TextInput, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { finalizeBooking, refreshActiveRide, setActiveBooking, syncRideStatus } from "../../store/slices/bookingSlice";
+import { finalizeBooking, rateRideBooking, refreshActiveRide, setActiveBooking, syncRideStatus } from "../../store/slices/bookingSlice";
 import { COLORS, SPACING, BOOKING_STATUS } from "../../constants";
 import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
@@ -26,6 +26,11 @@ export default function RideTrackingScreen({ navigation }) {
   const lastBookingRef = useRef(null);
   const isRedirectingRef = useRef(false);
   const [sharedRequest, setSharedRequest] = useState(null);
+  const [completionRide, setCompletionRide] = useState(null);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingError, setRatingError] = useState(null);
 
   const goHomeFast = () => {
     if (isRedirectingRef.current) return;
@@ -39,8 +44,13 @@ export default function RideTrackingScreen({ navigation }) {
   useEffect(() => {
     if (booking) {
       lastBookingRef.current = booking;
-      if (booking.status === BOOKING_STATUS.COMPLETED || booking.status === BOOKING_STATUS.CANCELLED) {
+      if (booking.status === BOOKING_STATUS.CANCELLED) {
         goHomeFast();
+        return;
+      }
+
+      if (booking.status === BOOKING_STATUS.COMPLETED) {
+        setCompletionRide(booking);
       }
       return;
     }
@@ -52,7 +62,7 @@ export default function RideTrackingScreen({ navigation }) {
     }
 
     if (lastBooking.status === BOOKING_STATUS.COMPLETED) {
-      goHomeFast();
+      setCompletionRide(lastBooking);
       return;
     }
 
@@ -62,6 +72,14 @@ export default function RideTrackingScreen({ navigation }) {
   }, [booking, navigation]);
 
   useEffect(() => {
+    if (booking?.status !== BOOKING_STATUS.COMPLETED) {
+      setRatingError(null);
+      setRatingComment("");
+      setRatingValue(5);
+    }
+  }, [booking?.id, booking?.status]);
+
+  useEffect(() => {
     if (!booking?.id) return undefined;
 
     const refresh = () => dispatch(refreshActiveRide(booking.id)).catch(() => {});
@@ -69,7 +87,13 @@ export default function RideTrackingScreen({ navigation }) {
 
     const unsubscribeRealtime = subscribeRideRealtime(booking.id, {
       onRideUpdate: (ride) => {
-        if (ride.status === BOOKING_STATUS.COMPLETED || ride.status === BOOKING_STATUS.CANCELLED) {
+        if (ride.status === BOOKING_STATUS.COMPLETED) {
+          setCompletionRide(ride);
+          dispatch(setActiveBooking(ride));
+          return;
+        }
+
+        if (ride.status === BOOKING_STATUS.CANCELLED) {
           goHomeFast();
           dispatch(finalizeBooking(ride));
           return;
@@ -154,6 +178,39 @@ export default function RideTrackingScreen({ navigation }) {
     Linking.openURL(`sms:${driverPhone}`).catch(() => {
       Alert.alert("SMS Failed", "Unable to open the messaging app on this device.");
     });
+  };
+
+  const rideForRating = completionRide || (booking?.status === BOOKING_STATUS.COMPLETED ? booking : null);
+
+  const handleSubmitRating = async () => {
+    if (!rideForRating) return;
+
+    setRatingSubmitting(true);
+    setRatingError(null);
+
+    try {
+      await dispatch(
+        rateRideBooking(rideForRating.id, {
+          rating: ratingValue,
+          reviewText: ratingComment.trim(),
+        })
+      );
+      dispatch(finalizeBooking(rideForRating));
+      setCompletionRide(null);
+      goHomeFast();
+    } catch (error) {
+      setRatingError(error.message || "Unable to submit rating");
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
+  const handleSkipRating = () => {
+    if (rideForRating) {
+      dispatch(finalizeBooking(rideForRating));
+    }
+    setCompletionRide(null);
+    goHomeFast();
   };
 
   return (
@@ -291,6 +348,54 @@ export default function RideTrackingScreen({ navigation }) {
           ) : null}
         </View>
       </View>
+
+      <Modal visible={Boolean(rideForRating)} transparent animationType="fade" onRequestClose={handleSkipRating}>
+        <View style={styles.ratingBackdrop}>
+          <View style={styles.ratingSheet}>
+            <View style={styles.ratingHeader}>
+              <View style={styles.ratingIconWrap}>
+                <Ionicons name="star" size={22} color={COLORS.warning} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.ratingTitle}>Rate your ride</Text>
+                <Text style={styles.ratingSubtitle}>
+                  {rideForRating?.driver?.name ? `How was ${rideForRating.driver.name}?` : "Tell us how your trip went."}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Pressable key={star} onPress={() => setRatingValue(star)} style={styles.starButton}>
+                  <Ionicons name={star <= ratingValue ? "star" : "star-outline"} size={30} color={star <= ratingValue ? COLORS.warning : COLORS.gray} />
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              placeholder="Add a short review (optional)"
+              placeholderTextColor={COLORS.gray}
+              multiline
+              style={styles.ratingInput}
+            />
+
+            {ratingError ? <Text style={styles.ratingError}>{ratingError}</Text> : null}
+
+            <View style={styles.ratingActions}>
+              <Button title="Skip" onPress={handleSkipRating} variant="outline" style={{ flex: 1 }} />
+              <Button
+                title={ratingSubmitting ? "Saving..." : "Submit Rating"}
+                onPress={handleSubmitRating}
+                loading={ratingSubmitting}
+                disabled={ratingSubmitting}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -343,4 +448,15 @@ const styles = StyleSheet.create({
   fareVal: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
   tripMeta: { fontSize: 14, fontWeight: "700", color: COLORS.text },
   actionsRow: { flexDirection: "row", gap: 10 },
+  ratingBackdrop: { flex: 1, backgroundColor: "rgba(15,23,42,0.55)", justifyContent: "center", padding: SPACING.md },
+  ratingSheet: { backgroundColor: COLORS.white, borderRadius: 24, padding: SPACING.lg, gap: 16 },
+  ratingHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  ratingIconWrap: { width: 46, height: 46, borderRadius: 16, backgroundColor: COLORS.warning + "15", alignItems: "center", justifyContent: "center" },
+  ratingTitle: { fontSize: 18, fontWeight: "900", color: COLORS.text },
+  ratingSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4, lineHeight: 18 },
+  starRow: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  starButton: { padding: 4 },
+  ratingInput: { minHeight: 90, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: COLORS.text, textAlignVertical: "top" },
+  ratingError: { fontSize: 12, fontWeight: "700", color: COLORS.error },
+  ratingActions: { flexDirection: "row", gap: 10 },
 });

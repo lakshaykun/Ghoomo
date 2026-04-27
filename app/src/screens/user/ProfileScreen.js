@@ -1,5 +1,5 @@
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { logoutUser } from "../../store/slices/authSlice";
 import Header from "../../components/common/Header";
 import Card from "../../components/common/Card";
+import { api } from "../../services/api";
 import { COLORS, SPACING } from "../../constants";
 
 export default function ProfileScreen({ navigation }) {
@@ -15,6 +16,39 @@ export default function ProfileScreen({ navigation }) {
   const user = useSelector(s => s.auth.user);
   const history = useSelector(s => s.booking.bookingHistory);
   const activeBooking = useSelector(s => s.booking.activeBooking);
+  const [savedLocations, setSavedLocations] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadSavedLocations = async () => {
+      if (!user?.id) {
+        if (active) {
+          setSavedLocations([]);
+        }
+        return;
+      }
+
+      try {
+        const { locations } = await api.getSavedLocations();
+        if (active) {
+          setSavedLocations(locations || []);
+        }
+      } catch {
+        if (active) {
+          setSavedLocations([]);
+        }
+      }
+    };
+
+    const unsubscribe = navigation.addListener("focus", loadSavedLocations);
+    loadSavedLocations();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [navigation, user?.id]);
 
   const myHistory = useMemo(
     () => history.filter(item => item.userId === user?.id && item.type === "ride"),
@@ -44,6 +78,17 @@ export default function ProfileScreen({ navigation }) {
         { icon: "time", label: `${myHistory.length} total ride bookings`, color: COLORS.info, onPress: () => navigation.navigate("History") },
         { icon: "checkmark-circle", label: `${completedRides} completed rides`, color: COLORS.success, onPress: () => navigation.navigate("History") },
         { icon: "ticket", label: `${busBookings} bus bookings`, color: "#10B981", onPress: () => navigation.navigate("Home", { screen: "BusBooking" }) },
+      ],
+    },
+    {
+      section: "Places",
+      items: [
+        {
+          icon: "bookmark",
+          label: savedLocations.length > 0 ? `${savedLocations.length} saved locations` : "No saved locations yet",
+          color: COLORS.primary,
+          onPress: () => navigation.navigate("Home", { screen: "SavedLocations" }),
+        },
       ],
     },
     {

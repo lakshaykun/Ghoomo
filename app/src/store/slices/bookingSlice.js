@@ -410,7 +410,7 @@ export const refreshActiveRide = (rideId) => async (dispatch, getState) => {
         data: { rideId: ride.id, status: ride.status, role: "user" },
       });
     }
-    if (ride.status === BOOKING_STATUS.COMPLETED || ride.status === BOOKING_STATUS.CANCELLED) {
+    if (ride.status === BOOKING_STATUS.CANCELLED) {
       dispatch(finalizeBooking(ride));
     } else {
       dispatch(setActiveBooking(ride));
@@ -418,6 +418,29 @@ export const refreshActiveRide = (rideId) => async (dispatch, getState) => {
     return ride;
   } catch (error) {
     dispatch(requestFailure(error.message || "Unable to refresh ride"));
+    throw error;
+  }
+};
+
+export const rateRideBooking = (rideId, payload = {}) => async (dispatch) => {
+  dispatch(requestStart());
+  try {
+    const rating = await api.rateRide(rideId, {
+      rating: payload.rating,
+      reviewText: payload.reviewText,
+    });
+
+    await sendLocalNotification({
+      key: `ride-rated-${rideId}`,
+      title: "Thanks for your feedback",
+      body: "Your driver rating has been submitted successfully.",
+      data: { rideId, role: "user" },
+    });
+
+    dispatch(requestFailure(null));
+    return rating;
+  } catch (error) {
+    dispatch(requestFailure(error.message || "Unable to submit ride rating"));
     throw error;
   }
 };

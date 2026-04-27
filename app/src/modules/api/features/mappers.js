@@ -160,6 +160,18 @@ export function normalizeDriverProfile(row = {}) {
   };
 }
 
+export function normalizeSavedLocation(row = {}) {
+  return {
+    id: row.id || null,
+    userId: row.user_id || row.userId || null,
+    name: row.name || "Saved location",
+    address: row.address || row.name || "",
+    latitude: toNumber(row.latitude, null),
+    longitude: toNumber(row.longitude, null),
+    createdAt: row.created_at || row.createdAt || null,
+  };
+}
+
 export function normalizeDriverCandidateRequest(row = {}) {
   const candidateStatus = String(row.status || "pending").toLowerCase();
   const appStatus =

@@ -14,6 +14,7 @@ import RideTrackingScreen from "../screens/user/RideTrackingScreen";
 import RideHistoryScreen from "../screens/user/RideHistoryScreen";
 import ProfileScreen from "../screens/user/ProfileScreen";
 import SharedRidesScreen from "../screens/user/SharedRidesScreen";
+import SavedLocationsScreen from "../screens/user/SavedLocationsScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -26,6 +27,7 @@ function HomeStack() {
       <Stack.Screen name="BookRide" component={BookRideScreen} />
       <Stack.Screen name="BusBooking" component={BusBookingScreen} />
       <Stack.Screen name="RideTracking" component={RideTrackingScreen} />
+      <Stack.Screen name="SavedLocations" component={SavedLocationsScreen} />
     </Stack.Navigator>
   );
 }

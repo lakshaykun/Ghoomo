@@ -83,7 +83,7 @@ export default function BookRideScreen({ navigation, route }) {
   const dropInputRef = useRef(null);
   const user = useSelector(s => s.auth.user);
   const { currentQuote, loading, error } = useSelector(s => s.booking);
-  const { rideType: initType = "cab" } = route.params || {};
+  const { rideType: initType = "cab", presetPickup = null, presetDrop = null } = route.params || {};
   const [pickupInput, setPickupInput] = useState("");
   const [dropInput, setDropInput] = useState("");
   const [pickupPlace, setPickupPlace] = useState(null);
@@ -96,6 +96,7 @@ export default function BookRideScreen({ navigation, route }) {
   const [sharedSeatsWanted, setSharedSeatsWanted] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [scheduleKey, setScheduleKey] = useState("now");
+  const [savedLocations, setSavedLocations] = useState([]);
 
   const selectedType = initType;
   const currentRide = RIDE_OPTIONS.find(r => r.type === selectedType) || RIDE_OPTIONS[2];
@@ -118,6 +119,18 @@ export default function BookRideScreen({ navigation, route }) {
   const estTime = estimate?.durationMinutes || (selectedType === "bike" ? 12 : selectedType === "auto" ? 18 : 20);
 
   useEffect(() => {
+    if (presetPickup) {
+      setPickupPlace(presetPickup);
+      setPickupInput(presetPickup.name || presetPickup.address || "");
+    }
+
+    if (presetDrop) {
+      setDropPlace(presetDrop);
+      setDropInput(presetDrop.name || presetDrop.address || "");
+    }
+  }, [presetPickup, presetDrop]);
+
+  useEffect(() => {
     let mounted = true;
 
     (async () => {
@@ -137,18 +150,54 @@ export default function BookRideScreen({ navigation, route }) {
       try {
         const { place } = await api.reverseGeocode(coords);
         if (!mounted) return;
-        setPickupPlace(place);
-        setPickupInput(place.name);
+        if (!presetPickup) {
+          setPickupPlace(place);
+          setPickupInput(place.name);
+        }
       } catch (_error) {
         if (!mounted) return;
-        setPickupPlace(coords);
+        if (!presetPickup) {
+          setPickupPlace(coords);
+        }
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [presetPickup]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadSavedLocations = async () => {
+      if (!user?.id) {
+        if (active) {
+          setSavedLocations([]);
+        }
+        return;
+      }
+
+      try {
+        const { locations } = await api.getSavedLocations();
+        if (active) {
+          setSavedLocations(locations || []);
+        }
+      } catch {
+        if (active) {
+          setSavedLocations([]);
+        }
+      }
+    };
+
+    const unsubscribe = navigation.addListener("focus", loadSavedLocations);
+    loadSavedLocations();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [navigation, user?.id]);
 
   useEffect(() => {
     if (!pickupPlace || !dropPlace) return;
@@ -378,6 +427,47 @@ export default function BookRideScreen({ navigation, route }) {
           </Card>
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Saved Places</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("SavedLocations", { rideType: selectedType })}>
+              <Text style={styles.manageSavedText}>Manage</Text>
+            </TouchableOpacity>
+          </View>
+          {savedLocations.length > 0 ? (
+            <View style={styles.savedList}>
+              {savedLocations.slice(0, 4).map((location) => (
+                <Card key={location.id} elevated style={styles.savedCard}>
+                  <View style={styles.savedCardTop}>
+                    <View style={styles.savedCardIconWrap}>
+                      <Ionicons name="bookmark" size={16} color={COLORS.primary} />
+                    </View>
+                    <View style={styles.savedCardBody}>
+                      <Text style={styles.savedCardTitle}>{location.name}</Text>
+                      <Text style={styles.savedCardAddress} numberOfLines={2}>{location.address}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.savedCardActions}>
+                    <TouchableOpacity style={styles.savedActionButton} onPress={() => applyPlace("pickup", location)}>
+                      <Ionicons name="ellipse" size={12} color={COLORS.success} />
+                      <Text style={styles.savedActionText}>Pickup</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.savedActionButton} onPress={() => applyPlace("drop", location)}>
+                      <Ionicons name="location" size={12} color={COLORS.error} />
+                      <Text style={styles.savedActionText}>Drop</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              ))}
+            </View>
+          ) : (
+            <Card style={styles.savedEmptyCard}>
+              <Text style={styles.savedEmptyTitle}>No saved places yet</Text>
+              <Text style={styles.savedEmptyText}>Save home, office, or campus from your profile to book faster.</Text>
+            </Card>
+          )}
+        </View>
+
         {/* Popular Locations */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Popular Destinations</Text>
@@ -562,6 +652,21 @@ const styles = StyleSheet.create({
   resultRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.border },
   resultText: { flex: 1, fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
   swapLine: { height: 1, backgroundColor: COLORS.border, marginVertical: 4 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: SPACING.sm },
+  manageSavedText: { fontSize: 12, fontWeight: "800", color: COLORS.primary },
+  savedList: { gap: 10 },
+  savedCard: { marginBottom: 0 },
+  savedCardTop: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  savedCardIconWrap: { width: 34, height: 34, borderRadius: 11, backgroundColor: COLORS.primary + "12", alignItems: "center", justifyContent: "center" },
+  savedCardBody: { flex: 1 },
+  savedCardTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text },
+  savedCardAddress: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4, lineHeight: 18 },
+  savedCardActions: { flexDirection: "row", gap: 10, marginTop: 12 },
+  savedActionButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 999, paddingVertical: 10, backgroundColor: COLORS.white },
+  savedActionText: { fontSize: 12, fontWeight: "800", color: COLORS.text },
+  savedEmptyCard: { alignItems: "center" },
+  savedEmptyTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text },
+  savedEmptyText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 6, textAlign: "center", lineHeight: 18 },
   popularGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   popularChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.white, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: COLORS.border },
   popularText: { fontSize: 12, fontWeight: "600", color: COLORS.text },

@@ -65,6 +65,17 @@ export async function requestRide(payload = {}) {
   return createRideRequest(payload);
 }
 
+export async function rateRideRemote(rideId, payload = {}) {
+  const row = await httpClient.post(`/api/rides/${rideId}/rate`, {
+    body: {
+      rating: payload.rating,
+      reviewText: payload.reviewText,
+    },
+  });
+
+  return row;
+}
+
 export async function fetchRideQuote(payload = {}) {
   const { pickup, drop } = toPickupDrop(payload);
   const vehicleType = toBackendVehicleType(payload.rideType || payload.vehicleType);

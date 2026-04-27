@@ -88,7 +88,7 @@ export default function HomeScreen({ navigation }) {
             {[
               { icon: "time", label: "History", screen: "History", color: COLORS.primary },
               { icon: "wallet", label: "Wallet", screen: "Profile", color: "#10B981" },
-              { icon: "star", label: "Favorites", screen: "Profile", color: "#F59E0B" },
+              { icon: "bookmark", label: "Saved", screen: "SavedLocations", color: "#F59E0B" },
               { icon: "help-circle", label: "Support", screen: "Profile", color: "#EF4444" },
             ].map(q => (
               <TouchableOpacity key={q.label} style={styles.quickBtn} onPress={() => navigation.navigate(q.screen)}>

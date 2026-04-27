@@ -36,6 +36,12 @@ import {
   findSharedRideByRideId,
   joinSharedRideById,
 } from "./features/sharedRideApi";
+import {
+  addSavedLocation,
+  getSavedLocations,
+  removeSavedLocation,
+} from "./features/userApi";
+import { rateRideRemote } from "./features/rideApi";
 
 export function setApiAuthToken(token) {
   setAuthToken(token);
@@ -72,11 +78,15 @@ export const api = {
 
   searchPlaces: (params) => searchPlacesByText(params),
   reverseGeocode: (params) => reverseGeocodeCoordinates(params),
+  getSavedLocations: () => getSavedLocations(),
+  addSavedLocation: (payload) => addSavedLocation(payload),
+  removeSavedLocation: (locationId) => removeSavedLocation(locationId),
 
   getNearbyDrivers: (params) => getNearbyDrivers(params),
   fetchQuote: (payload) => fetchRideQuote(payload),
   createRide: (payload) => createRideRequest(payload),
   requestRide: (payload) => requestRide(payload),
+  rateRide: (rideId, payload) => rateRideRemote(rideId, payload),
   getRide: (rideId) => getRideByIdOrRequest(rideId),
   updateRideStatus: (rideId, status, extra = {}) => updateRideStatusRemote(rideId, status, extra),
   getRideHistory: (userId) => getRideHistoryForCurrentUser(userId),
