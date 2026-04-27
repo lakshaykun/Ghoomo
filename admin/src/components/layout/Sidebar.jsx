@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Activity, BusFront, GraduationCap, LayoutDashboard, Route, ShieldCheck, X } from 'lucide-react';
+import { Activity, BusFront, GraduationCap, LayoutDashboard, Route, ShieldCheck, Star, X } from 'lucide-react';
 
 export const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -8,6 +8,7 @@ export const NAV_ITEMS = [
   { label: 'Students', path: '/students', icon: GraduationCap },
   { label: 'Rides', path: '/rides', icon: Route },
   { label: 'Live Monitoring', path: '/live-monitoring', icon: Activity },
+  { label: 'Popular Places', path: '/popular-places', icon: Star },
 ];
 
 export default function Sidebar({ open, onClose }) {

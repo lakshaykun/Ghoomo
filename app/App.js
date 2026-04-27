@@ -12,6 +12,7 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import { initializeNotifications } from "./src/services/notifications";
 import { checkAndApplyOtaUpdate } from "./src/services/appUpdate";
 import { hydrateAuthSession } from "./src/store/slices/authSlice";
+import { prefetchPopularPlaces } from "./src/modules/api/popularPlacesAPI";
 import { COLORS } from "./src/constants";
 
 enableScreens(false);
@@ -48,6 +49,7 @@ export default function App() {
     }
 
     initializeNotifications().catch(() => {});
+    prefetchPopularPlaces();
 
     const updateTimer = setTimeout(() => {
       checkAndApplyOtaUpdate().catch(() => {});

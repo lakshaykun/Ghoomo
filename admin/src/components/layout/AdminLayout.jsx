@@ -30,6 +30,11 @@ const ROUTE_META = {
     title: 'Live Monitoring',
     description: 'Watch active rides, queue pressure, and driver coverage with auto-refresh enabled.',
   },
+  '/popular-places': {
+    kicker: 'Location management',
+    title: 'Popular Places',
+    description: 'Manage campus landmarks and common pickup/drop points for quick selection.',
+  },
 };
 
 export default function AdminLayout() {

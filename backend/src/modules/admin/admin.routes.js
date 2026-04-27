@@ -1,5 +1,6 @@
 const express = require("express");
 const controller = require("./admin.controller");
+const popularPlacesController = require("./popularPlaces.controller");
 const { authenticate, requireRole } = require("../../common/middleware/auth.middleware");
 
 const router = express.Router();
@@ -21,4 +22,11 @@ router.patch("/drivers/:driverId/suspend", (req, res, next) => {
   return controller.updateDriverStatus(req, res, next);
 });
 
+// Popular places CRUD
+router.get("/popular-places", popularPlacesController.listPlaces);
+router.post("/popular-places", popularPlacesController.addPlace);
+router.put("/popular-places/:id", popularPlacesController.editPlace);
+router.delete("/popular-places/:id", popularPlacesController.removePlace);
+
 module.exports = router;
+

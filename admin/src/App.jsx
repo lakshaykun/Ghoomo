@@ -8,6 +8,8 @@ import Drivers from './pages/Drivers';
 import Students from './pages/Students';
 import Rides from './pages/Rides';
 import LiveMonitoring from './pages/LiveMonitoring';
+import PopularPlaces from './pages/PopularPlaces';
+import 'leaflet/dist/leaflet.css';
 
 function ProtectedRoute() {
   const { isAuthenticated, loading } = useAuth();
@@ -32,6 +34,7 @@ export default function App() {
             <Route path="students" element={<Students />} />
             <Route path="rides" element={<Rides />} />
             <Route path="live-monitoring" element={<LiveMonitoring />} />
+            <Route path="popular-places" element={<PopularPlaces />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Route>
         </Routes>

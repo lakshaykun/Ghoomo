@@ -1,95 +1,32 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder } from "react-native";
-import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions, Platform } from "react-native";
-import Svg, { Circle, Text as SvgText } from "react-native-svg";
+import React, { useEffect, useRef, useMemo } from "react";
+import { View, StyleSheet, Text, Platform } from "react-native";
+import MapView, { Marker, UrlTile, AnimatedRegion } from "react-native-maps";
 import { COLORS } from "../../constants";
-import { buildTileGrid, getMapRegion, projectToGrid } from "../../utils/map";
+import { getMapRegion } from "../../utils/map";
 
-const CLUSTER_RADIUS_PX = 38;
-const ANIMATION_MS = 1300;
-const MIN_ZOOM = 9;
-const MAX_ZOOM = 18;
+function AnimatedDriverMarker({ driver }) {
+  const coordinate = useRef(new AnimatedRegion({
+    latitude: driver.latitude,
+    longitude: driver.longitude,
+    latitudeDelta: 0,
+    longitudeDelta: 0,
+  })).current;
 
-function toPoint(item) {
-  return {
-    id: item.id,
-    name: item.name,
-    latitude: Number(item.latitude),
-    longitude: Number(item.longitude),
-    etaMinutes: item.etaMinutes,
-    distanceKm: item.distanceKm,
-    vehicleType: item.vehicleType,
-  };
-}
-
-function groupDriversForClusters(drivers, region, grid) {
-  const buckets = [];
-
-  drivers.forEach((driver) => {
-    const point = projectToGrid(driver, region, grid);
-    let assigned = null;
-
-    for (let index = 0; index < buckets.length; index += 1) {
-      const cluster = buckets[index];
-      const dx = point.x - cluster.anchor.x;
-      const dy = point.y - cluster.anchor.y;
-      if (Math.sqrt(dx * dx + dy * dy) <= CLUSTER_RADIUS_PX) {
-        assigned = cluster;
-        break;
-      }
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      coordinate.timing({
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        duration: 1300,
+        useNativeDriver: false,
+      }).start();
     }
+  }, [driver.latitude, driver.longitude]);
 
-    if (!assigned) {
-      buckets.push({
-        anchor: point,
-        items: [driver],
-      });
-      return;
-    }
-
-    assigned.items.push(driver);
-  });
-
-  return buckets.map((cluster) => {
-    const latitude =
-      cluster.items.reduce((acc, item) => acc + item.latitude, 0) / cluster.items.length;
-    const longitude =
-      cluster.items.reduce((acc, item) => acc + item.longitude, 0) / cluster.items.length;
-    const point = projectToGrid({ latitude, longitude }, region, grid);
-
-    return {
-      point,
-      items: cluster.items,
-      count: cluster.items.length,
-    };
-  });
-}
-
-function DriverDot({ point, color }) {
   return (
-    <>
-      <Circle cx={point.x} cy={point.y} r={10} fill={color} opacity={0.2} />
-      <Circle cx={point.x} cy={point.y} r={5.5} fill={color} stroke="#FFFFFF" strokeWidth={2} />
-    </>
-  );
-}
-
-function ClusterDot({ point, count }) {
-  return (
-    <>
-      <Circle cx={point.x} cy={point.y} r={15} fill={COLORS.primary} opacity={0.25} />
-      <Circle cx={point.x} cy={point.y} r={11} fill={COLORS.primary} />
-      <SvgText
-        x={point.x}
-        y={point.y + 4}
-        fontSize={10}
-        fill={COLORS.white}
-        fontWeight="800"
-        textAnchor="middle"
-      >
-        {String(count)}
-      </SvgText>
-    </>
+    <Marker.Animated coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
+      <View style={[styles.driverDot, { backgroundColor: COLORS.accentOrange }]} />
+    </Marker.Animated>
   );
 }
 
@@ -99,17 +36,11 @@ export default function DriverDiscoveryMap({
   refreshedAt,
   autoRefreshSeconds = 6,
   loading = false,
+  style,
+  onRegionChangeComplete
 }) {
-  const { width: windowWidth } = useWindowDimensions();
-  const previousPointsRef = useRef(new Map());
-  const [renderDrivers, setRenderDrivers] = useState([]);
-  const [tileLoadFailures, setTileLoadFailures] = useState(0);
-  const [tileLoadSuccess, setTileLoadSuccess] = useState(0);
-
-  // For panning
-  const [center, setCenter] = useState(null); // { latitude, longitude }
-  const lastPan = useRef({ x: 0, y: 0 });
-
+  const isWeb = Platform.OS === 'web';
+  
   const normPickup = useMemo(() => {
     if (!pickup) return null;
     if (Array.isArray(pickup) && pickup.length >= 2) return { latitude: Number(pickup[1]), longitude: Number(pickup[0]) };
@@ -118,151 +49,83 @@ export default function DriverDiscoveryMap({
     return null;
   }, [pickup]);
 
-  const allPoints = useMemo(() => [normPickup, ...renderDrivers].filter(Boolean), [normPickup, renderDrivers]);
-  const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
-  const [zoom, setZoom] = useState(() => autoRegion.zoom || 13);
-  // If user has panned, use center; else use autoRegion
-  const region = useMemo(() => {
-    const base = center ? { ...center, zoom } : { ...autoRegion, zoom };
-    return { ...base, zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)) };
-  }, [autoRegion, zoom, center]);
-    // PanResponder for map movement
-    const panResponder = React.useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          lastPan.current = { x: 0, y: 0 };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          // gestureState.dx, gestureState.dy
-          if (!region) return;
-          const { dx, dy } = gestureState;
-          // Only update if moved enough
-          if (Math.abs(dx - lastPan.current.x) < 1 && Math.abs(dy - lastPan.current.y) < 1) return;
-          // Convert pixel movement to lat/lon delta
-          const grid = buildTileGrid(region);
-          const pxPerLon = grid.width / 360; // rough
-          const pxPerLat = grid.height / 180; // rough
-          // More accurate: use world coordinates
-          const TILE_SIZE = 256;
-          const scale = TILE_SIZE * 2 ** region.zoom;
-          // Move in world coordinates
-          const dLon = (dx - lastPan.current.x) * 360 / scale;
-          const dLat = -(dy - lastPan.current.y) * 170 / scale; // negative because y is down
-          setCenter((prev) => {
-            const base = prev || { latitude: region.latitude, longitude: region.longitude };
-            return {
-              latitude: base.latitude + dLat,
-              longitude: base.longitude + dLon,
-            };
-          });
-          lastPan.current = { x: dx, y: dy };
-        },
-        onPanResponderRelease: () => {},
-        onPanResponderTerminate: () => {},
-      })
-    ).current;
-  const grid = useMemo(() => buildTileGrid(region), [region]);
-  const clusters = useMemo(
-    () => groupDriversForClusters(renderDrivers, region, grid),
-    [renderDrivers, region, grid]
-  );
-
-  const supportsRemoteTiles = Platform.OS !== "web";
-  const tiles = supportsRemoteTiles ? grid.tiles : [];
-  const scale = Math.min(1, Math.max(0.42, (windowWidth - 32) / grid.width));
-  const showTileFallback = !supportsRemoteTiles || (tileLoadFailures >= grid.tiles.length && tileLoadSuccess === 0);
-  const canZoomIn = zoom < MAX_ZOOM;
-  const canZoomOut = zoom > MIN_ZOOM;
-
-  useEffect(() => {
-    const normalized = drivers
-      .filter((item) => Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude)))
-      .map(toPoint);
-
-    const nextMap = new Map(normalized.map((item) => [item.id, item]));
-    const startMap = new Map();
-    normalized.forEach((item) => {
-      startMap.set(item.id, previousPointsRef.current.get(item.id) || item);
-    });
-
-    const animationStart = Date.now();
-    let frameId = null;
-
-    const tick = () => {
-      const progressRaw = (Date.now() - animationStart) / ANIMATION_MS;
-      const progress = Math.max(0, Math.min(1, progressRaw));
-      const eased = 1 - (1 - progress) * (1 - progress);
-
-      const interpolated = normalized.map((target) => {
-        const start = startMap.get(target.id) || target;
-        return {
-          ...target,
-          latitude: start.latitude + (target.latitude - start.latitude) * eased,
-          longitude: start.longitude + (target.longitude - start.longitude) * eased,
-        };
-      });
-
-      setRenderDrivers(interpolated);
-
-      if (progress < 1) {
-        frameId = requestAnimationFrame(tick);
-      } else {
-        previousPointsRef.current = nextMap;
-      }
-    };
-
-    tick();
-
-    return () => {
-      if (frameId) cancelAnimationFrame(frameId);
-    };
+  // Limit driver markers for performance and clarity
+  const MAX_DRIVERS = 15;
+  const filteredDrivers = useMemo(() => {
+    return drivers
+      .filter((d) => Number.isFinite(Number(d.latitude)) && Number.isFinite(Number(d.longitude)))
+      .slice(0, MAX_DRIVERS);
   }, [drivers]);
 
-  return (
-    <View style={styles.wrapper} {...panResponder.panHandlers}>
-      <View style={[styles.canvasWrap, { transform: [{ scale }] }]}> 
-        <View style={styles.canvas}>
-          {tiles.map((tile) => (
-            <Image
-              key={tile.key}
-              source={{
-                uri: tile.url,
-                headers: {
-                  "User-Agent": "ghoomo-app/1.0",
-                },
-              }}
-              style={[styles.tile, { left: tile.left, top: tile.top }]}
-              resizeMode="cover"
-              onLoad={() => setTileLoadSuccess((count) => count + 1)}
-              onError={() => setTileLoadFailures((count) => count + 1)}
-            />
-          ))}
+  const allPoints = useMemo(() => [normPickup, ...filteredDrivers].filter(Boolean), [normPickup, filteredDrivers]);
+  const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
+  const mapRef = useRef(null);
 
-          <Svg width={grid.width} height={grid.height} style={styles.overlay}>
-            {normPickup ? <DriverDot point={projectToGrid(normPickup, region, grid)} color={COLORS.success} /> : null}
-            {clusters.map((cluster, index) =>
-              cluster.count > 1 ? (
-                <ClusterDot key={`cluster-${index}`} point={cluster.point} count={cluster.count} />
-              ) : (
-                <DriverDot
-                  key={cluster.items[0].id}
-                  point={cluster.point}
-                  color={COLORS.accentOrange}
-                />
-              )
-            )}
-          </Svg>
-        </View>
+  useEffect(() => {
+    if (mapRef.current && allPoints.length > 0) {
+      mapRef.current.animateToRegion({
+        latitude: autoRegion.latitude,
+        longitude: autoRegion.longitude,
+        latitudeDelta: Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom)),
+        longitudeDelta: Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom)),
+      }, 1000);
+    }
+  }, [normPickup]);
+
+  if (isWeb) {
+    return (
+      <View style={[styles.wrapper, style]}>
+        <Text>Map not supported on web currently.</Text>
       </View>
+    );
+  }
+
+  return (
+    <View style={[styles.wrapper, style]}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={{
+          latitude: autoRegion.latitude,
+          longitude: autoRegion.longitude,
+          latitudeDelta: Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom)),
+          longitudeDelta: Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom)),
+        }}
+        mapType="none"
+        showsUserLocation={false}
+        showsCompass={false}
+        showsScale={false}
+        showsBuildings={false}
+        showsTraffic={false}
+        showsIndoors={false}
+        showsMyLocationButton={false}
+        pitchEnabled={false}
+        toolbarEnabled={false}
+        onRegionChangeComplete={onRegionChangeComplete}
+      >
+        <UrlTile
+          urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+          maximumZ={19}
+          flipY={false}
+        />
+        
+        {normPickup && (
+          <Marker coordinate={normPickup} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.pickupDot, { backgroundColor: COLORS.success }]} />
+          </Marker>
+        )}
+        
+        {filteredDrivers.map(driver => (
+          <AnimatedDriverMarker key={driver.id} driver={driver} />
+        ))}
+      </MapView>
 
       <View style={styles.headerOverlay}>
         <Text style={styles.headerTitle}>Live Driver Discovery</Text>
         <Text style={styles.headerSub}>
           {loading
             ? "Refreshing nearby drivers..."
-            : `${drivers.length} online drivers • auto-refresh ${autoRefreshSeconds}s`}
+            : `${filteredDrivers.length} online drivers • auto-refresh ${autoRefreshSeconds}s`}
         </Text>
         {refreshedAt ? (
           <Text style={styles.headerTime}>
@@ -271,31 +134,8 @@ export default function DriverDiscoveryMap({
         ) : null}
       </View>
 
-      {showTileFallback ? (
-        <View style={styles.fallbackBanner}>
-          <Text style={styles.fallbackText}>Live driver dots stay active even when map tiles fail to load.</Text>
-        </View>
-      ) : null}
-
       <View style={styles.attribution}>
         <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
-      </View>
-
-      <View style={styles.zoomControls}>
-        <Pressable
-          style={[styles.zoomButton, !canZoomIn && styles.zoomButtonDisabled]}
-          onPress={() => setZoom((value) => Math.min(MAX_ZOOM, value + 1))}
-          disabled={!canZoomIn}
-        >
-          <Text style={styles.zoomButtonText}>+</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.zoomButton, !canZoomOut && styles.zoomButtonDisabled]}
-          onPress={() => setZoom((value) => Math.max(MIN_ZOOM, value - 1))}
-          disabled={!canZoomOut}
-        >
-          <Text style={styles.zoomButtonText}>-</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -306,26 +146,34 @@ const styles = StyleSheet.create({
     height: 240,
     overflow: "hidden",
     borderRadius: 18,
-    backgroundColor: "#D9E8F3",
-    justifyContent: "center",
+    backgroundColor: "#E5E3DF",
   },
-  canvasWrap: {
-    alignSelf: "center",
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
-  canvas: {
-    width: 256 * 3,
-    height: 256 * 3,
-    alignSelf: "center",
+  pickupDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2,
   },
-  tile: {
-    position: "absolute",
-    width: 256,
-    height: 256,
-  },
-  overlay: {
-    position: "absolute",
-    left: 0,
-    top: 0,
+  driverDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2,
   },
   headerOverlay: {
     position: "absolute",
@@ -352,57 +200,18 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.74)",
     marginTop: 3,
   },
-  fallbackBanner: {
-    position: "absolute",
-    left: 10,
-    right: 10,
-    bottom: 28,
-    borderRadius: 10,
-    backgroundColor: "rgba(15,23,42,0.72)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  fallbackText: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.86)",
-  },
   attribution: {
     position: "absolute",
     right: 10,
     bottom: 8,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   attributionText: {
-    fontSize: 10,
+    fontSize: 9,
     color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  zoomControls: {
-    position: "absolute",
-    right: 10,
-    top: "42%",
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-  },
-  zoomButton: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  zoomButtonDisabled: {
-    opacity: 0.4,
-  },
-  zoomButtonText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: COLORS.text,
-    lineHeight: 22,
+    fontWeight: "500",
   },
 });

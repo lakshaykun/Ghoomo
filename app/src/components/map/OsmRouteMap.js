@@ -1,34 +1,13 @@
-import React, { useMemo, useState } from "react";
-import { View, Image, StyleSheet, Text, Pressable, useWindowDimensions, Platform } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import React, { useMemo, useRef, useEffect } from "react";
+import { View, StyleSheet, Text, Platform } from "react-native";
+import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
 import { COLORS } from "../../constants";
-import { buildTileGrid, getMapRegion, projectToGrid } from "../../utils/map";
+import { getMapRegion } from "../../utils/map";
 
 const MIN_ZOOM = 9;
 const MAX_ZOOM = 18;
 
-function buildPath(points, region, grid) {
-  return points
-    .map((point, index) => {
-      const projected = projectToGrid(point, region, grid);
-      return `${index === 0 ? "M" : "L"} ${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-function Marker({ point, color, region, grid }) {
-  const projected = projectToGrid(point, region, grid);
-  return (
-    <>
-      <Circle cx={projected.x} cy={projected.y} r={9} fill={color} opacity={0.18} />
-      <Circle cx={projected.x} cy={projected.y} r={5} fill={color} stroke="#FFFFFF" strokeWidth={2} />
-    </>
-  );
-}
-
-export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) {
-  const { width: windowWidth } = useWindowDimensions();
-
+export default function OsmRouteMap({ pickup, drop, driver, routePoints = [], style, children, onRegionChangeComplete, mapRef }) {
   const normalizePoint = (p) => {
     if (!p) return null;
     if (Array.isArray(p) && p.length >= 2) return { latitude: Number(p[1]), longitude: Number(p[0]) };
@@ -44,77 +23,92 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [] }) 
 
   const allPoints = [normPickup, normDrop, normDriver, ...normRoutePoints].filter(Boolean);
   const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
-  const [zoom, setZoom] = useState(() => autoRegion.zoom || 13);
-  const region = useMemo(
-    () => ({ ...autoRegion, zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)) }),
-    [autoRegion, zoom]
-  );
-  const grid = useMemo(() => buildTileGrid(region), [region]);
-  const path = useMemo(() => buildPath(normRoutePoints, region, grid), [normRoutePoints, region, grid]);
-  const [tileLoadFailures, setTileLoadFailures] = useState(0);
-  const [tileLoadSuccess, setTileLoadSuccess] = useState(0);
-  const supportsRemoteTiles = Platform.OS !== "web";
-  const tiles = supportsRemoteTiles ? grid.tiles : [];
-  const scale = Math.min(1, Math.max(0.42, (windowWidth - 32) / grid.width));
-  const showTileFallback = !supportsRemoteTiles || (tileLoadFailures >= grid.tiles.length && tileLoadSuccess === 0);
-  const canZoomIn = zoom < MAX_ZOOM;
-  const canZoomOut = zoom > MIN_ZOOM;
+  
+  const internalRef = useRef(null);
+  const ref = mapRef || internalRef;
+
+  useEffect(() => {
+    if (ref.current && allPoints.length > 0) {
+      ref.current.fitToCoordinates(allPoints, {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+        animated: true,
+      });
+    }
+  }, [allPoints]);
+
+  const isWeb = Platform.OS === 'web';
+  if (isWeb) {
+    return (
+      <View style={[styles.wrapper, style]}>
+        <Text>Map not supported on web currently.</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.wrapper}>
-      <View style={[styles.canvasWrap, { transform: [{ scale }] }]}>
-      <View style={styles.canvas}>
-        {tiles.map((tile) => (
-          <Image
-            key={tile.key}
-            source={{
-              uri: tile.url,
-              headers: {
-                "User-Agent": "ghoomo-app/1.0",
-              },
-            }}
-            style={[styles.tile, { left: tile.left, top: tile.top }]}
-            resizeMode="cover"
-            onLoad={() => setTileLoadSuccess((count) => count + 1)}
-            onError={() => setTileLoadFailures((count) => count + 1)}
+    <View style={[styles.wrapper, style]}>
+      <MapView
+        ref={ref}
+        style={styles.map}
+        initialRegion={{
+          latitude: autoRegion.latitude,
+          longitude: autoRegion.longitude,
+          latitudeDelta: Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom)),
+          longitudeDelta: Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom)),
+        }}
+        mapType="none"
+        minZoomLevel={MIN_ZOOM}
+        maxZoomLevel={MAX_ZOOM}
+        showsUserLocation={false}
+        showsCompass={false}
+        showsScale={false}
+        showsBuildings={false}
+        showsTraffic={false}
+        showsIndoors={false}
+        showsMyLocationButton={false}
+        pitchEnabled={false}
+        toolbarEnabled={false}
+        onRegionChangeComplete={onRegionChangeComplete}
+      >
+        <UrlTile
+          urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+          maximumZ={19}
+          flipY={false}
+        />
+        
+        {normRoutePoints.length > 0 && (
+          <Polyline
+            coordinates={normRoutePoints}
+            strokeColor={COLORS.primary}
+            strokeWidth={4}
+            lineCap="round"
+            lineJoin="round"
           />
-        ))}
-
-        <Svg width={grid.width} height={grid.height} style={styles.overlay}>
-          {path ? <Path d={path} stroke={COLORS.primary} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" fill="none" /> : null}
-          {normDriver ? <Marker point={normDriver} color={COLORS.accentOrange} region={region} grid={grid} /> : null}
-          {normPickup ? <Marker point={normPickup} color={COLORS.success} region={region} grid={grid} /> : null}
-          {normDrop ? <Marker point={normDrop} color={COLORS.error} region={region} grid={grid} /> : null}
-        </Svg>
-      </View>
-      </View>
-
-      {showTileFallback ? (
-        <View style={styles.fallbackBanner}>
-          <Text style={styles.fallbackTitle}>Live route active</Text>
-          <Text style={styles.fallbackText}>Map tiles could not load on this device, but pickup, drop, driver, and route tracking are still being rendered.</Text>
-        </View>
-      ) : null}
+        )}
+        
+        {normPickup && (
+          <Marker coordinate={normPickup} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.dot, { backgroundColor: COLORS.success }]} />
+          </Marker>
+        )}
+        
+        {normDrop && (
+          <Marker coordinate={normDrop} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.dot, { backgroundColor: COLORS.error }]} />
+          </Marker>
+        )}
+        
+        {normDriver && (
+          <Marker coordinate={normDriver} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.dot, { backgroundColor: COLORS.accentOrange, width: 14, height: 14, borderRadius: 7 }]} />
+          </Marker>
+        )}
+        
+        {children}
+      </MapView>
 
       <View style={styles.attribution}>
         <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
-      </View>
-
-      <View style={styles.zoomControls}>
-        <Pressable
-          style={[styles.zoomButton, !canZoomIn && styles.zoomButtonDisabled]}
-          onPress={() => setZoom((value) => Math.min(MAX_ZOOM, value + 1))}
-          disabled={!canZoomIn}
-        >
-          <Text style={styles.zoomButtonText}>+</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.zoomButton, !canZoomOut && styles.zoomButtonDisabled]}
-          onPress={() => setZoom((value) => Math.max(MIN_ZOOM, value - 1))}
-          disabled={!canZoomOut}
-        >
-          <Text style={styles.zoomButtonText}>-</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -124,85 +118,35 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     overflow: "hidden",
-    backgroundColor: "#D9E8F3",
-    justifyContent: "center",
+    backgroundColor: "#E5E3DF",
   },
-  canvasWrap: {
-    alignSelf: "center",
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
-  canvas: {
-    width: 256 * 3,
-    height: 256 * 3,
-    alignSelf: "center",
-  },
-  tile: {
-    position: "absolute",
-    width: 256,
-    height: 256,
-  },
-  overlay: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-  },
-  fallbackBanner: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    top: 12,
-    backgroundColor: "rgba(17,24,39,0.82)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  fallbackTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: COLORS.white,
-    marginBottom: 2,
-  },
-  fallbackText: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.82)",
-    lineHeight: 16,
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2,
   },
   attribution: {
     position: "absolute",
     right: 10,
     bottom: 10,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   attributionText: {
-    fontSize: 10,
+    fontSize: 9,
     color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  zoomControls: {
-    position: "absolute",
-    right: 10,
-    top: "40%",
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-  },
-  zoomButton: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  zoomButtonDisabled: {
-    opacity: 0.4,
-  },
-  zoomButtonText: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: COLORS.text,
-    lineHeight: 24,
+    fontWeight: "500",
   },
 });

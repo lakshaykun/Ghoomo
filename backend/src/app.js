@@ -12,6 +12,7 @@ const rideRoutes = require("./modules/ride/ride.routes");
 const sharedRideRoutes = require("./modules/sharedRide/sharedRide.routes");
 const busRoutes = require("./modules/bus/bus.routes");
 const adminRoutes = require("./modules/admin/admin.routes");
+const placesRoutes = require("./modules/places/places.routes");
 const docsRoutes = require("./docs/docs.routes");
 
 function isOriginAllowed(origin) {
@@ -75,6 +76,7 @@ function createApp() {
   app.use("/api/rides", rideRoutes);
   app.use("/api/shared-rides", sharedRideRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/places", placesRoutes);
 
   // Mount bus routes under /api and keep /api/bus-routes + /api/bus-bookings compatibility.
   app.use("/api", busRoutes);
