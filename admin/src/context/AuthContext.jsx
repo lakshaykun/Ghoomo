@@ -6,6 +6,11 @@ const AuthContext = createContext();
 const TOKEN_KEY = 'admin_token';
 const USER_KEY = 'admin_user';
 
+function isAllowedRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  return normalized === 'admin' || normalized === 'operator';
+}
+
 function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
@@ -33,7 +38,7 @@ export function AuthProvider({ children }) {
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
-          if (parsedUser?.role === 'admin') {
+          if (isAllowedRole(parsedUser?.role)) {
             if (active) {
               setUser(parsedUser);
               setIsAuthenticated(true);
@@ -47,8 +52,8 @@ export function AuthProvider({ children }) {
       try {
         const currentUser = await dashboardAPI.getCurrentUser();
 
-        if (currentUser?.role !== 'admin') {
-          throw new Error('Only admin accounts can access this portal.');
+        if (!isAllowedRole(currentUser?.role)) {
+          throw new Error('Only admin and operator accounts can access this portal.');
         }
 
         if (active) {
@@ -82,8 +87,8 @@ export function AuthProvider({ children }) {
       setLoading(true);
       const { token, user: loggedInUser } = await dashboardAPI.login({ email, password });
 
-      if (loggedInUser?.role !== 'admin') {
-        throw new Error('Only admin accounts can sign in to this portal.');
+      if (!isAllowedRole(loggedInUser?.role)) {
+        throw new Error('Only admin or operator accounts can sign in to this portal.');
       }
 
       localStorage.setItem(TOKEN_KEY, token);

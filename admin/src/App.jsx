@@ -1,16 +1,22 @@
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import AdminLayout from './components/layout/AdminLayout';
+import LoadingState from './components/common/LoadingState';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import Drivers from './pages/Drivers';
+import Students from './pages/Students';
+import Rides from './pages/Rides';
+import LiveMonitoring from './pages/LiveMonitoring';
 
-function PrivateRoute({ children }) {
+function ProtectedRoute() {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return <div className="loading">Checking admin session...</div>;
+    return <LoadingState title="Checking admin session" description="Restoring the secure dashboard workspace." fullScreen />;
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  return isAuthenticated ? <AdminLayout /> : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -19,16 +25,15 @@ export default function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard/*"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route path="/" element={<Navigate to="/dashboard/overview" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard/overview" replace />} />
+          <Route element={<ProtectedRoute />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="drivers" element={<Drivers />} />
+            <Route path="students" element={<Students />} />
+            <Route path="rides" element={<Rides />} />
+            <Route path="live-monitoring" element={<LiveMonitoring />} />
+            <Route path="*" element={<Navigate to="dashboard" replace />} />
+          </Route>
         </Routes>
       </Router>
     </AuthProvider>

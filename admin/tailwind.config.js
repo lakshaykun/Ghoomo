@@ -8,6 +8,10 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Sora", "Manrope", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
       colors: {
         primary: '#3B82F6',
         secondary: '#10B981',

@@ -1,80 +1,47 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap');
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Manrope', 'Segoe UI', sans-serif;
+    color: #0f172a;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0) 32%),
+      radial-gradient(circle at 90% 0%, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0) 30%),
+      #f8fafc;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
 
-:root {
-  --primary: #0f766e;
-  --primary-dark: #0b5e57;
-  --primary-light: #ccfbf1;
-  --secondary: #f97316;
-  --danger: #dc2626;
-  --warning: #d97706;
-  --gray-50: #f8fafc;
-  --gray-100: #f1f5f9;
-  --gray-200: #e2e8f0;
-  --gray-300: #cbd5e1;
-  --gray-400: #94a3b8;
-  --gray-500: #64748b;
-  --gray-600: #475569;
-  --gray-700: #334155;
-  --gray-800: #1e293b;
-  --gray-900: #0f172a;
-  --ink-100: #f8fafc;
-  --ink-200: #e2e8f0;
-  --ink-300: #cbd5e1;
-  --ink-400: #94a3b8;
-  --ink-500: #64748b;
-  --ink-600: #475569;
-  --ink-700: #334155;
-  --ink-800: #1e293b;
-  --ink-900: #0f172a;
-  --shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 22px 60px rgba(15, 23, 42, 0.16);
-  --radius-md: 14px;
-  --radius-lg: 20px;
-}
-
-body {
-  font-family: 'Manrope', 'Segoe UI', sans-serif;
-  background:
-    radial-gradient(circle at 15% 20%, #f0fdfa 0%, rgba(240, 253, 250, 0) 35%),
-    radial-gradient(circle at 90% 0%, #ffedd5 0%, rgba(255, 237, 213, 0) 34%),
-    #f8fafc;
-  color: var(--ink-900);
-  min-height: 100vh;
-}
-
-.loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  font-size: 18px;
-  color: var(--ink-600);
-}
-
-.error {
-  padding: 20px;
-  background: #FEE2E2;
-  color: #B91C1C;
-  border-radius: var(--radius-md);
-  margin: 20px;
-}
-
-input, button, select {
-  font-family: inherit;
-}
-
-button {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
 }

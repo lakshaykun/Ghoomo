@@ -1,6 +1,9 @@
 import api from './api';
 
 const DEFAULT_LIMIT = 20;
+const MAX_ADMIN_PAGE_LIMIT = 100;
+const MAX_ANALYTICS_LIMIT = 20;
+const MAX_NEARBY_DRIVER_LIMIT = 20;
 
 function unwrapData(response) {
   return response?.data?.data ?? response?.data ?? null;
@@ -22,6 +25,25 @@ function toNullableNumber(value) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampInteger(value, fallback, min, max) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const normalized = Math.trunc(parsed);
+  if (normalized < min) {
+    return min;
+  }
+
+  if (normalized > max) {
+    return max;
+  }
+
+  return normalized;
 }
 
 function normalizeUser(row = {}) {
@@ -335,10 +357,13 @@ async function getCurrentUser() {
 }
 
 async function getAnalyticsData({ days = 7, limit = 5 } = {}) {
+  const safeDays = clampInteger(days, 7, 1, 30);
+  const safeLimit = clampInteger(limit, 5, 1, MAX_ANALYTICS_LIMIT);
+
   const response = await api.get('/admin/analytics', {
     params: {
-      days,
-      limit,
+      days: safeDays,
+      limit: safeLimit,
     },
   });
 
@@ -388,32 +413,38 @@ async function getMonitoringData({ days = 14, limit = 8 } = {}) {
 }
 
 async function getUsers({ page = 1, limit = DEFAULT_LIMIT, role = '' } = {}) {
+  const safePage = clampInteger(page, 1, 1, Number.MAX_SAFE_INTEGER);
+  const safeLimit = clampInteger(limit, DEFAULT_LIMIT, 1, MAX_ADMIN_PAGE_LIMIT);
+
   const response = await api.get('/admin/users', {
     params: {
-      page,
-      limit,
+      page: safePage,
+      limit: safeLimit,
       ...(role ? { role } : {}),
     },
   });
 
   return {
     data: toArray(unwrapData(response)).map(normalizeUser),
-    pagination: response.data?.pagination ?? { page, limit },
+    pagination: response.data?.pagination ?? { page: safePage, limit: safeLimit },
   };
 }
 
 async function getRides({ page = 1, limit = DEFAULT_LIMIT, status = '' } = {}) {
+  const safePage = clampInteger(page, 1, 1, Number.MAX_SAFE_INTEGER);
+  const safeLimit = clampInteger(limit, DEFAULT_LIMIT, 1, MAX_ADMIN_PAGE_LIMIT);
+
   const response = await api.get('/admin/rides', {
     params: {
-      page,
-      limit,
+      page: safePage,
+      limit: safeLimit,
       ...(status ? { status } : {}),
     },
   });
 
   return {
     data: toArray(unwrapData(response)).map(normalizeRide),
-    pagination: response.data?.pagination ?? { page, limit },
+    pagination: response.data?.pagination ?? { page: safePage, limit: safeLimit },
   };
 }
 
@@ -468,11 +499,13 @@ async function updateBookingStatus(bookingId, status) {
 }
 
 async function getNearbyDrivers({ latitude, longitude, limit = DEFAULT_LIMIT } = {}) {
+  const safeLimit = clampInteger(limit, DEFAULT_LIMIT, 1, MAX_NEARBY_DRIVER_LIMIT);
+
   const response = await api.get('/drivers/nearby', {
     params: {
       latitude,
       longitude,
-      limit,
+      limit: safeLimit,
     },
   });
 
