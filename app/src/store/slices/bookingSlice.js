@@ -338,7 +338,8 @@ export const syncRideStatus = (rideId, status) => async (dispatch, getState) => 
   dispatch(requestStart());
   try {
     const userId = getState().auth.user?.id;
-    const { ride } = await api.updateRideStatus(rideId, status, { userId });
+    const sourceType = getState().booking.activeBooking?.sourceType || null;
+    const { ride } = await api.updateRideStatus(rideId, status, { userId, sourceType });
     await sendLocalNotification({
       key: `ride-status-${ride.id}-${ride.status}`,
       title:

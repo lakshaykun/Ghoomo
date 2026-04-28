@@ -235,8 +235,18 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
 
   if (normalizedStatus === "cancelled") {
     const runtimeDriverId = extra.driverId || extra.driverUserId;
+    const sourceType = String(extra.sourceType || "").trim().toLowerCase();
 
     if (extra?.actor !== "driver" && extra?.actor !== "admin") {
+      if (sourceType === "ride") {
+        const row = await httpClient.patch(`/api/rides/${rideId}/status`, {
+          body: { status: "cancelled" },
+        });
+
+        const ride = normalizeRide(row);
+        return { ride };
+      }
+
       const requestRow = await httpClient.patch(`/api/rides/requests/${rideId}/cancel`);
       return {
         ride: normalizeRideRequest(requestRow, {

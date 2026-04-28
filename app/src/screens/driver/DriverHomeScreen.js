@@ -30,6 +30,8 @@ import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS, BOOKING_STATUS } from "..
 import { ensureDriverBackgroundLocation, stopDriverBackgroundLocation } from "../../services/backgroundLocation";
 import { api } from "../../services/api";
 
+const EMPTY_ROUTE_POINTS = [];
+
 export default function DriverHomeScreen({ navigation }) {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.auth.user);
@@ -297,7 +299,7 @@ export default function DriverHomeScreen({ navigation }) {
                     pickup={activeRide.pickup}
                     drop={activeRide.drop}
                     driver={activeRide.driver}
-                    routePoints={activeRide.route?.geometry || []}
+                    routePoints={activeRide.route?.geometry ?? EMPTY_ROUTE_POINTS}
                   />
                 </View>
                 <Card elevated style={styles.assignmentCard}>

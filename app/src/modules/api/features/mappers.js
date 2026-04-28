@@ -17,6 +17,18 @@ const APP_TO_BACKEND_RIDE_STATUS = {
   cancelled: "cancelled",
 };
 
+function deriveOtp(sourceId) {
+  const text = String(sourceId || "").trim();
+  if (!text) return null;
+
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) % 10000;
+  }
+
+  return String((hash % 9000) + 1000);
+}
+
 export function toNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -254,7 +266,7 @@ export function normalizeRideRequest(row = {}, overrides = {}) {
     isShare: Boolean(row.is_shared ?? overrides.isShare),
     requestedDrivers: [],
     driver: null,
-    otp: null,
+    otp: row.otp || row.otp_code || overrides.otp || null,
     paymentMethod: overrides.paymentMethod || "cash",
     scheduledAt: row.expires_at || overrides.scheduledAt || null,
     userId: row.student_id || overrides.userId || null,
@@ -267,6 +279,7 @@ export function normalizeRide(row = {}, overrides = {}) {
   if (row?.pickup && row?.drop) {
     return {
       ...row,
+      otp: row.otp || row.otp_code || overrides.otp || deriveOtp(row.request_id || row.requestId || row.id),
       status: mapBackendRideStatus(row.status),
     };
   }
@@ -352,7 +365,7 @@ export function normalizeRide(row = {}, overrides = {}) {
     isShare: Boolean(row.is_shared ?? overrides.isShare),
     requestedDrivers: row.requested_drivers || [],
     driver,
-    otp: row.otp || overrides.otp || null,
+    otp: row.otp || row.otp_code || overrides.otp || deriveOtp(row.request_id || row.requestId || row.id),
     paymentMethod: row.payment_method || overrides.paymentMethod || "cash",
     scheduledAt: row.scheduled_at || overrides.scheduledAt || null,
     userId: row.student_id || row.user_id || overrides.userId || null,

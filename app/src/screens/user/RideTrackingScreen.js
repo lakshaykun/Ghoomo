@@ -11,6 +11,8 @@ import OsmRouteMap from "../../components/map/OsmRouteMap";
 import { api } from "../../services/api";
 import { subscribeRideRealtime } from "../../services/realtime";
 
+const EMPTY_ROUTE_POINTS = [];
+
 const STATUS_STEPS = [
   { key: BOOKING_STATUS.PENDING, label: "Finding Driver", icon: "search", color: COLORS.warning },
   { key: BOOKING_STATUS.ACCEPTED, label: "Driver Assigned", icon: "person", color: COLORS.primary },
@@ -190,7 +192,7 @@ export default function RideTrackingScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.mapArea}>
-        <OsmRouteMap pickup={booking.pickup} drop={booking.drop} driver={booking.driver} routePoints={booking.route?.geometry || []} />
+        <OsmRouteMap pickup={booking.pickup} drop={booking.drop} driver={booking.driver} routePoints={booking.route?.geometry ?? EMPTY_ROUTE_POINTS} />
       </View>
 
       <View style={styles.bottomSheet}>
