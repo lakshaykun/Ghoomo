@@ -66,6 +66,8 @@ async function getAvailableDrivers(db = null) {
       AND d.status = 'approved'
       AND loc.current_latitude IS NOT NULL
       AND loc.current_longitude IS NOT NULL
+      AND d.last_seen_at IS NOT NULL
+      AND d.last_seen_at > NOW() - INTERVAL '2 minute'
     `
   );
 
