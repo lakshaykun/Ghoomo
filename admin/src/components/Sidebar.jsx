@@ -6,13 +6,14 @@ export default function Sidebar({ open, onToggle }) {
   const location = useLocation();
 
   const menuItems = [
-    { icon: '📊', label: 'Overview', path: '/dashboard/overview' },
-    { icon: '📡', label: 'Monitoring', path: '/dashboard/monitoring' },
-    { icon: '👥', label: 'Users', path: '/dashboard/users' },
-    { icon: '👨‍💼', label: 'Drivers', path: '/dashboard/drivers' },
-    { icon: '🚗', label: 'Rides', path: '/dashboard/rides' },
-    { icon: '🚌', label: 'Bus Routes', path: '/dashboard/routes' },
-    { icon: '⭐', label: 'Popular Places', path: '/dashboard/popular-places' },
+    { icon: '📊', label: 'Overview', path: '/dashboard' },
+    { icon: '📡', label: 'Monitoring', path: '/live-monitoring' },
+    { icon: '👥', label: 'Students', path: '/students' },
+    { icon: '👨‍💼', label: 'Drivers', path: '/drivers' },
+    { icon: '🚗', label: 'Rides', path: '/rides' },
+    { icon: '🚌', label: 'Bus Routes', path: '/routes' },
+    { icon: '🗺️', label: 'Campus Boundary', path: '/campus-boundary' },
+    { icon: '⭐', label: 'Popular Places', path: '/popular-places' },
   ];
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');

@@ -220,6 +220,35 @@ function normalizeNearbyDriver(row = {}) {
     currentLatitude: toNullableNumber(row.current_latitude ?? row.currentLatitude),
     currentLongitude: toNullableNumber(row.current_longitude ?? row.currentLongitude),
     distanceKm: toNullableNumber(row.distance_km ?? row.distanceKm),
+    isInsideCampus: Boolean(row.is_inside_campus ?? row.isInsideCampus),
+  };
+}
+
+function normalizeCampusBoundaryPoint(row = {}, index = 0) {
+  return {
+    id: row.id ?? index + 1,
+    latitude: toNullableNumber(row.latitude),
+    longitude: toNullableNumber(row.longitude),
+    sortOrder: Number.isFinite(Number(row.sort_order ?? row.sortOrder)) ? Number(row.sort_order ?? row.sortOrder) : index,
+    createdAt: row.created_at ?? row.createdAt ?? null,
+  };
+}
+
+function normalizeLiveDriver(row = {}) {
+  const latitude = toNullableNumber(row.lat ?? row.latitude);
+  const longitude = toNullableNumber(row.lng ?? row.longitude);
+  const explicitHasLocation = row.hasLocation ?? row.has_location;
+
+  return {
+    id: row.id,
+    name: row.name ?? 'Driver',
+    lat: latitude,
+    lng: longitude,
+    isInsideCampus: Boolean(row.isInsideCampus ?? row.is_inside_campus),
+    hasLocation: explicitHasLocation == null ? Number.isFinite(latitude) && Number.isFinite(longitude) : Boolean(explicitHasLocation),
+    isAvailable: Boolean(row.isAvailable ?? row.is_available),
+    status: row.status ?? 'pending',
+    locationUpdatedAt: row.locationUpdatedAt ?? row.location_updated_at ?? null,
   };
 }
 
@@ -401,15 +430,44 @@ async function getOverviewData() {
 }
 
 async function getMonitoringData({ days = 14, limit = 8 } = {}) {
-  const [analytics, health] = await Promise.all([
+  const [analytics, health, campusBoundary, liveDrivers] = await Promise.all([
     getAnalyticsData({ days, limit }),
     getHealthData(),
+    getCampusBoundary(),
+    getLiveDrivers(),
   ]);
 
   return {
     ...analytics,
     health,
+    campusBoundary: campusBoundary.coordinates,
+    liveDrivers,
   };
+}
+
+async function getCampusBoundary() {
+  const response = await api.get('/admin/campus-boundary');
+
+  return {
+    coordinates: toArray(unwrapData(response)?.coordinates).map(normalizeCampusBoundaryPoint),
+  };
+}
+
+async function saveCampusBoundary(coordinates = [], method = 'put') {
+  const payload = { coordinates: toArray(coordinates) };
+  const response = method === 'post'
+    ? await api.post('/admin/campus-boundary', payload)
+    : await api.put('/admin/campus-boundary', payload);
+
+  return {
+    coordinates: toArray(unwrapData(response)?.coordinates).map(normalizeCampusBoundaryPoint),
+  };
+}
+
+async function getLiveDrivers() {
+  const response = await api.get('/admin/drivers/live');
+
+  return toArray(unwrapData(response)).map(normalizeLiveDriver);
 }
 
 async function getUsers({ page = 1, limit = DEFAULT_LIMIT, role = '' } = {}) {
@@ -534,6 +592,9 @@ export default {
   getHealthData,
   getOverviewData,
   getMonitoringData,
+  getCampusBoundary,
+  saveCampusBoundary,
+  getLiveDrivers,
   getUsers,
   getRides,
   getRoutes,

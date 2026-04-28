@@ -1,4 +1,6 @@
 const { query, withTransaction } = require("../../config/db");
+const { isPointInPolygon } = require("../../common/utils/geofence");
+const { getCampusBoundaryPoints } = require("../campusBoundary/campusBoundary.repository");
 
 const DRIVER_PROFILE_SELECT = `
   SELECT
@@ -16,7 +18,8 @@ const DRIVER_PROFILE_SELECT = `
     vehicle.vehicle_number,
     vehicle.vehicle_type,
     loc.current_latitude,
-    loc.current_longitude
+    loc.current_longitude,
+    loc.is_inside_campus
   FROM drivers d
   INNER JOIN users u ON u.id = d.user_id
   LEFT JOIN driver_locations loc ON loc.driver_id = d.id
@@ -44,6 +47,7 @@ async function getAvailableDrivers(db = null) {
       u.phone,
       loc.current_latitude AS latitude,
       loc.current_longitude AS longitude,
+      loc.is_inside_campus,
       vehicle.vehicle_number,
       vehicle.vehicle_type
     FROM drivers d
@@ -182,6 +186,10 @@ async function updateAvailabilityByUserId(userId, { isAvailable, status }) {
 }
 
 async function updateLocationByUserId(userId, { latitude, longitude }) {
+  const boundaryPoints = await getCampusBoundaryPoints();
+  const campusPolygon = boundaryPoints.map((point) => ({ lat: point.latitude, lng: point.longitude }));
+  const isInsideCampus = isPointInPolygon({ lat: latitude, lng: longitude }, campusPolygon);
+
   return withTransaction(async (client) => {
     const driverResult = await client.query(
       `
@@ -200,15 +208,16 @@ async function updateLocationByUserId(userId, { latitude, longitude }) {
 
     await client.query(
       `
-      INSERT INTO driver_locations (driver_id, current_latitude, current_longitude, updated_at)
-      VALUES ($1, $2, $3, NOW())
+      INSERT INTO driver_locations (driver_id, current_latitude, current_longitude, is_inside_campus, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
       ON CONFLICT (driver_id)
       DO UPDATE SET
         current_latitude = EXCLUDED.current_latitude,
         current_longitude = EXCLUDED.current_longitude,
+        is_inside_campus = EXCLUDED.is_inside_campus,
         updated_at = NOW()
       `,
-      [driver.id, latitude, longitude]
+      [driver.id, latitude, longitude, isInsideCampus]
     );
 
     await client.query(
@@ -340,9 +349,11 @@ async function findActiveRideByUserId(userId) {
       r.end_time,
       r.is_shared,
       r.created_at,
-      r.updated_at
+      r.updated_at,
+      loc.is_inside_campus AS driver_is_inside_campus
     FROM rides r
     INNER JOIN drivers d ON d.id = r.driver_id
+    LEFT JOIN driver_locations loc ON loc.driver_id = d.id
     WHERE
       d.user_id = $1
       AND r.status IN ('assigned', 'arriving', 'started')

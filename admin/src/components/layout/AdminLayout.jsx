@@ -10,6 +10,11 @@ const ROUTE_META = {
     title: 'Dashboard',
     description: 'Live transport oversight with core counts, alerts, and the latest operational movement.',
   },
+  '/routes': {
+    kicker: 'Route planning',
+    title: 'Bus Routes',
+    description: 'Review bus routes, stops, and booking distribution from the operations desk.',
+  },
   '/drivers': {
     kicker: 'Fleet control',
     title: 'Drivers',
@@ -29,6 +34,11 @@ const ROUTE_META = {
     kicker: 'Live monitoring',
     title: 'Live Monitoring',
     description: 'Watch active rides, queue pressure, and driver coverage with auto-refresh enabled.',
+  },
+  '/campus-boundary': {
+    kicker: 'Campus control',
+    title: 'Campus Boundary',
+    description: 'Draw and manage the campus geofence that powers driver campus monitoring.',
   },
   '/popular-places': {
     kicker: 'Location management',
