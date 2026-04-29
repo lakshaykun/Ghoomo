@@ -206,7 +206,9 @@ async function getAnalytics({ days, limit }) {
     getGroupedCounts({ table: "drivers", field: "status" }),
     getGroupedCounts({ table: "rides", field: "status" }),
     getGroupedCounts({ table: "ride_requests", field: "status" }),
-    getGroupedCounts({ table: "buses", field: "status", whereClause: "1=0" }).catch(() => ({ rows: [] })),
+    getGroupedCounts({ table: "bus_bookings", field: "status" }),
+    // shared rides distribution from the rides table (ride_type='shared')
+    query(`SELECT status AS label, COUNT(*)::int AS count FROM rides WHERE ride_type = 'shared' GROUP BY status ORDER BY count DESC`),
     getGroupedCounts({ table: "ride_request_candidates", field: "status" }),
     getDailyCountSeries({ table: "users", dateExpression: "created_at", days: windowDays }),
     getDailyCountSeries({ table: "ride_requests", dateExpression: "created_at", days: windowDays }),

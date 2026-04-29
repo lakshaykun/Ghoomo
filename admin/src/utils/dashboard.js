@@ -81,26 +81,55 @@ export function getDriverStatusInfo(driver = {}) {
 }
 
 export function getRideStatusInfo(status = '') {
-  const normalized = String(status || '').toLowerCase();
+  const normalized = String(status || '').toUpperCase().trim();
 
-  if (['assigned', 'arriving', 'started'].includes(normalized)) {
-    return { label: normalized.replace(/_/g, ' '), tone: 'info' };
+  // Active / in-progress statuses
+  if (['ACCEPTED', 'ASSIGNED'].includes(normalized)) {
+    return { label: 'Accepted', tone: 'info' };
+  }
+  if (['ONGOING', 'ARRIVING', 'DRIVER_ARRIVED'].includes(normalized)) {
+    return { label: 'Ongoing', tone: 'info' };
+  }
+  if (['OTP_VERIFIED'].includes(normalized)) {
+    return { label: 'OTP Verified', tone: 'info' };
+  }
+  if (['ON_TRIP', 'STARTED'].includes(normalized)) {
+    return { label: 'On Trip', tone: 'info' };
   }
 
-  if (normalized === 'completed') {
+  // Terminal statuses
+  if (normalized === 'COMPLETED') {
     return { label: 'Completed', tone: 'success' };
   }
-
-  if (normalized === 'cancelled') {
+  if (normalized === 'CANCELLED') {
     return { label: 'Cancelled', tone: 'danger' };
   }
+  if (normalized === 'EXPIRED') {
+    return { label: 'Expired', tone: 'danger' };
+  }
 
-  if (normalized === 'pending' || normalized === 'searching' || normalized === 'matched') {
-    return { label: normalized.replace(/_/g, ' '), tone: 'warning' };
+  // Shared / scheduled specific
+  if (normalized === 'OPEN') {
+    return { label: 'Open', tone: 'success' };
+  }
+  if (normalized === 'SCHEDULED') {
+    return { label: 'Scheduled', tone: 'warning' };
+  }
+  if (normalized === 'FULL') {
+    return { label: 'Full', tone: 'info' };
+  }
+
+  // Pre-assignment
+  if (['SEARCHING', 'PENDING'].includes(normalized)) {
+    return { label: 'Searching', tone: 'warning' };
+  }
+  if (normalized === 'MATCHED') {
+    return { label: 'Matched', tone: 'info' };
   }
 
   return { label: normalized || 'Unknown', tone: 'neutral' };
 }
+
 
 export function buildOperationalAlerts({ stats = {}, health = {} } = {}) {
   const alerts = [];
