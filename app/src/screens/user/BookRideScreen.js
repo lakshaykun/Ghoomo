@@ -320,25 +320,23 @@ export default function BookRideScreen({ navigation, route }) {
           title="Select Locations"
           onBack={() => navigation.goBack()}
         />
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <LocationPicker
-            initialPickup={pickupPlace}
-            initialDrop={dropPlace}
-            onPickupChange={setPickupPlace}
-            onDropChange={setDropPlace}
-            distance={estDist}
-            style={{ flex: 1 }}
+        <LocationPicker
+          initialPickup={pickupPlace}
+          initialDrop={dropPlace}
+          onPickupChange={setPickupPlace}
+          onDropChange={setDropPlace}
+          distance={estDist}
+          style={{ flex: 1 }}
+        />
+        {/* CTA — only active when both locations are filled */}
+        <View style={styles.bottomBar}>
+          <Button
+            title={pickupPlace && dropPlace ? "Next: Confirm Ride →" : "Set pickup & drop to continue"}
+            onPress={handleNextStep}
+            disabled={!pickupPlace || !dropPlace}
+            size="lg"
           />
-          {/* CTA — only active when both locations are filled */}
-          <View style={styles.bottomBar}>
-            <Button
-              title={pickupPlace && dropPlace ? "Next: Confirm Ride →" : "Set pickup & drop to continue"}
-              onPress={handleNextStep}
-              disabled={!pickupPlace || !dropPlace}
-              size="lg"
-            />
-          </View>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaView>
     );
   }

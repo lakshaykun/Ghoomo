@@ -35,14 +35,47 @@ ALTER TABLE rides ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR(20) NOT NULL DEF
 ALTER TABLE rides ALTER COLUMN driver_id DROP NOT NULL;
 
 -- Migrate existing statuses to new capitalized versions before applying constraint
+UPDATE rides SET status = UPPER(TRIM(status));
 UPDATE rides SET status = 'ACCEPTED' WHERE status IN ('assigned', 'arriving');
-UPDATE rides SET status = 'ONGOING' WHERE status = 'started';
+UPDATE rides SET status = 'ON_TRIP' WHERE status IN ('started', 'ONGOING');
 UPDATE rides SET status = 'COMPLETED' WHERE status = 'completed';
 UPDATE rides SET status = 'CANCELLED' WHERE status = 'cancelled';
+UPDATE rides SET status = 'SEARCHING' WHERE status = 'searching';
+UPDATE rides SET status = 'ACCEPTED' WHERE status = 'ARRIVING';
+UPDATE rides SET status = 'ON_TRIP' WHERE status IN ('STARTED', 'ONGOING');
+UPDATE rides SET status = 'CANCELLED' WHERE status NOT IN (
+  'CREATED',
+  'SCHEDULED',
+  'OPEN',
+  'FULL',
+  'ACCEPTED',
+  'SEARCHING',
+  'DRIVER_ARRIVED',
+  'OTP_VERIFIED',
+  'ON_TRIP',
+  'COMPLETED',
+  'CANCELLED',
+  'EXPIRED'
+);
 
 -- Update rides status constraint
 ALTER TABLE rides DROP CONSTRAINT IF EXISTS rides_status_check;
-ALTER TABLE rides ADD CONSTRAINT rides_status_check CHECK (status IN ('CREATED', 'SCHEDULED', 'OPEN', 'FULL', 'ACCEPTED', 'ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'));
+ALTER TABLE rides ADD CONSTRAINT rides_status_check CHECK (
+  status IN (
+    'CREATED',
+    'SCHEDULED',
+    'OPEN',
+    'FULL',
+    'ACCEPTED',
+    'SEARCHING',
+    'DRIVER_ARRIVED',
+    'OTP_VERIFIED',
+    'ON_TRIP',
+    'COMPLETED',
+    'CANCELLED',
+    'EXPIRED'
+  )
+);
 
 -- Migrate is_shared data for rides
 DO $$ 

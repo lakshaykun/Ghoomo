@@ -137,9 +137,32 @@ async function addRouteStop(routeId, payload) {
     throw new AppError("Bus route not found", 404, "BUS_ROUTE_NOT_FOUND");
   }
 
+  let resolvedStopId = payload.stopId || null;
+  if (!resolvedStopId) {
+    const stopName = String(payload.stopName || "").trim();
+    if (!stopName) {
+      throw new AppError("stopName is required when stopId is not provided", 400, "INVALID_STOP_NAME");
+    }
+
+    const existing = await repository.findStopByName(stopName);
+    if (existing?.id) {
+      resolvedStopId = existing.id;
+    } else {
+      const created = await repository.createStop({
+        stopName,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+      });
+      resolvedStopId = created.id;
+    }
+  }
+
   return repository.createRouteStop({
     routeId,
-    ...payload
+    stopId: resolvedStopId,
+    stopOrder: Number(payload.stopOrder),
+    stopType: payload.stopType,
+    arrivalTime: payload.arrivalTime,
   });
 }
 

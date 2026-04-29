@@ -196,6 +196,8 @@ function normalizeRoute(row = {}) {
     arrivalTime: row.arrival_time ?? row.arrivalTime ?? null,
     totalSeats: toNumber(row.total_seats ?? row.totalSeats, 40),
     farePerSeat: toNumber(row.fare_per_seat ?? row.farePerSeat, 0),
+    driverUserId: row.driver_user_id ?? row.driverUserId ?? null,
+    driverName: row.driver_name ?? row.driverName ?? '',
     createdAt: row.created_at ?? row.createdAt ?? null,
     updatedAt: row.updated_at ?? row.updatedAt ?? null,
     stops: toArray(row.stops).map(normalizeRouteStop),

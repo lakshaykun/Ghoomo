@@ -28,6 +28,40 @@ function validateRoutePayload(payload = {}) {
     }
   }
 
+  if (payload.stops !== undefined) {
+    if (!Array.isArray(payload.stops) || payload.stops.length < 2) {
+      errors.push({ field: "stops", message: "stops must be an array with at least 2 items" });
+    } else {
+      payload.stops.forEach((stop, index) => {
+        if (!stop || typeof stop !== "object") {
+          errors.push({ field: `stops[${index}]`, message: "stop must be an object" });
+          return;
+        }
+        if (!stop.name || String(stop.name).trim().length < 2) {
+          errors.push({ field: `stops[${index}].name`, message: "stop name is required" });
+        }
+        const lat = Number(stop.latitude);
+        const lng = Number(stop.longitude);
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+          errors.push({ field: `stops[${index}].latitude`, message: "latitude must be between -90 and 90" });
+        }
+        if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+          errors.push({ field: `stops[${index}].longitude`, message: "longitude must be between -180 and 180" });
+        }
+        if (!stop.arrivalTime) {
+          errors.push({ field: `stops[${index}].arrivalTime`, message: "arrivalTime is required" });
+        }
+        if (!stop.type || !STOP_TYPE.includes(stop.type)) {
+          errors.push({ field: `stops[${index}].type`, message: `type must be one of: ${STOP_TYPE.join(", ")}` });
+        }
+        const order = Number(stop.order);
+        if (!Number.isInteger(order) || order < 1) {
+          errors.push({ field: `stops[${index}].order`, message: "order must be a positive integer" });
+        }
+      });
+    }
+  }
+
   return {
     isValid: errors.length === 0,
     errors,

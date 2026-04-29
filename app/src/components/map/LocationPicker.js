@@ -2,17 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
@@ -22,13 +22,10 @@ import { api } from "../../services/api";
 import { getPopularPlaces } from "../../modules/api/popularPlacesAPI";
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from "../../constants";
 
-const { height: SCREEN_H } = Dimensions.get("window");
 const DEBOUNCE_MS = 380;
 const MIN_ZOOM = 9;
 const MAX_ZOOM = 18;
 const DEFAULT_REGION = { latitude: 30.7333, longitude: 76.7794, latitudeDelta: 0.05, longitudeDelta: 0.05 };
-const MAP_HEIGHT_FULL = SCREEN_H * 0.42;
-const MAP_HEIGHT_COLLAPSED = SCREEN_H * 0.18;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,7 +89,9 @@ function LocationInput({
   field,
   isActive,
   value,
+  inputRef,
   onFocus,
+  onLayout,
   onChangeText,
   onUseMyLocation,
   onOpenPopular,
@@ -115,7 +114,7 @@ function LocationInput({
   });
 
   return (
-    <Animated.View style={[styles.inputRow, { borderColor }]}>
+    <Animated.View style={[styles.inputRow, { borderColor }]} onLayout={onLayout}>
       <View style={styles.fieldDot}>
         <View
           style={[
@@ -125,6 +124,7 @@ function LocationInput({
         />
       </View>
       <TextInput
+        ref={inputRef}
         style={styles.inputText}
         value={value}
         placeholder={field === "pickup" ? "Pickup location" : "Drop location"}
@@ -155,10 +155,10 @@ function LocationInput({
   );
 }
 
-function SuggestionList({ items, onSelect, onDismiss }) {
+function SuggestionList({ items, onSelect, onDismiss, maxHeight }) {
   if (!items || items.length === 0) return null;
   return (
-    <View style={styles.suggestionBox}>
+    <View style={[styles.suggestionBox, maxHeight ? { maxHeight } : null]}>
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -184,7 +184,7 @@ function SuggestionList({ items, onSelect, onDismiss }) {
   );
 }
 
-function PopularPlacesModal({ visible, onClose, onSelect }) {
+function PopularPlacesModal({ visible, onClose, onSelect, sheetMaxHeight }) {
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -202,7 +202,7 @@ function PopularPlacesModal({ visible, onClose, onSelect }) {
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
       <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose} />
-      <View style={styles.popularSheet}>
+      <View style={[styles.popularSheet, sheetMaxHeight ? { maxHeight: sheetMaxHeight } : null]}>
         <View style={styles.sheetHandle} />
         <Text style={styles.popularTitle}>Popular Places</Text>
         {loading ? (
@@ -271,6 +271,11 @@ export default function LocationPicker({
   distance = 0,
   style,
 }) {
+  const { height: windowHeight } = useWindowDimensions();
+  const mapHeightFull = windowHeight * 0.32;
+  const mapHeightCollapsed = windowHeight * 0.14;
+  const mapCollapseDistance = Math.max(1, mapHeightFull - mapHeightCollapsed);
+
   const [activeField, setActiveField] = useState("pickup");
   const [pickup, setPickup] = useState(() => normalizePlace(initialPickup));
   const [drop, setDrop] = useState(() => normalizePlace(initialDrop));
@@ -285,15 +290,21 @@ export default function LocationPicker({
   const [popularFor, setPopularFor] = useState(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isTypingInput, setIsTypingInput] = useState(false);
 
   // ── Refs ──
   const mapRef = useRef(null);
+  const scrollRef = useRef(null);
+  const pickupInputRef = useRef(null);
+  const dropInputRef = useRef(null);
+  const inputYRef = useRef({ pickup: 0, drop: 0 });
   const geocodeTimer = useRef(null);
   const isProgrammaticRef = useRef(true); // Start true to skip initialRegion auto-fetch
   const skipNextReverseGeocodeRef = useRef(false);
+  const pendingFocusFieldRef = useRef(null);
 
-  // Map height animation: collapses when keyboard is open
-  const mapHeightAnim = useRef(new Animated.Value(MAP_HEIGHT_FULL)).current;
+  const [mapHeight, setMapHeight] = useState(mapHeightFull);
 
   // Sheet slide-up animation
   const sheetAnim = useRef(new Animated.Value(0)).current;
@@ -303,29 +314,26 @@ export default function LocationPicker({
     Animated.timing(sheetAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
 
+  useEffect(() => {
+    setMapHeight(mapHeightFull);
+  }, [mapHeightFull]);
+
   // ── Keyboard listeners — collapse map height when keyboard appears ─────────
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
-    const onShow = () => {
+    const onShow = (event) => {
       setKeyboardVisible(true);
-      Animated.spring(mapHeightAnim, {
-        toValue: MAP_HEIGHT_COLLAPSED,
-        useNativeDriver: false,
-        speed: 20,
-        bounciness: 0,
-      }).start();
+      setKeyboardHeight(event?.endCoordinates?.height || 0);
+      if (pendingFocusFieldRef.current) {
+        requestAnimationFrame(() => ensureInputVisible(pendingFocusFieldRef.current, true));
+      }
     };
 
     const onHide = () => {
       setKeyboardVisible(false);
-      Animated.spring(mapHeightAnim, {
-        toValue: MAP_HEIGHT_FULL,
-        useNativeDriver: false,
-        speed: 14,
-        bounciness: 0,
-      }).start();
+      setKeyboardHeight(0);
     };
 
     const showSub = Keyboard.addListener(showEvent, onShow);
@@ -335,6 +343,31 @@ export default function LocationPicker({
       hideSub.remove();
     };
   }, []);
+
+  const ensureInputVisible = useCallback((field, animated = true) => {
+    const y = inputYRef.current[field] ?? 0;
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, y - SPACING.md),
+      animated,
+    });
+  }, []);
+
+  const handleFieldFocus = useCallback(
+    (field, anchor, event) => {
+      setActiveField(field);
+      setIsTypingInput(true);
+      pendingFocusFieldRef.current = field;
+      setSuggestions([]);
+      if (anchor) animateTo(anchor);
+      const target = event?.target;
+      if (target && scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard) {
+        scrollRef.current.scrollResponderScrollNativeHandleToKeyboard(target, SPACING.md, true);
+      } else {
+        requestAnimationFrame(() => ensureInputVisible(field, true));
+      }
+    },
+    [ensureInputVisible]
+  );
 
   // ── Auto-zoom to route ──────────────────────────────────────────────────
   const safeRoutePoints = useMemo(() => {
@@ -393,6 +426,8 @@ export default function LocationPicker({
         setDropText(place.name || place.address || "");
       }
       setSuggestions([]);
+      setIsTypingInput(false);
+      Keyboard.dismiss();
       if (isMapReady) {
         animateTo(place);
       }
@@ -557,113 +592,31 @@ export default function LocationPicker({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, style]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-    >
-      {/* ── MAP (collapses when keyboard is visible) ── */}
-      <Animated.View style={[styles.mapArea, { height: mapHeightAnim }]}>
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFillObject}
-          initialRegion={{
-            latitude: Number(mapRegion.latitude),
-            longitude: Number(mapRegion.longitude),
-            latitudeDelta: Number(mapRegion.latitudeDelta),
-            longitudeDelta: Number(mapRegion.longitudeDelta),
-          }}
-          mapType="none"
-          minZoomLevel={MIN_ZOOM}
-          maxZoomLevel={MAX_ZOOM}
-          showsUserLocation={false}
-          showsCompass={false}
-          showsScale={false}
-          showsBuildings={false}
-          showsTraffic={false}
-          showsIndoors={false}
-          showsMyLocationButton={false}
-          pitchEnabled={false}
-          toolbarEnabled={false}
-          onRegionChangeComplete={handleRegionChangeComplete}
-          onRegionChange={() => setIsCalibrating(true)}
-          onMapReady={() => setIsMapReady(true)}
-        >
-          <UrlTile
-            urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
-            maximumZ={19}
-            flipY={false}
-          />
-
-          {safeRoutePoints.length > 1 && (
-            <Polyline
-              coordinates={safeRoutePoints}
-              strokeColor={COLORS.primary}
-              strokeWidth={4}
-              lineCap="round"
-              lineJoin="round"
-            />
-          )}
-
-          {pickup && Number.isFinite(pickup.latitude) && (
-            <Marker 
-              coordinate={{ latitude: Number(pickup.latitude), longitude: Number(pickup.longitude) }} 
-              anchor={{ x: 0.5, y: 0.5 }} 
-              tracksViewChanges={false}
-            >
-              <MarkerDot color={COLORS.success} isActive={activeField === "pickup"} />
-            </Marker>
-          )}
-
-          {drop && Number.isFinite(drop.latitude) && (
-            <Marker 
-              coordinate={{ latitude: Number(drop.latitude), longitude: Number(drop.longitude) }} 
-              anchor={{ x: 0.5, y: 0.5 }} 
-              tracksViewChanges={false}
-            >
-              <MarkerDot color={COLORS.error} isActive={activeField === "drop"} />
-            </Marker>
-          )}
-        </MapView>
-
-        {/* Center calibration pin */}
-        <View style={styles.centerPin} pointerEvents="none">
-          <View style={[styles.pinShadow, { opacity: isCalibrating ? 0.5 : 0.15 }]} />
-          <Ionicons
-            name="location"
-            size={40}
-            color={activeColor}
-            style={[styles.pinIcon, { transform: [{ translateY: isCalibrating ? -6 : 0 }] }]}
-          />
-        </View>
-
-        {/* Calibrating badge */}
-        {isCalibrating && (
-          <View style={styles.calibratingBadge}>
-            <ActivityIndicator size="small" color={COLORS.white} />
-            <Text style={styles.calibratingText}>Move to refine</Text>
-          </View>
-        )}
-
-        {/* Recenter FAB */}
-        <TouchableOpacity
-          style={styles.recenterFab}
-          onPress={() => {
-            const anchor = activeField === "pickup" ? pickup : drop;
-            if (anchor) animateTo(anchor);
-          }}
-        >
-          <Ionicons name="locate-outline" size={22} color={COLORS.primary} />
-        </TouchableOpacity>
-
-        {/* Attribution */}
-        <View style={styles.attribution}>
-          <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
-        </View>
-      </Animated.View>
-
-      {/* ── BOTTOM SHEET ── */}
-      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslate }] }]}>
+    <KeyboardAvoidingView style={[styles.container, style]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            minHeight: windowHeight,
+            paddingBottom: keyboardHeight + SPACING.xl,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        onScroll={(event) => {
+          const y = event?.nativeEvent?.contentOffset?.y || 0;
+          const nextHeight = Math.max(mapHeightCollapsed, mapHeightFull - Math.min(y, mapCollapseDistance));
+          if (Math.abs(nextHeight - mapHeight) > 1) {
+            setMapHeight(nextHeight);
+          }
+        }}
+        scrollEventThrottle={16}
+      >
+        {/* ── INPUT CONTENT ── */}
+        <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslate }] }]}>
         <View style={styles.sheetHandle} />
 
         {/* Only show title when keyboard is hidden — saves space */}
@@ -682,11 +635,11 @@ export default function LocationPicker({
           field="pickup"
           isActive={activeField === "pickup"}
           value={pickupText}
-          onFocus={() => {
-            setActiveField("pickup");
-            setSuggestions([]);
-            if (pickup) animateTo(pickup);
+          inputRef={pickupInputRef}
+          onLayout={(e) => {
+            inputYRef.current.pickup = e.nativeEvent.layout.y;
           }}
+          onFocus={(event) => handleFieldFocus("pickup", pickup, event)}
           onChangeText={(t) => handleTextChange("pickup", t)}
           onUseMyLocation={() => handleUseMyLocation("pickup")}
           onOpenPopular={() => handleOpenPopular("pickup")}
@@ -695,15 +648,16 @@ export default function LocationPicker({
 
         {/* Drop field */}
         <View style={{ marginTop: SPACING.sm }}>
+          
           <LocationInput
             field="drop"
             isActive={activeField === "drop"}
             value={dropText}
-            onFocus={() => {
-              setActiveField("drop");
-              setSuggestions([]);
-              if (drop) animateTo(drop);
+            inputRef={dropInputRef}
+            onLayout={(e) => {
+              inputYRef.current.drop = e.nativeEvent.layout.y;
             }}
+            onFocus={(event) => handleFieldFocus("drop", drop, event)}
             onChangeText={(t) => handleTextChange("drop", t)}
             onUseMyLocation={() => handleUseMyLocation("drop")}
             onOpenPopular={() => handleOpenPopular("drop")}
@@ -713,6 +667,7 @@ export default function LocationPicker({
 
         {/* Suggestions list — only shown for active field */}
         <SuggestionList
+          maxHeight={windowHeight * 0.28}
           items={suggestions}
           onSelect={(place) => applyPlace(activeField, place)}
           onDismiss={() => setSuggestions([])}
@@ -728,10 +683,89 @@ export default function LocationPicker({
             {distance ? <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>{distance} km</Text> : null}
           </View>
         )}
-      </Animated.View>
+        </Animated.View>
+
+        {!isTypingInput && (
+          <Animated.View style={[styles.mapArea, { height: mapHeight, minHeight: mapHeightCollapsed }]}>
+            <MapView
+              ref={mapRef}
+              style={StyleSheet.absoluteFillObject}
+              initialRegion={{
+                latitude: Number(mapRegion.latitude),
+                longitude: Number(mapRegion.longitude),
+                latitudeDelta: Number(mapRegion.latitudeDelta),
+                longitudeDelta: Number(mapRegion.longitudeDelta),
+              }}
+              mapType="none"
+              minZoomLevel={MIN_ZOOM}
+              maxZoomLevel={MAX_ZOOM}
+              showsUserLocation={false}
+              showsCompass={false}
+              showsScale={false}
+              showsBuildings={false}
+              showsTraffic={false}
+              showsIndoors={false}
+              showsMyLocationButton={false}
+              pitchEnabled={false}
+              toolbarEnabled={false}
+              onRegionChangeComplete={handleRegionChangeComplete}
+              onRegionChange={() => setIsCalibrating(true)}
+              onMapReady={() => setIsMapReady(true)}
+            >
+              <UrlTile
+                urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+                maximumZ={19}
+                flipY={false}
+              />
+              {safeRoutePoints.length > 1 && (
+                <Polyline
+                  coordinates={safeRoutePoints}
+                  strokeColor={COLORS.primary}
+                  strokeWidth={4}
+                  lineCap="round"
+                  lineJoin="round"
+                />
+              )}
+              {pickup && Number.isFinite(pickup.latitude) && (
+                <Marker coordinate={{ latitude: Number(pickup.latitude), longitude: Number(pickup.longitude) }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                  <MarkerDot color={COLORS.success} isActive={activeField === "pickup"} />
+                </Marker>
+              )}
+              {drop && Number.isFinite(drop.latitude) && (
+                <Marker coordinate={{ latitude: Number(drop.latitude), longitude: Number(drop.longitude) }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                  <MarkerDot color={COLORS.error} isActive={activeField === "drop"} />
+                </Marker>
+              )}
+            </MapView>
+            <View style={styles.centerPin} pointerEvents="none">
+              <View style={[styles.pinShadow, { opacity: isCalibrating ? 0.5 : 0.15 }]} />
+              <Ionicons name="location" size={40} color={activeColor} style={[styles.pinIcon, { transform: [{ translateY: isCalibrating ? -6 : 0 }] }]} />
+            </View>
+            {isCalibrating && (
+              <View style={styles.calibratingBadge}>
+                <ActivityIndicator size="small" color={COLORS.white} />
+                <Text style={styles.calibratingText}>Move to refine</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.recenterFab}
+              onPress={() => {
+                const anchor = activeField === "pickup" ? pickup : drop;
+                if (anchor) animateTo(anchor);
+              }}
+            >
+              <Ionicons name="locate-outline" size={22} color={COLORS.primary} />
+            </TouchableOpacity>
+            <View style={styles.attribution}>
+              <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
+            </View>
+          </Animated.View>
+        )}
+      </ScrollView>
 
       {/* Popular Places Modal */}
       <PopularPlacesModal
+        sheetMaxHeight={windowHeight * 0.68}
         visible={showPopular}
         onClose={() => setShowPopular(false)}
         onSelect={handlePopularSelect}
@@ -748,10 +782,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   mapArea: {
     width: "100%",
-    minHeight: MAP_HEIGHT_COLLAPSED,
     overflow: "hidden",
+    backgroundColor: COLORS.background,
   },
   // ── Center pin ──
   centerPin: {
@@ -822,7 +862,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.xl,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
-    paddingBottom: Platform.OS === "ios" ? 32 : SPACING.lg,
+    paddingBottom: SPACING.lg,
     ...SHADOWS.card,
   },
   sheetHandle: {
@@ -943,7 +983,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     paddingBottom: Platform.OS === "ios" ? 34 : SPACING.xl,
-    maxHeight: SCREEN_H * 0.65,
     ...SHADOWS.card,
   },
   popularTitle: {

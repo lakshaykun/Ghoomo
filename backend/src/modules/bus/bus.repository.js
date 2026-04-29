@@ -1,4 +1,29 @@
-const { query } = require("../../config/db");
+const { query, withTransaction } = require("../../config/db");
+
+let busSchemaCapabilitiesCache = null;
+
+async function getBusSchemaCapabilities(clientLike = { query }) {
+  if (busSchemaCapabilitiesCache) return busSchemaCapabilitiesCache;
+
+  const [columnsRes, liveTableRes] = await Promise.all([
+    clientLike.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'bus_routes'
+      `
+    ),
+    clientLike.query(`SELECT to_regclass('public.bus_route_live_locations') AS table_name`),
+  ]);
+
+  const columnSet = new Set(columnsRes.rows.map((r) => r.column_name));
+  busSchemaCapabilitiesCache = {
+    hasTotalSeats: columnSet.has("total_seats"),
+    hasFarePerSeat: columnSet.has("fare_per_seat"),
+    hasLiveLocations: Boolean(liveTableRes.rows[0]?.table_name),
+  };
+  return busSchemaCapabilitiesCache;
+}
 
 async function findRouteById(routeId) {
   const result = await query(
@@ -15,6 +40,11 @@ async function findRouteById(routeId) {
 }
 
 async function listRoutes() {
+  const caps = await getBusSchemaCapabilities({ query });
+  const totalSeatsSelect = caps.hasTotalSeats ? "br.total_seats" : "40::int AS total_seats";
+  const fareSelect = caps.hasFarePerSeat ? "br.fare_per_seat" : "0::numeric AS fare_per_seat";
+  const liveJoin = caps.hasLiveLocations ? "LEFT JOIN bus_route_live_locations brll ON brll.route_id = br.id" : "LEFT JOIN LATERAL (SELECT NULL::uuid AS driver_user_id) brll ON TRUE";
+
   const result = await query(
     `
     SELECT
@@ -22,8 +52,8 @@ async function listRoutes() {
       br.name,
       br.departure_time,
       br.arrival_time,
-      br.total_seats,
-      br.fare_per_seat,
+      ${totalSeatsSelect},
+      ${fareSelect},
       br.created_at,
       br.updated_at,
       brll.driver_user_id,
@@ -47,7 +77,7 @@ async function listRoutes() {
     FROM bus_routes br
     LEFT JOIN bus_route_stops brs ON br.id = brs.route_id
     LEFT JOIN bus_stops bs ON bs.id = brs.stop_id
-    LEFT JOIN bus_route_live_locations brll ON brll.route_id = br.id
+    ${liveJoin}
     LEFT JOIN users u ON u.id = brll.driver_user_id
     GROUP BY br.id, brll.driver_user_id, u.name
     ORDER BY br.created_at DESC
@@ -213,6 +243,10 @@ async function upsertLiveLocation({
 }
 
 async function getRouteTracking(routeId) {
+  const caps = await getBusSchemaCapabilities({ query });
+  const totalSeatsSelect = caps.hasTotalSeats ? "br.total_seats" : "40::int AS total_seats";
+  const fareSelect = caps.hasFarePerSeat ? "br.fare_per_seat" : "0::numeric AS fare_per_seat";
+
   const routeResult = await query(
     `
     SELECT
@@ -220,8 +254,8 @@ async function getRouteTracking(routeId) {
       br.name,
       br.departure_time,
       br.arrival_time,
-      br.total_seats,
-      br.fare_per_seat,
+      ${totalSeatsSelect},
+      ${fareSelect},
       COALESCE(
         json_agg(
           json_build_object(
@@ -246,15 +280,17 @@ async function getRouteTracking(routeId) {
     [routeId]
   );
 
-  const liveResult = await query(
-    `
-    SELECT route_id, driver_user_id, latitude, longitude, speed_kmph, heading_deg, delay_minutes, updated_at
-    FROM bus_route_live_locations
-    WHERE route_id = $1
-    LIMIT 1
-    `,
-    [routeId]
-  );
+  const liveResult = caps.hasLiveLocations
+    ? await query(
+        `
+        SELECT route_id, driver_user_id, latitude, longitude, speed_kmph, heading_deg, delay_minutes, updated_at
+        FROM bus_route_live_locations
+        WHERE route_id = $1
+        LIMIT 1
+        `,
+        [routeId]
+      )
+    : { rows: [] };
 
   return {
     route: routeResult.rows[0] || null,
@@ -291,15 +327,25 @@ async function createRouteWithStops({
   driverUserId 
 }) {
   return withTransaction(async (client) => {
+    const caps = await getBusSchemaCapabilities(client);
     // 1. Create Route
-    const routeRes = await client.query(
-      `
-      INSERT INTO bus_routes (name, departure_time, arrival_time, total_seats, fare_per_seat)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-      `,
-      [name, departureTime, arrivalTime, totalSeats, farePerSeat]
-    );
+    const routeRes = caps.hasTotalSeats && caps.hasFarePerSeat
+      ? await client.query(
+          `
+          INSERT INTO bus_routes (name, departure_time, arrival_time, total_seats, fare_per_seat)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING *
+          `,
+          [name, departureTime, arrivalTime, totalSeats, farePerSeat]
+        )
+      : await client.query(
+          `
+          INSERT INTO bus_routes (name, departure_time, arrival_time)
+          VALUES ($1, $2, $3)
+          RETURNING *
+          `,
+          [name, departureTime, arrivalTime]
+        );
     const route = routeRes.rows[0];
 
     // 2. For each stop
@@ -332,7 +378,7 @@ async function createRouteWithStops({
     }
 
     // 3. Driver assignment (via live locations)
-    if (driverUserId) {
+    if (driverUserId && caps.hasLiveLocations) {
       await client.query(
         `
         INSERT INTO bus_route_live_locations (route_id, driver_user_id, latitude, longitude)
@@ -356,16 +402,27 @@ async function updateRouteWithStops(routeId, {
   driverUserId 
 }) {
   return withTransaction(async (client) => {
+    const caps = await getBusSchemaCapabilities(client);
     // 1. Update Route metadata
-    const routeRes = await client.query(
-      `
-      UPDATE bus_routes 
-      SET name = $1, departure_time = $2, arrival_time = $3, total_seats = $4, fare_per_seat = $5, updated_at = NOW()
-      WHERE id = $6
-      RETURNING *
-      `,
-      [name, departureTime, arrivalTime, totalSeats, farePerSeat, routeId]
-    );
+    const routeRes = caps.hasTotalSeats && caps.hasFarePerSeat
+      ? await client.query(
+          `
+          UPDATE bus_routes 
+          SET name = $1, departure_time = $2, arrival_time = $3, total_seats = $4, fare_per_seat = $5, updated_at = NOW()
+          WHERE id = $6
+          RETURNING *
+          `,
+          [name, departureTime, arrivalTime, totalSeats, farePerSeat, routeId]
+        )
+      : await client.query(
+          `
+          UPDATE bus_routes 
+          SET name = $1, departure_time = $2, arrival_time = $3, updated_at = NOW()
+          WHERE id = $4
+          RETURNING *
+          `,
+          [name, departureTime, arrivalTime, routeId]
+        );
     const route = routeRes.rows[0];
     if (!route) return null;
 
@@ -400,7 +457,7 @@ async function updateRouteWithStops(routeId, {
     }
 
     // 4. Update Driver assignment
-    if (driverUserId) {
+    if (driverUserId && caps.hasLiveLocations) {
       await client.query(
         `
         INSERT INTO bus_route_live_locations (route_id, driver_user_id, latitude, longitude)
@@ -409,7 +466,7 @@ async function updateRouteWithStops(routeId, {
         `,
         [routeId, driverUserId, stops[0].latitude, stops[0].longitude]
       );
-    } else {
+    } else if (caps.hasLiveLocations) {
       await client.query(`DELETE FROM bus_route_live_locations WHERE route_id = $1`, [routeId]);
     }
 
@@ -419,12 +476,14 @@ async function updateRouteWithStops(routeId, {
 
 async function deleteRoute(routeId) {
   return withTransaction(async (client) => {
-    // 1. Delete dependent records
-    await client.query(`DELETE FROM bus_route_live_locations WHERE route_id = $1`, [routeId]);
-    await client.query(`DELETE FROM bus_route_stops WHERE route_id = $1`, [routeId]);
-    await client.query(`DELETE FROM bus_bookings WHERE route_id = $1`, [routeId]);
-    
-    // 2. Delete the route itself
+    const caps = await getBusSchemaCapabilities(client);
+    if (caps.hasLiveLocations) {
+      await client.query(`DELETE FROM bus_route_live_locations WHERE route_id = $1`, [routeId]);
+    }
+    await client.query(
+      `UPDATE bus_bookings SET route_id = NULL, updated_at = NOW() WHERE route_id = $1`,
+      [routeId]
+    );
     const result = await client.query(`DELETE FROM bus_routes WHERE id = $1 RETURNING id`, [routeId]);
     return result.rowCount > 0;
   });
