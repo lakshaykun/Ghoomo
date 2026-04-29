@@ -7,6 +7,8 @@ const router = express.Router();
 // Modern modular endpoints
 router.get("/bus/routes", controller.listRoutes);
 router.post("/bus/routes", authenticate, requireRole("admin"), controller.createRoute);
+router.put("/bus/routes/:routeId", authenticate, requireRole("admin"), controller.updateRoute);
+router.delete("/bus/routes/:routeId", authenticate, requireRole("admin"), controller.deleteRoute);
 router.post("/bus/routes/:routeId/stops", authenticate, requireRole("admin"), controller.addRouteStop);
 router.get("/bus/routes/:routeId/tracking", authenticate, controller.getRouteTracking);
 router.patch(
@@ -23,5 +25,7 @@ router.patch(
   authenticate,
   controller.updateBookingStatus
 );
+
+router.get("/admin/bus-drivers", authenticate, requireRole("admin"), controller.listApprovedBusDrivers);
 
 module.exports = router;

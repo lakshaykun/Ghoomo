@@ -186,6 +186,8 @@ function normalizeRoute(row = {}) {
     name: row.name ?? '',
     departureTime: row.departure_time ?? row.departureTime ?? null,
     arrivalTime: row.arrival_time ?? row.arrivalTime ?? null,
+    totalSeats: toNumber(row.total_seats ?? row.totalSeats, 40),
+    farePerSeat: toNumber(row.fare_per_seat ?? row.farePerSeat, 0),
     createdAt: row.created_at ?? row.createdAt ?? null,
     updatedAt: row.updated_at ?? row.updatedAt ?? null,
     stops: toArray(row.stops).map(normalizeRouteStop),
@@ -519,9 +521,37 @@ async function createRoute(payload = {}) {
     name: payload.name,
     departureTime: payload.departureTime,
     arrivalTime: payload.arrivalTime,
+    totalSeats: payload.totalSeats,
+    farePerSeat: payload.farePerSeat,
+    stops: payload.stops,
+    driverUserId: payload.driverUserId,
   });
 
   return normalizeRoute(unwrapData(response) || {});
+}
+
+async function updateRoute(routeId, payload = {}) {
+  const response = await api.put(`/bus/routes/${routeId}`, {
+    name: payload.name,
+    departureTime: payload.departureTime,
+    arrivalTime: payload.arrivalTime,
+    totalSeats: payload.totalSeats,
+    farePerSeat: payload.farePerSeat,
+    stops: payload.stops,
+    driverUserId: payload.driverUserId,
+  });
+
+  return normalizeRoute(unwrapData(response) || {});
+}
+
+async function deleteRoute(routeId) {
+  const response = await api.delete(`/bus/routes/${routeId}`);
+  return unwrapData(response);
+}
+
+async function getApprovedBusDrivers() {
+  const response = await api.get('/admin/bus-drivers');
+  return toArray(unwrapData(response));
 }
 
 async function addRouteStop(routeId, payload = {}) {
@@ -599,6 +629,8 @@ export default {
   getRides,
   getRoutes,
   createRoute,
+  updateRoute,
+  deleteRoute,
   addRouteStop,
   getBookings,
   updateBookingStatus,
@@ -606,4 +638,5 @@ export default {
   updateDriverStatus,
   suspendDriver,
   approveDriver,
+  getApprovedBusDrivers,
 };

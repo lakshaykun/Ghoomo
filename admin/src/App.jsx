@@ -1,4 +1,5 @@
 import { HashRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminLayout from './components/layout/AdminLayout';
 import LoadingState from './components/common/LoadingState';
@@ -11,6 +12,7 @@ import RoutesPage from './components/Routes';
 import LiveMonitoring from './pages/LiveMonitoring';
 import CampusBoundary from './pages/CampusBoundary';
 import PopularPlaces from './pages/PopularPlaces';
+import BusManagement from './pages/BusManagement';
 import 'leaflet/dist/leaflet.css';
 
 function ProtectedRoute() {
@@ -26,6 +28,7 @@ function ProtectedRoute() {
 export default function App() {
   return (
     <AuthProvider>
+      <Toaster position="top-right" reverseOrder={false} />
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -38,6 +41,7 @@ export default function App() {
             <Route path="routes" element={<RoutesPage />} />
             <Route path="live-monitoring" element={<LiveMonitoring />} />
             <Route path="campus-boundary" element={<CampusBoundary />} />
+            <Route path="bus-management" element={<BusManagement />} />
             <Route path="popular-places" element={<PopularPlaces />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Route>

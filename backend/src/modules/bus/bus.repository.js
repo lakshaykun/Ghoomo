@@ -26,6 +26,8 @@ async function listRoutes() {
       br.fare_per_seat,
       br.created_at,
       br.updated_at,
+      brll.driver_user_id,
+      u.name AS driver_name,
       COALESCE(
         json_agg(
           json_build_object(
@@ -45,7 +47,9 @@ async function listRoutes() {
     FROM bus_routes br
     LEFT JOIN bus_route_stops brs ON br.id = brs.route_id
     LEFT JOIN bus_stops bs ON bs.id = brs.stop_id
-    GROUP BY br.id
+    LEFT JOIN bus_route_live_locations brll ON brll.route_id = br.id
+    LEFT JOIN users u ON u.id = brll.driver_user_id
+    GROUP BY br.id, brll.driver_user_id, u.name
     ORDER BY br.created_at DESC
     `
   );
@@ -243,6 +247,174 @@ async function getRouteTracking(routeId) {
   };
 }
 
+async function listApprovedBusDrivers() {
+  const result = await query(
+    `
+    SELECT 
+      bd.id AS bus_driver_id,
+      bd.user_id,
+      u.name,
+      u.email,
+      u.phone,
+      bd.license_number
+    FROM bus_drivers bd
+    JOIN users u ON u.id = bd.user_id
+    WHERE bd.status = 'approved'
+    ORDER BY u.name ASC
+    `
+  );
+  return result.rows;
+}
+
+async function createRouteWithStops({ 
+  name, 
+  departureTime, 
+  arrivalTime, 
+  totalSeats, 
+  farePerSeat, 
+  stops, 
+  driverUserId 
+}) {
+  return withTransaction(async (client) => {
+    // 1. Create Route
+    const routeRes = await client.query(
+      `
+      INSERT INTO bus_routes (name, departure_time, arrival_time, total_seats, fare_per_seat)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+      `,
+      [name, departureTime, arrivalTime, totalSeats, farePerSeat]
+    );
+    const route = routeRes.rows[0];
+
+    // 2. For each stop
+    for (const stop of stops) {
+      // Find or create stop
+      const stopCheck = await client.query(
+        `SELECT id FROM bus_stops WHERE latitude = $1 AND longitude = $2 LIMIT 1`,
+        [stop.latitude, stop.longitude]
+      );
+
+      let stopId;
+      if (stopCheck.rows.length > 0) {
+        stopId = stopCheck.rows[0].id;
+      } else {
+        const newStopRes = await client.query(
+          `INSERT INTO bus_stops (name, latitude, longitude) VALUES ($1, $2, $3) RETURNING id`,
+          [stop.name, stop.latitude, stop.longitude]
+        );
+        stopId = newStopRes.rows[0].id;
+      }
+
+      // Link to route
+      await client.query(
+        `
+        INSERT INTO bus_route_stops (route_id, stop_id, stop_order, stop_type, arrival_time)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [route.id, stopId, stop.order, stop.type, stop.arrivalTime]
+      );
+    }
+
+    // 3. Driver assignment (via live locations)
+    if (driverUserId) {
+      await client.query(
+        `
+        INSERT INTO bus_route_live_locations (route_id, driver_user_id, latitude, longitude)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [route.id, driverUserId, stops[0].latitude, stops[0].longitude]
+      );
+    }
+
+    return route;
+  });
+}
+
+async function updateRouteWithStops(routeId, { 
+  name, 
+  departureTime, 
+  arrivalTime, 
+  totalSeats, 
+  farePerSeat, 
+  stops, 
+  driverUserId 
+}) {
+  return withTransaction(async (client) => {
+    // 1. Update Route metadata
+    const routeRes = await client.query(
+      `
+      UPDATE bus_routes 
+      SET name = $1, departure_time = $2, arrival_time = $3, total_seats = $4, fare_per_seat = $5, updated_at = NOW()
+      WHERE id = $6
+      RETURNING *
+      `,
+      [name, departureTime, arrivalTime, totalSeats, farePerSeat, routeId]
+    );
+    const route = routeRes.rows[0];
+    if (!route) return null;
+
+    // 2. Clear old stops
+    await client.query(`DELETE FROM bus_route_stops WHERE route_id = $1`, [routeId]);
+
+    // 3. Insert new stops
+    for (const stop of stops) {
+      const stopCheck = await client.query(
+        `SELECT id FROM bus_stops WHERE latitude = $1 AND longitude = $2 LIMIT 1`,
+        [stop.latitude, stop.longitude]
+      );
+
+      let stopId;
+      if (stopCheck.rows.length > 0) {
+        stopId = stopCheck.rows[0].id;
+      } else {
+        const newStopRes = await client.query(
+          `INSERT INTO bus_stops (name, latitude, longitude) VALUES ($1, $2, $3) RETURNING id`,
+          [stop.name, stop.latitude, stop.longitude]
+        );
+        stopId = newStopRes.rows[0].id;
+      }
+
+      await client.query(
+        `
+        INSERT INTO bus_route_stops (route_id, stop_id, stop_order, stop_type, arrival_time)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [routeId, stopId, stop.order, stop.type, stop.arrivalTime]
+      );
+    }
+
+    // 4. Update Driver assignment
+    if (driverUserId) {
+      await client.query(
+        `
+        INSERT INTO bus_route_live_locations (route_id, driver_user_id, latitude, longitude)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (route_id) DO UPDATE SET driver_user_id = EXCLUDED.driver_user_id, updated_at = NOW()
+        `,
+        [routeId, driverUserId, stops[0].latitude, stops[0].longitude]
+      );
+    } else {
+      await client.query(`DELETE FROM bus_route_live_locations WHERE route_id = $1`, [routeId]);
+    }
+
+    return route;
+  });
+}
+
+async function deleteRoute(routeId) {
+  return withTransaction(async (client) => {
+    // 1. Delete dependent records
+    await client.query(`DELETE FROM bus_route_live_locations WHERE route_id = $1`, [routeId]);
+    await client.query(`DELETE FROM bus_route_stops WHERE route_id = $1`, [routeId]);
+    await client.query(`DELETE FROM bus_bookings WHERE route_id = $1`, [routeId]);
+    
+    // 2. Delete the route itself
+    const result = await client.query(`DELETE FROM bus_routes WHERE id = $1 RETURNING id`, [routeId]);
+    return result.rowCount > 0;
+  });
+}
+
 module.exports = {
   findRouteById,
   listRoutes,
@@ -256,4 +428,8 @@ module.exports = {
   createRouteStop,
   upsertLiveLocation,
   getRouteTracking,
+  listApprovedBusDrivers,
+  createRouteWithStops,
+  updateRouteWithStops,
+  deleteRoute,
 };

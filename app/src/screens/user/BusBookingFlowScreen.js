@@ -216,26 +216,6 @@ export default function BusBookingFlowScreen({ route, navigation }) {
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Fare Details</Text>
-          <Card style={styles.fareCard}>
-            <View style={styles.fareRow}>
-              <Text style={styles.fareLabel}>Ticket Fare</Text>
-              <Text style={styles.fareValue}>₹{Number(selectedRoute.farePerSeat || 0).toFixed(2)}</Text>
-            </View>
-            <View style={styles.fareRow}>
-              <Text style={styles.fareLabel}>Taxes & Fees</Text>
-              <Text style={styles.fareValue}>₹0.00</Text>
-            </View>
-            <View style={styles.fareDivider} />
-            <View style={styles.fareRow}>
-              <Text style={[styles.fareLabel, { fontWeight: "800", color: COLORS.text }]}>Total Amount</Text>
-              <Text style={[styles.fareValue, { fontWeight: "900", color: COLORS.primary, fontSize: 18 }]}>
-                ₹{Number(selectedRoute.farePerSeat || 0).toFixed(2)}
-              </Text>
-            </View>
-          </Card>
-        </View>
         
         <View style={{ height: 40 }} />
       </ScrollView>

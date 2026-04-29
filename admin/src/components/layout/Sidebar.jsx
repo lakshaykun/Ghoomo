@@ -8,6 +8,7 @@ export const NAV_ITEMS = [
   { label: 'Students', path: '/students', icon: GraduationCap },
   { label: 'Rides', path: '/rides', icon: Route },
   { label: 'Live Monitoring', path: '/live-monitoring', icon: Activity },
+  { label: 'Bus Management', path: '/bus-management', icon: BusFront },
   { label: 'Popular Places', path: '/popular-places', icon: Star },
 ];
 

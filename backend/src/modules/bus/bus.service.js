@@ -7,13 +7,53 @@ async function listRoutes() {
 }
 
 async function createRoute(payload) {
-  return repository.createRoute({
+  if (!payload.stops || !Array.isArray(payload.stops) || payload.stops.length < 2) {
+    throw new AppError("Route must have at least 2 stops", 400, "INVALID_ROUTE_STOPS");
+  }
+
+  return repository.createRouteWithStops({
     name: String(payload.name).trim(),
     departureTime: payload.departureTime,
     arrivalTime: payload.arrivalTime,
     totalSeats: payload.totalSeats !== undefined ? Number(payload.totalSeats) : 40,
     farePerSeat: payload.farePerSeat !== undefined ? Number(payload.farePerSeat) : 0,
+    stops: payload.stops,
+    driverUserId: payload.driverUserId || null,
   });
+}
+
+async function updateRoute(routeId, payload) {
+  if (!payload.stops || !Array.isArray(payload.stops) || payload.stops.length < 2) {
+    throw new AppError("Route must have at least 2 stops", 400, "INVALID_ROUTE_STOPS");
+  }
+
+  const updated = await repository.updateRouteWithStops(routeId, {
+    name: String(payload.name).trim(),
+    departureTime: payload.departureTime,
+    arrivalTime: payload.arrivalTime,
+    totalSeats: payload.totalSeats !== undefined ? Number(payload.totalSeats) : 40,
+    farePerSeat: payload.farePerSeat !== undefined ? Number(payload.farePerSeat) : 0,
+    stops: payload.stops,
+    driverUserId: payload.driverUserId || null,
+  });
+
+  if (!updated) {
+    throw new AppError("Bus route not found", 404, "BUS_ROUTE_NOT_FOUND");
+  }
+
+  return updated;
+}
+
+async function deleteRoute(routeId) {
+  const deleted = await repository.deleteRoute(routeId);
+  if (!deleted) {
+    throw new AppError("Bus route not found", 404, "BUS_ROUTE_NOT_FOUND");
+  }
+  return { success: true };
+}
+
+async function listApprovedBusDrivers() {
+  return repository.listApprovedBusDrivers();
 }
 
 async function listBookings(payload = {}) {
@@ -196,4 +236,7 @@ module.exports = {
   addRouteStop,
   updateRouteLocation,
   getRouteTracking,
+  listApprovedBusDrivers,
+  updateRoute,
+  deleteRoute,
 };

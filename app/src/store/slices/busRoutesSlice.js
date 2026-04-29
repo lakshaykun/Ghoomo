@@ -2,25 +2,26 @@ import { createSlice } from "@reduxjs/toolkit";
 import { api } from "../../services/api";
 
 function normalizeBusRoute(route = {}) {
-  const bookedSeats = Array.isArray(route.bookedSeats)
-    ? route.bookedSeats.filter((seat) => Number.isFinite(Number(seat))).map((seat) => Number(seat))
-    : [];
+  const stopsDetailed = Array.isArray(route.stops) ? route.stops : [];
+  const stopNames = stopsDetailed
+    .map((stop) => stop?.stopName || stop?.name || "")
+    .filter(Boolean);
 
   return {
     ...route,
     id: route.id || null,
     name: typeof route.name === "string" && route.name.trim() ? route.name : "Unnamed Route",
-    from: typeof route.from === "string" ? route.from : "",
-    to: typeof route.to === "string" ? route.to : "",
-    departureTime:
-      typeof route.departureTime === "string" && route.departureTime.trim()
-        ? route.departureTime
-        : null,
-    stops: Array.isArray(route.stops) ? route.stops.filter((stop) => typeof stop === "string" && stop.trim()) : [],
-    totalSeats: Number.isFinite(Number(route.totalSeats)) && Number(route.totalSeats) > 0
-      ? Number(route.totalSeats)
+    from: route.from || stopNames[0] || "",
+    to: route.to || stopNames[stopNames.length - 1] || "",
+    departureTime: route.departureTime || route.departure_time || null,
+    driverUserId: route.driverUserId || route.driver_user_id || null,
+    driverName: route.driverName || route.driver_name || null,
+    stops: stopNames,
+    stopsDetailed,
+    totalSeats: Number.isFinite(Number(route.totalSeats || route.total_seats)) 
+      ? Number(route.totalSeats || route.total_seats) 
       : null,
-    bookedSeats,
+    farePerSeat: Number(route.farePerSeat || route.fare_per_seat || 0),
   };
 }
 

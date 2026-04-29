@@ -17,8 +17,10 @@ export default function BusDriverScreen({ navigation }) {
   const user = useSelector(s => s.auth.user);
   const busBookings = useSelector(s => s.booking.busBookings);
   const liveRoutes = useSelector((state) => state.busRoutes.routes);
-  const routes = liveRoutes;
-  const [selectedRouteId, setSelectedRouteId] = useState(user?.busRoute || routes[0]?.id);
+  const routes = useMemo(() => {
+    return liveRoutes.filter(r => r.driverUserId === user?.id);
+  }, [liveRoutes, user?.id]);
+  const [selectedRouteId, setSelectedRouteId] = useState(routes[0]?.id);
 
   useEffect(() => {
     dispatch(fetchBusRoutes()).catch(() => {});

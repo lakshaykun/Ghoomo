@@ -30,6 +30,28 @@ const createRoute = asyncHandler(async (req, res) => {
   });
 });
 
+const updateRoute = asyncHandler(async (req, res) => {
+  const validation = validateRoutePayload(req.body);
+  if (!validation.isValid) {
+    throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
+  }
+
+  const row = await service.updateRoute(req.params.routeId, req.body);
+  res.status(200).json({
+    success: true,
+    message: "Bus route updated",
+    data: row,
+  });
+});
+
+const deleteRoute = asyncHandler(async (req, res) => {
+  await service.deleteRoute(req.params.routeId);
+  res.status(200).json({
+    success: true,
+    message: "Bus route deleted",
+  });
+});
+
 const listBookings = asyncHandler(async (req, res) => {
   const query = {
     routeId: req.query.routeId,
@@ -115,13 +137,24 @@ const getRouteTracking = asyncHandler(async (req, res) => {
   });
 });
 
+const listApprovedBusDrivers = asyncHandler(async (req, res) => {
+  const rows = await service.listApprovedBusDrivers();
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
 module.exports = {
   listRoutes,
   createRoute,
+  updateRoute,
+  deleteRoute,
   listBookings,
   createBooking,
   updateBookingStatus,
   addRouteStop,
   updateRouteLocation,
   getRouteTracking,
+  listApprovedBusDrivers,
 };
