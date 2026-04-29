@@ -1,145 +1,127 @@
-
-import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { logoutUser } from "../../store/slices/authSlice";
 import { fetchBusRoutes } from "../../store/slices/busRoutesSlice";
-import { fetchBusBookings, setBusBookings } from "../../store/slices/bookingSlice";
-import { COLORS, SPACING } from "../../constants";
-import { getBookingWindow } from "../../utils/bus";
-import { subscribeBusRealtime } from "../../services/realtime";
+import Card from "../../components/common/Card";
+import { COLORS, SPACING, RADIUS, SHADOWS, TYPOGRAPHY } from "../../constants";
 
 export default function BusDriverScreen({ navigation }) {
   const dispatch = useDispatch();
-  const user = useSelector(s => s.auth.user);
-  const busBookings = useSelector(s => s.booking.busBookings);
-  const liveRoutes = useSelector((state) => state.busRoutes.routes);
-  const routes = useMemo(() => {
-    return liveRoutes.filter(r => r.driverUserId === user?.id);
-  }, [liveRoutes, user?.id]);
-  const [selectedRouteId, setSelectedRouteId] = useState(routes[0]?.id);
+  const user = useSelector((state) => state.auth.user);
+  const routes = useSelector((state) => state.busRoutes.routes || []);
+  const loading = useSelector((state) => state.busRoutes.loading);
 
   useEffect(() => {
-    dispatch(fetchBusRoutes()).catch(() => {});
-    dispatch(fetchBusBookings()).catch(() => {});
+    dispatch(fetchBusRoutes());
   }, [dispatch]);
 
-  useEffect(() => {
-    const unsubscribe = subscribeBusRealtime({
-      onBusUpdate: ({ busBookings }) => {
-        dispatch(setBusBookings(busBookings || []));
-      },
-      onError: () => {
-        dispatch(fetchBusBookings()).catch(() => {});
-      },
-    });
-    return () => unsubscribe();
-  }, [dispatch]);
+  const assignedRoutes = useMemo(() => {
+    return routes.filter((r) => r.driver_user_id === user?.id || r.driverUserId === user?.id);
+  }, [routes, user?.id]);
 
-  useEffect(() => {
-    if (!routes.some((route) => route.id === selectedRouteId)) {
-      setSelectedRouteId(user?.busRoute || routes[0]?.id);
-    }
-  }, [routes, selectedRouteId, user?.busRoute]);
-
-  const sortedRoutes = useMemo(() => {
-    return [...routes].sort((a, b) => {
-      const aw = getBookingWindow(a, new Date());
-      const bw = getBookingWindow(b, new Date());
-      return aw.departure.getTime() - bw.departure.getTime();
-    });
-  }, [routes]);
-
-  const selectedRoute = sortedRoutes.find(r => r.id === selectedRouteId) || sortedRoutes[0];
-  if (!selectedRoute) {
-    return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>No bus routes available</Text>
-          <Text style={styles.emptySub}>Ask support to add routes before scanning tickets.</Text>
+  const renderRouteItem = ({ item }) => (
+    <Card elevated style={styles.routeCard}>
+      <TouchableOpacity 
+        style={styles.routeTouchable}
+        onPress={() => navigation.navigate("BusDriverRoute", { routeId: item.id })}
+      >
+        <View style={styles.routeIconContainer}>
+          <Ionicons name="bus" size={24} color={COLORS.primary} />
         </View>
-      </SafeAreaView>
-    );
-  }
-  const routeBookings = busBookings.filter(b => b.routeId === selectedRoute.id && b.status !== "cancelled");
-  const verifiedCount = routeBookings.filter(b => b.verified).length;
-  const routeCapacity = Number.isFinite(Number(selectedRoute.totalSeats)) ? Number(selectedRoute.totalSeats) : 0;
-
-  const todayPassengers = routeBookings.length;
+        <View style={styles.routeInfo}>
+          <Text style={styles.routeName}>{item.name}</Text>
+          <View style={styles.timeRow}>
+            <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.timeText}>{item.departureTime} - {item.arrivalTime}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>{item.stops?.length || 0} stops</Text>
+            <View style={styles.dot} />
+            <Text style={styles.metaText}>{item.totalSeats} seats</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.borderStrong} />
+      </TouchableOpacity>
+    </Card>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <LinearGradient colors={[COLORS.success, "#059669"]} style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.busDriverName}>{user?.name}</Text>
-              <Text style={styles.routeLabel}>{selectedRoute.name}</Text>
-            </View>
-            <TouchableOpacity onPress={() => dispatch(logoutUser())} style={styles.logoutBtn}>
-              <Ionicons name="log-out" size={22} color="rgba(255,255,255,0.8)" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={styles.stat}><Text style={styles.statVal}>{todayPassengers}</Text><Text style={styles.statLabel}>Passengers</Text></View>
-            <View style={styles.statDivider} />
-            <View style={styles.stat}><Text style={styles.statVal}>{verifiedCount}</Text><Text style={styles.statLabel}>Verified</Text></View>
-            <View style={styles.statDivider} />
-            <View style={styles.stat}><Text style={styles.statVal}>{Math.max(0, routeCapacity - routeBookings.length)}</Text><Text style={styles.statLabel}>Empty Seats</Text></View>
-          </View>
-        </LinearGradient>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose Route</Text>
-          <View style={styles.routePickerList}>
-            {sortedRoutes.map(route => (
-              <TouchableOpacity
-                key={route.id}
-                style={[styles.routePickerCard, selectedRouteId === route.id && styles.routePickerCardActive]}
-                onPress={() => {
-                  setSelectedRouteId(route.id);
-                  navigation.navigate("BusDriverRoute", { routeId: route.id });
-                }}
-              >
-                <Text style={styles.routePickerTitle}>{route.name}</Text>
-                <Text style={styles.routePickerText}>{route.from} to {route.to}</Text>
-                <Text style={styles.routePickerMeta}>{route.departureTime}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.welcomeText}>Welcome Pilot,</Text>
+          <Text style={styles.driverName}>{user?.name}</Text>
         </View>
+        <TouchableOpacity style={styles.logoutBtn} onPress={() => dispatch(logoutUser())}>
+          <Ionicons name="log-out-outline" size={24} color={COLORS.error} />
+        </TouchableOpacity>
+      </View>
 
-        <View style={{ height: SPACING.xxl }} />
-      </ScrollView>
+      <View style={styles.content}>
+        <Text style={styles.sectionTitle}>Your Assigned Routes</Text>
+        {loading ? (
+          <View style={styles.centered}><Text>Loading routes...</Text></View>
+        ) : assignedRoutes.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="map-outline" size={60} color={COLORS.gray} />
+            <Text style={styles.emptyTitle}>No Routes Assigned</Text>
+            <Text style={styles.emptySub}>You haven't been assigned to any bus routes yet.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={assignedRoutes}
+            renderItem={renderRouteItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </div>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xl },
-  headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: SPACING.md },
-  busDriverName: { fontSize: 22, fontWeight: "800", color: COLORS.white },
-  routeLabel: { fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 4 },
-  logoutBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
-  statsRow: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 16, paddingVertical: 14, paddingHorizontal: 20 },
-  stat: { flex: 1, alignItems: "center" },
-  statVal: { fontSize: 18, fontWeight: "900", color: COLORS.white },
-  statLabel: { fontSize: 11, color: "rgba(255,255,255,0.8)", marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.3)" },
-  section: { paddingHorizontal: SPACING.md, marginTop: SPACING.md },
-  sectionTitle: { fontSize: 16, fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm },
-  emptySub: { fontSize: 13, color: COLORS.textSecondary, marginTop: 6 },
-  routePickerList: { gap: 10 },
-  routePickerCard: { borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.white, padding: 14 },
-  routePickerCardActive: { borderColor: COLORS.success, backgroundColor: "#ECFDF5" },
-  routePickerTitle: { fontSize: 14, fontWeight: "800", color: COLORS.text },
-  routePickerText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4 },
-  routePickerMeta: { fontSize: 12, color: COLORS.success, fontWeight: "700", marginTop: 6 },
-  emptyCard: { alignItems: "center", paddingVertical: SPACING.xl },
-  emptyText: { fontSize: 14, color: COLORS.textSecondary, marginTop: 10 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  welcomeText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
+  driverName: { ...TYPOGRAPHY.subtitle, fontSize: 20, color: COLORS.text },
+  logoutBtn: { padding: 8 },
+  content: { flex: 1, padding: SPACING.lg },
+  sectionTitle: { ...TYPOGRAPHY.subtitle, color: COLORS.text, marginBottom: SPACING.md },
+  list: { paddingBottom: SPACING.xl },
+  routeCard: { marginBottom: SPACING.md, padding: 0, overflow: "hidden" },
+  routeTouchable: { flexDirection: "row", alignItems: "center", padding: SPACING.md },
+  routeIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary + "10",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.md,
+  },
+  routeInfo: { flex: 1 },
+  routeName: { ...TYPOGRAPHY.body, fontWeight: "700", color: COLORS.text, marginBottom: 4 },
+  timeRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  timeText: { fontSize: 13, color: COLORS.textSecondary, marginLeft: 4 },
+  metaRow: { flexDirection: "row", alignItems: "center" },
+  metaText: { fontSize: 12, color: COLORS.textSecondary },
+  dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: COLORS.gray, marginHorizontal: 6 },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
+  emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: 60 },
+  emptyTitle: { ...TYPOGRAPHY.subtitle, color: COLORS.text, marginTop: 16 },
+  emptySub: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, textAlign: "center", marginTop: 8, paddingHorizontal: 20 },
 });

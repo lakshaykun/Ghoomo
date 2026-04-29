@@ -1,0 +1,213 @@
+% Ghoomo — Project Report
+% Generated: 2026-04-29
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{font=small}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+
+% Title page metadata
+\title{Ghoomo: Design and Implementation of a Campus Ride-Sharing Platform}
+\author{Ghoomo Project — Development Team}
+\date{April 29, 2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+% Abstract
+\begin{abstract}
+Ghoomo is a modular ride-sharing platform designed to provide campus and institutional mobility through digitized operations, real-time vehicle tracking, and flexible booking flows including shared-ride functionality. The system integrates a cross-platform mobile client (rider and driver interfaces), an administrative web dashboard, and a Node.js backend with PostgreSQL (Supabase-compatible) persistence and real-time eventing via WebSocket. This report documents the problem context, architectural decisions, workflows, database design, core features, and trade-offs encountered during development. Recommendations for future improvements and extension points are provided.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+Modern campus transportation benefits substantially from software systems that coordinate demand, optimize routing, and provide reliable real-time information to passengers and operators. Ghoomo was conceived to address the operational inefficiencies common to institutional shuttle networks and ad-hoc ride services by offering a tightly integrated mobile-first experience for riders and drivers coupled with an administrative dashboard for route management and monitoring. The platform emphasizes low-friction booking, live tracking, shared-ride matching, and a resilient backend suitable for both local deployments and cloud-hosted Supabase/PostgreSQL environments.
+
+This report provides a complete technical overview suitable for academic review and project handoff. The description synthesizes the repository's multiple workspaces: a React Native/Expo mobile application, a Node.js backend with WebSocket support, and an admin dashboard implemented using React + Vite. Design decisions are justified with respect to operational requirements and developer maintainability.
+
+\section{Problem Statement}
+The project addresses four related operational problems faced by campus mobility services:
+
+\subsection{Digitize Operations}
+Many campuses manage shuttle services through manual schedules, spreadsheets, and telephone coordination. Such workflows increase response time, reduce transparency, and make historical analysis difficult. Digitization enables route publishing, real-time status updates, and centralized management of users, drivers, and vehicles.
+
+\subsection{Provide Real-Time Tracking}
+Passengers require accurate arrival estimates and the ability to locate vehicles when boarding windows are small. Real-time tracking decreases passenger wait times and increases trust in the service. The solution must be robust under intermittent connectivity and provide efficient location update propagation to subscribed clients.
+
+\subsection{Enable Seamless Interaction}
+Booking a trip — especially for students — should be frictionless. The system must provide intuitive authentication, quick pickup requests, transparent pricing or fare rules, and timely notifications. Both riders and drivers should receive only the information necessary for their role.
+
+\subsection{Implement Efficient Booking}
+Limited vehicle capacity and dynamic demand necessitate booking strategies that maximize vehicle utilization. Shared-ride support and assignment logic are required to match compatible ride requests while maintaining acceptable detours and user experience.
+
+\section{Objectives}
+The implementation objectives are:
+\begin{enumerate}[leftmargin=*]
+  \item Provide mobile applications for riders and drivers supporting booking, tracking, and notifications.
+  \item Expose a single backend API that supports REST endpoints for configuration and WebSocket channels for real-time events.
+  \item Persist domain entities in PostgreSQL with a schema supporting users, drivers, vehicles, routes, rides, bookings, and shared-ride groupings.
+  \item Offer an admin dashboard to manage routes, monitor active vehicles, and inspect historical logs and metrics.
+  \item Support a developer-friendly local environment using environment files, seed data, and optional JSON fallback storage for offline development.
+\end{enumerate}
+
+\section{Features}
+The Ghoomo platform implements a set of features that together create a full-stack solution for campus mobility. Each feature is described with technical depth and rationale.
+
+\subsection{Authentication and Authorization}
+User authentication for the mobile clients is implemented using Firebase Authentication to simplify onboarding and social login (Google OAuth). Firebase is used for identity; issued tokens are verified by the backend and mapped to internal user records. Authorization on the backend is role-based: primary roles include `rider`, `driver`, `bus_driver`, and `admin`. Authentication responsibilities are split: Firebase handles user credentials and session management, while the backend manages application-level permissions and profile enrichment.
+
+\subsection{Booking and Ride Lifecycle}
+Booking flows include instant single rides, bus bookings (for scheduled shuttle services), and shared rides. On starting a booking, the mobile client calls the backend REST API to create a tentative booking record. The backend performs capacity checks, candidate driver discovery, and enqueues assignment logic. Once assigned, the ride transitions through states (assigned, accepted, in_transit, completed, cancelled) which are recorded in the database and emitted to subscribers via WebSocket channels. Clients subscribe to per-ride event topics to receive state updates and driver location streams.
+
+\subsection{Real-Time Bus and Driver Tracking}
+Drivers and buses periodically upload location pings through a secured WebSocket or REST endpoint. Location publishes are broadcast to interested clients and to the admin dashboard. The backend aggregates pings into an internal proximity-indexed cache used for assignment heuristics and ETA estimation. To lower bandwidth cost and battery impact, the mobile app uses adaptive sampling and background task scheduling.
+
+\subsection{Shared-Ride Matching}
+Shared-ride logic groups compatible booking requests by spatiotemporal proximity and route compatibility. A matching service runs lightweight heuristics: it clusters open ride requests within a short time window, evaluates incremental route detours, and checks vehicle capacity. When the match is accepted, the booking records are updated to reference a shared-ride group with internal sequencing. The system is designed to remain fair — earlier requests are prioritized and drivers are presented with a consolidated route and passenger list.
+
+\subsection{Admin Dashboard and Monitoring}
+The admin web application allows operators to create and edit routes, view active vehicles on a live map overlay, and audit historical rides. Dashboard visualizations (made with Recharts) present ride volumes, average wait times, and driver utilization. The admin also receives alerts on system health through backend health endpoints and configurable thresholds.
+
+\section{System Architecture}
+This section describes the architecture and the responsibilities of each major subsystem.
+
+\subsection{High-level Overview}
+Ghoomo uses a modular monorepo structure with three workspaces: `app/` (React Native mobile clients), `backend/` (Node.js service with REST + WebSocket), and `admin/` (React + Vite admin dashboard). Persistence is provided by PostgreSQL (Supabase-compatible) while Firebase provides authentication services for the mobile clients. Real-time communication runs over WebSocket channels implemented on the backend.
+
+\subsection{Frontend}
+The mobile apps are built with Expo and React Native. The codebase uses Redux Toolkit for state management and a layered services directory for API and WebSocket clients. Key responsibilities:
+\begin{itemize}
+  \item Present maps (OpenStreetMap) and interactive routing UI.
+  \item Capture and report background location updates via Expo Task Manager.
+  \item Manage booking flows with optimistic UI updates and retry for network failures.
+  \item Handle push notifications via Expo Notifications to deliver critical alerts (driver arrival, ride assignment).
+\end{itemize}
+
+The admin web UI is a Vite-powered SPA implemented in React and styled with Tailwind CSS. It consumes the backend REST API and subscribes to WebSocket topics for live status.
+
+\subsection{Backend}
+The backend is written in Node.js and follows a modular, feature-oriented layout. Each module (e.g., `ride`, `sharedRide`, `bus`, `driver`) adheres to a controller-service-repository pattern. The server exposes:
+\begin{itemize}
+  \item REST endpoints for configuration, user profile operations, and booking creation.
+  \item WebSocket channels for ride and vehicle event propagation, implemented alongside HTTP on the same port for simplified local development.
+  \item Health and docs endpoints (`/health`, `/docs`, `/openapi.json`) for operational monitoring and integration.
+\end{itemize}
+
+The backend integrates with PostgreSQL through the `pg` library and is designed to be Supabase-compatible. Deployment targets include Vercel serverless functions for API routing and a standalone Node server for long-running development instances.
+
+\subsection{Database}
+PostgreSQL stores normalized domain entities. A migration-driven schema (scripts under `backend/src/db/migrations`) is used to keep the snapshot `schema.sql` in sync. Sample entities include `users`, `drivers`, `vehicles`, `routes`, `ride_requests`, `rides`, `shared_ride_groups`, and `ride_events` for an append-only history of state transitions.
+
+\subsection{APIs}
+Public API surfaces consist of REST endpoints for CRUD operations and subscription endpoints for WebSocket connections. Notable patterns:
+\begin{itemize}
+  \item Token-based authentication: mobile clients use Firebase-issued tokens which the backend validates and maps to local user profiles.
+  \item WebSocket topics: `ride:{rideId}`, `driver:{driverId}`, `route:{routeId}`, and `admin:live` are typical channels.
+  \item Backwards compatibility: the API keeps legacy paths such as `/api/rides` and `/api/bus-bookings` to ease integration.
+\end{itemize}
+
+\subsection{Real-time Components}
+Real-time components include the WebSocket server, a lightweight in-memory proximity index for matching and ETA estimation, and a publish-subscribe layer to route events to the appropriate clients. The system favors ephemeral, in-memory structures for quick decisions while using the authoritative PostgreSQL store for durable state and audit trails.
+
+\section{Workflow}
+This section details typical user and system workflows, describing interactions between components and expected state transitions.
+
+\subsection{User Ride Booking Flow}
+When a user initiates a booking, the mobile client first ensures authentication via Firebase, then issues a POST to `/api/rides` with origin, destination, desired pickup window, and ride-type preferences (single or shared). The backend validates the request, creates a `ride_request` and optionally triggers shared-ride matching. If immediate assignment is possible, the backend selects a driver candidate and emits an assignment event. The rider receives a confirmation screen with ETA and driver information. During driver approach, incremental location updates are streamed to the rider app via the `ride:{rideId}` WebSocket channel. On completion, the driver marks the ride complete, the backend settles the ride, and receipts or logs are published to the rider.
+
+\subsection{Driver Assignment Flow}
+Driver dispatch follows a prioritized candidate selection. The backend uses the proximity index and active driver availability table to select candidates who are both nearby and within capacity constraints. Assignment rules account for driver preferences, vehicle capacity, scheduled route obligations (for bus drivers), and fairness. The backend sends assignment notifications to the chosen driver via WebSocket and push notifications; drivers acknowledge assignments, after which the ride state moves to `accepted`. If the driver declines or times out, the backend reassigns following the candidate queue.
+
+\subsection{Bus Tracking Flow}
+Buses assigned to fixed routes report GPS pings at a configurable interval. The backend aggregates these into a route-level telemetry stream that the admin dashboard visualizes as a polyline with live markers. For scheduled bus bookings, the backend reconciles scheduled passengers, capacity, and actual arrival times to estimate adherence and inform passengers of delays.
+
+\subsection{Shared Ride Logic}
+Shared-ride matching is implemented as a near-real-time microservice within the backend. Open ride requests are examined in small windows (e.g., 30--90 seconds) to find clusters that can share a vehicle without exceeding a configurable maximum detour. The algorithm evaluates incremental route distance and time cost for all permutations that add the new request to an existing shared group. Accepted matches produce a `shared_ride_group` entity and update individual ride records to reference the group. Driver UI presents the consolidated pickup list and optimized sequence.
+
+\section{Use Cases / Work Cases}
+Here we describe representative user scenarios with concrete steps.
+
+\subsection{Student Booking a Ride}
+A student opens the Ghoomo app, authenticates via Firebase, and requests a ride from a dormitory to a lecture hall. The app estimates a fare, requests a pickup window, and offers `single` or `shared` options. The user selects `shared` to lower the fare. The backend creates a ride request and matches it with an ongoing group. The student receives a confirmation and a live map showing the vehicle approach. The driver picks up the student, follows the consolidated route, and completes the journey. The backend logs the trip, updates analytics, and the student receives a summary notification.
+
+\subsection{Shared Ride Participation}
+When two or more students request rides with compatible origins and destinations in short succession, the matching logic aggregates them into a shared-ride group. Each participant receives the same shared group details, including estimated pickup times for each passenger in sequence. Pricing reflects shared discounts, and riders can cancel within a penalty-free window configured by administrators.
+
+\subsection{Bus Tracking}
+An administrative operator launches the dashboard to confirm bus adherence. Route telemetry shows a bus behind schedule; the operator can notify impacted riders via push notifications or adjust subsequent pickup windows. Historical logs are used to analyze recurring delays at specific stops and refine route timing.
+
+\subsection{Admin Managing Routes}
+Admins can create, edit, and deactivate routes. Route creation includes a polyline definition, scheduled departure times, capacity, and driver assignments. Changes are versioned through migrations and reflected in the driver app after an update or through OTA mechanisms for static assets.
+
+\section{Database Design Overview}
+The database schema follows normalized relational modeling with simplified entity descriptions below.
+
+\subsection{Core Tables}
+\begin{description}[leftmargin=*]
+  \item[users] Primary user table storing profile metadata and references to external auth providers.
+  \item[drivers] Stores driver-related fields including license, associated `vehicle_id`, and status (available, enroute, offline).
+  \item[vehicles] Vehicle records with capacity, type, and current registration data.
+  \item[routes] Route definitions for scheduled bus services: polylines, stops, and schedule entries.
+  \item[ride_requests] Transient booking requests capturing origin, destination, requested time, and preferences.
+  \item[rides] Authoritative ride records produced when bookings are accepted and assigned to drivers; tracks lifecycle and final metrics.
+  \item[shared_ride_groups] Groups that reference multiple rides and a single assigned vehicle/driver.
+  \item[ride_events] Append-only timeline of events for each ride (assigned, accepted, started, location_ping, completed).
+\end{description}
+
+Foreign keys enforce referential integrity, and indices on geolocation columns support proximity queries. Audit trails are kept in `ride_events` to guarantee recoverability and to support analytics.
+
+\section{Challenges Faced}
+During development several practical and engineering challenges required trade-offs.
+
+\subsection{Live Location Scalability}
+Streaming high-frequency location pings from many vehicles places load on the real-time pipeline. To manage this, the system implements adaptive sampling where client-side logic increases interval when vehicle speed is low and reduces it while moving. On the backend, approximate in-memory indices are used for proximity without persistent writes for every ping.
+
+\subsection{Shared-Ride Matching Complexity}
+Exact optimization for arbitrary shared-ride matching is computationally expensive. The chosen heuristic-based approach prioritizes low-latency decisions and predictable experience over guaranteed global optimality. This results in good empirical utilization while keeping assignment latency low.
+
+\subsection{Authentication and Privacy}
+Integrating Firebase for authentication while using server-side sessions and role-based authorization required careful token validation and mapping to local user records. Privacy of location streams was enforced through scoped WebSocket topics and token-based subscriptions.
+
+\subsection{Offline Development Experience}
+Developers may lack a full Supabase instance locally. A JSON fallback store and seed scripts were implemented to enable realistic development without a live DB, but this required duplicating some migration logic and careful feature-flagging to ensure parity with production schema.
+
+\section{Improvements and Future Scope}
+Planned improvements and research directions include:
+
+\begin{enumerate}[leftmargin=*]
+  \item Introduce a dedicated matching service written in a compiled language (e.g., Go) for high-throughput shared-ride optimization.
+  \item Replace in-memory proximity indices with a geo-capable cache (e.g., Redis with geospatial support) to provide stronger scaling guarantees.
+  \item Extend analytics with a time-series store to analyze route performance and inform dynamic scheduling.
+  \item Implement predictive ETA models using historical telemetry and machine learning pipelines.
+  \item Add formal automated testing around timing-sensitive flows using integration tests and contract tests for WebSocket events.
+\end{enumerate}
+
+\section{Conclusion}
+Ghoomo demonstrates a pragmatic, developer-friendly approach to building a campus ride-sharing platform. By combining an Expo-managed mobile experience, a modular Node.js backend, and a React-based admin dashboard, the system addresses digitization, real-time tracking, seamless interaction, and efficient booking. The design balances operational requirements against engineering complexity, favoring robust heuristics and developer ergonomics. Future work will focus on improving scalability of the real-time pipeline, optimizing shared-ride matching, and enriching analytical capabilities to support data-driven route management.
+
+\section*{Acknowledgements}
+The Ghoomo project is the result of collaborative engineering efforts across mobile, backend, and web teams. This report synthesizes repository documentation and code-level structure as present in the monorepo layout.
+
+\vfill
+\noindent\textbf{Contact:} repository root and workspace README files contain setup, environment, and run commands.
+
+\end{document}

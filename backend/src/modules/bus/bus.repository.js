@@ -74,7 +74,7 @@ async function listBookings({ routeId, userId }) {
   const result = await query(
     `
     SELECT b.*, u.name AS user_name
-    FROM bus_bookings
+    FROM bus_bookings b
     LEFT JOIN users u ON u.id = b.user_id
     WHERE
       ($1::uuid IS NULL OR b.route_id = $1)

@@ -58,7 +58,10 @@ cp .env.example .env
 
 ```env
 # URL of the running Ghoomo backend
-VITE_API_URL=http://localhost:4000/api
+VITE_API_URL=http://127.0.0.1:4000/api
+
+# Optional proxy target if you keep VITE_API_URL relative (/api)
+VITE_BACKEND_ORIGIN=http://127.0.0.1:4000
 
 ```
 
@@ -71,7 +74,7 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
-The Vite dev server proxies `/api/*` to `http://localhost:4000` automatically, so no CORS issues during development.
+The Vite dev server proxies `/api/*` to the backend origin configured in `VITE_BACKEND_ORIGIN` when you use a relative `VITE_API_URL`. When `VITE_API_URL` is absolute, requests go directly to that backend host and do not depend on the proxy.
 
 ## Building for production
 

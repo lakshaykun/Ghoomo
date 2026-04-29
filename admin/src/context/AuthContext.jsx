@@ -50,7 +50,8 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const currentUser = await dashboardAPI.getCurrentUser();
+        const response = await dashboardAPI.getCurrentUser();
+        const currentUser = response.data;
 
         if (!isAllowedRole(currentUser?.role)) {
           throw new Error('Only admin and operator accounts can access this portal.');
@@ -85,7 +86,8 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       setLoading(true);
-      const { token, user: loggedInUser } = await dashboardAPI.login({ email, password });
+      const response = await dashboardAPI.login({ email, password });
+      const { token, user: loggedInUser } = response.data;
 
       if (!isAllowedRole(loggedInUser?.role)) {
         throw new Error('Only admin or operator accounts can sign in to this portal.');

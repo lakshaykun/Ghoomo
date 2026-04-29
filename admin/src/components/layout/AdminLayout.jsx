@@ -45,6 +45,11 @@ const ROUTE_META = {
     title: 'Popular Places',
     description: 'Manage campus landmarks and common pickup/drop points for quick selection.',
   },
+  '/bus-management': {
+    kicker: 'Fleet Logistics',
+    title: 'Bus Management',
+    description: 'Manage routes, stops, and schedules for the campus bus fleet.',
+  },
 };
 
 export default function AdminLayout() {
