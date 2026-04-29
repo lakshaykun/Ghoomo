@@ -20,6 +20,7 @@ router.patch(
 
 router.get("/bus/bookings", authenticate, controller.listBookings);
 router.post("/bus/bookings", authenticate, controller.createBooking);
+router.post("/bus/bookings/:bookingId/cancel", authenticate, controller.cancelBooking);
 router.patch(
   "/bus/bookings/:bookingId/status",
   authenticate,

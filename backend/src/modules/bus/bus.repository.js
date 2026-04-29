@@ -127,6 +127,21 @@ async function findBookingById(bookingId) {
   return result.rows[0] || null;
 }
 
+async function findActiveBookingByUserAndRoute(userId, routeId) {
+  const result = await query(
+    `
+    SELECT *
+    FROM bus_bookings
+    WHERE user_id = $1
+      AND route_id = $2
+      AND status != 'cancelled'
+    LIMIT 1
+    `,
+    [userId, routeId]
+  );
+  return result.rows[0] || null;
+}
+
 async function findStopByName(stopName) {
   const result = await query(
     `
@@ -423,6 +438,7 @@ module.exports = {
   createBooking,
   updateBookingStatus,
   findBookingById,
+  findActiveBookingByUserAndRoute,
   findStopByName,
   createStop,
   createRouteStop,

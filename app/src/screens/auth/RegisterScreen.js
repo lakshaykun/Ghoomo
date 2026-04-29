@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { Ionicons, AntDesign } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { registerUser, googleSignIn } from "../../store/slices/authSlice";
@@ -157,11 +157,14 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
         <ScrollView
           contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
@@ -328,7 +331,7 @@ export default function RegisterScreen({ navigation }) {
             <Button title={`Create ${form.role.charAt(0).toUpperCase() + form.role.slice(1)} Account`} onPress={handleRegister} loading={loading} variant="success" style={{ marginTop: 8 }} />
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
 
       {showGoogleSignUpModal && (
         <View style={styles.modalOverlay} pointerEvents="box-none">

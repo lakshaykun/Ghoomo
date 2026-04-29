@@ -101,6 +101,20 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
   });
 });
 
+const cancelBooking = asyncHandler(async (req, res) => {
+  // Riders can only cancel their own bookings; admins can cancel any
+  const userId = req.user?.role === "rider" || req.user?.role === "user"
+    ? req.user.id
+    : null; // null means admin bypass
+
+  const row = await service.cancelBooking(req.params.bookingId, userId);
+  res.status(200).json({
+    success: true,
+    message: "Bus booking cancelled",
+    data: row,
+  });
+});
+
 const addRouteStop = asyncHandler(async (req, res) => {
   const validation = validateRouteStopPayload(req.body);
   if (!validation.isValid) {
@@ -153,6 +167,7 @@ module.exports = {
   listBookings,
   createBooking,
   updateBookingStatus,
+  cancelBooking,
   addRouteStop,
   updateRouteLocation,
   getRouteTracking,

@@ -4,6 +4,8 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -25,6 +27,8 @@ const DEBOUNCE_MS = 380;
 const MIN_ZOOM = 9;
 const MAX_ZOOM = 18;
 const DEFAULT_REGION = { latitude: 30.7333, longitude: 76.7794, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+const MAP_HEIGHT_FULL = SCREEN_H * 0.42;
+const MAP_HEIGHT_COLLAPSED = SCREEN_H * 0.18;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -280,6 +284,7 @@ export default function LocationPicker({
   const [showPopular, setShowPopular] = useState(false);
   const [popularFor, setPopularFor] = useState(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   // ── Refs ──
   const mapRef = useRef(null);
@@ -287,12 +292,48 @@ export default function LocationPicker({
   const isProgrammaticRef = useRef(true); // Start true to skip initialRegion auto-fetch
   const skipNextReverseGeocodeRef = useRef(false);
 
+  // Map height animation: collapses when keyboard is open
+  const mapHeightAnim = useRef(new Animated.Value(MAP_HEIGHT_FULL)).current;
+
   // Sheet slide-up animation
   const sheetAnim = useRef(new Animated.Value(0)).current;
 
   // ── Animate sheet on mount ────────────────────────────────────────────────
   useEffect(() => {
     Animated.timing(sheetAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  }, []);
+
+  // ── Keyboard listeners — collapse map height when keyboard appears ─────────
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const onShow = () => {
+      setKeyboardVisible(true);
+      Animated.spring(mapHeightAnim, {
+        toValue: MAP_HEIGHT_COLLAPSED,
+        useNativeDriver: false,
+        speed: 20,
+        bounciness: 0,
+      }).start();
+    };
+
+    const onHide = () => {
+      setKeyboardVisible(false);
+      Animated.spring(mapHeightAnim, {
+        toValue: MAP_HEIGHT_FULL,
+        useNativeDriver: false,
+        speed: 14,
+        bounciness: 0,
+      }).start();
+    };
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   // ── Auto-zoom to route ──────────────────────────────────────────────────
@@ -516,9 +557,13 @@ export default function LocationPicker({
   }
 
   return (
-    <View style={[styles.container, style]}>
-      {/* ── MAP ── */}
-      <View style={styles.mapArea}>
+    <KeyboardAvoidingView
+      style={[styles.container, style]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      {/* ── MAP (collapses when keyboard is visible) ── */}
+      <Animated.View style={[styles.mapArea, { height: mapHeightAnim }]}>
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
@@ -615,19 +660,22 @@ export default function LocationPicker({
         <View style={styles.attribution}>
           <Text style={styles.attributionText}>© OpenStreetMap, © CARTO</Text>
         </View>
-      </View>
+      </Animated.View>
 
       {/* ── BOTTOM SHEET ── */}
       <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslate }] }]}>
         <View style={styles.sheetHandle} />
 
-        <Text style={styles.sheetTitle}>
-          Setting{" "}
-          <Text style={{ color: activeColor }}>
-            {activeField === "pickup" ? "Pickup" : "Drop"}
-          </Text>{" "}
-          location
-        </Text>
+        {/* Only show title when keyboard is hidden — saves space */}
+        {!keyboardVisible && (
+          <Text style={styles.sheetTitle}>
+            Setting{" "}
+            <Text style={{ color: activeColor }}>
+              {activeField === "pickup" ? "Pickup" : "Drop"}
+            </Text>{" "}
+            location
+          </Text>
+        )}
 
         {/* Pickup field */}
         <LocationInput
@@ -688,7 +736,7 @@ export default function LocationPicker({
         onClose={() => setShowPopular(false)}
         onSelect={handlePopularSelect}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -701,8 +749,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   mapArea: {
-    flex: 1,
-    minHeight: 260,
+    width: "100%",
+    minHeight: MAP_HEIGHT_COLLAPSED,
+    overflow: "hidden",
   },
   // ── Center pin ──
   centerPin: {
@@ -775,8 +824,6 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
     paddingBottom: Platform.OS === "ios" ? 32 : SPACING.lg,
     ...SHADOWS.card,
-    // min height ~30% of screen
-    minHeight: SCREEN_H * 0.3,
   },
   sheetHandle: {
     width: 38,

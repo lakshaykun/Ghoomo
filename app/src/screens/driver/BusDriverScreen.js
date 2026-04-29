@@ -79,7 +79,7 @@ export default function BusDriverScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
           />
         )}
-      </div>
+      </View>
     </SafeAreaView>
   );
 }

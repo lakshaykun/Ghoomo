@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, ScrollView, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, Platform } from "react-native";
 import { Ionicons, AntDesign } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser, googleSignIn } from "../../store/slices/authSlice";
@@ -55,89 +55,102 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.scroll}>
-          <View style={styles.hero}>
-            <View style={styles.bgOrb} pointerEvents="none" />
-            <View style={styles.bgOrbAlt} pointerEvents="none" />
-            <View style={styles.logoRow}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="car-sport" size={28} color={COLORS.primary} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.hero}>
+              <View style={styles.bgOrb} pointerEvents="none" />
+              <View style={styles.bgOrbAlt} pointerEvents="none" />
+              <View style={styles.logoRow}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="car-sport" size={28} color={COLORS.primary} />
+                </View>
+                <Text style={styles.appName}>Ghoomo</Text>
               </View>
-              <Text style={styles.appName}>Ghoomo</Text>
+              <Text style={styles.greeting}>Welcome back</Text>
+              <Text style={styles.sub}>Sign in to manage rides, track trips, and keep campus transport flowing.</Text>
             </View>
-            <Text style={styles.greeting}>Welcome back</Text>
-            <Text style={styles.sub}>Sign in to manage rides, track trips, and keep campus transport flowing.</Text>
-          </View>
 
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Sign in</Text>
-            <Text style={styles.formSub}>Use your registered email and password.</Text>
-            <View style={styles.field}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={styles.inputWrap}>
-                <Ionicons name="mail" size={20} color={COLORS.gray} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="you@example.com"
-                  placeholderTextColor={COLORS.gray}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  textContentType="emailAddress"
-                  returnKeyType="next"
-                />
+            <View style={styles.formCard}>
+              <Text style={styles.formTitle}>Sign in</Text>
+              <Text style={styles.formSub}>Use your registered email and password.</Text>
+              <View style={styles.field}>
+                <Text style={styles.label}>Email Address</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="mail" size={20} color={COLORS.gray} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="you@example.com"
+                    placeholderTextColor={COLORS.gray}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="emailAddress"
+                    returnKeyType="next"
+                  />
+                </View>
               </View>
-            </View>
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrap}>
-                <Ionicons name="lock-closed" size={20} color={COLORS.gray} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter password"
-                  placeholderTextColor={COLORS.gray}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  textContentType="password"
-                  returnKeyType="done"
-                />
+              <View style={styles.field}>
+                <Text style={styles.label}>Password</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="lock-closed" size={20} color={COLORS.gray} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter password"
+                    placeholderTextColor={COLORS.gray}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    textContentType="password"
+                    returnKeyType="done"
+                    onSubmitEditing={handleLogin}
+                  />
+                </View>
               </View>
+              {error && <Text style={styles.error}>{error}</Text>}
+
+              <Button title="Sign In" onPress={handleLogin} loading={loading} style={{ marginTop: 8 }} />
+
+              <View style={styles.dividerContainer}>
+                <View style={styles.divider} />
+                <Text style={styles.dividerText}>Or</Text>
+                <View style={styles.divider} />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+                onPress={handleGoogleSignInClick}
+                disabled={googleLoading}
+                activeOpacity={0.8}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={COLORS.text} size="small" />
+                ) : (
+                  <>
+                    <AntDesign name="google" size={20} color="#EA4335" />
+                    <Text style={styles.googleButtonText}>Sign in with Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => navigation.navigate("Register")} style={styles.registerRow}>
+                <Text style={styles.registerText}>Don't have an account? </Text>
+                <Text style={styles.registerLink}>Register</Text>
+              </TouchableOpacity>
             </View>
-            {error && <Text style={styles.error}>{error}</Text>}
-
-            <Button title="Sign In" onPress={handleLogin} loading={loading} style={{ marginTop: 8 }} />
-
-            <View style={styles.dividerContainer}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>Or</Text>
-              <View style={styles.divider} />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
-              onPress={handleGoogleSignInClick}
-              disabled={googleLoading}
-              activeOpacity={0.8}
-            >
-              {googleLoading ? (
-                <ActivityIndicator color={COLORS.text} size="small" />
-              ) : (
-                <>
-                  <AntDesign name="google" size={20} color="#EA4335" />
-                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => navigation.navigate("Register")} style={styles.registerRow}>
-              <Text style={styles.registerText}>Don't have an account? </Text>
-              <Text style={styles.registerLink}>Register</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
       {showGoogleSignInModal && (
         <View style={styles.modalOverlay} pointerEvents="box-none">
@@ -212,7 +225,7 @@ export default function LoginScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.grayLight },
-  scroll: { flex: 1, paddingBottom: SPACING.xl },
+  scrollContent: { flexGrow: 1, paddingBottom: SPACING.xl },
   hero: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.xl + 4, paddingBottom: SPACING.lg, overflow: "hidden" },
   bgOrb: {
     position: "absolute",

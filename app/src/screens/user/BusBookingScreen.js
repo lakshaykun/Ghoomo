@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -41,6 +41,7 @@ export default function BusBookingScreen({ navigation }) {
   const [step, setStep] = useState("routes");
   const [lastBooking, setLastBooking] = useState(null);
   const [now, setNow] = useState(new Date());
+  const [isBooking, setIsBooking] = useState(false);
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 30000);
@@ -99,7 +100,7 @@ export default function BusBookingScreen({ navigation }) {
   }, [routes, now, busBookings]);
 
   const handleBook = async () => {
-    if (!selectedRoute) return;
+    if (!selectedRoute || isBooking) return;
 
     const existingBooking = getUserRouteBooking(selectedRoute.id);
     if (existingBooking) {
@@ -124,6 +125,7 @@ export default function BusBookingScreen({ navigation }) {
       return;
     }
 
+    setIsBooking(true);
     try {
       const bookingId = createBusBookingId();
       const booking = await dispatch(
@@ -138,7 +140,7 @@ export default function BusBookingScreen({ navigation }) {
 
       sendLocalNotification({
         key: booking.isWaiting ? `bus-waiting-${booking.id}` : `bus-booking-${booking.id}`,
-        title: booking.isWaiting ? "Added to waiting list" : "Bus seat confirmed",
+        title: booking.isWaiting ? "Added to waiting list" : "Bus seat confirmed! ✅",
         body: booking.isWaiting
           ? `${selectedRoute.name} waitlist position ${booking.waitlistPosition} is reserved.`
           : `${selectedRoute.name} seat ${booking.seatNumber} is booked for you.`,
@@ -153,12 +155,20 @@ export default function BusBookingScreen({ navigation }) {
         isWaiting: booking.isWaiting,
         routeName: selectedRoute.name,
       });
+      setStep("success");
     } catch (error) {
-      Alert.alert("Booking Failed", error.message || "Unable to book seat right now.");
-      return;
+      // Check for duplicate booking error specifically
+      if (error.message?.includes("already have an active booking") || error.message?.includes("DUPLICATE")) {
+        Alert.alert(
+          "Already Booked ⚠️",
+          "You already have an active booking for this bus route. You cannot book the same bus twice."
+        );
+      } else {
+        Alert.alert("Booking Failed", error.message || "Unable to book seat right now.");
+      }
+    } finally {
+      setIsBooking(false);
     }
-
-    setStep("success");
   };
 
   const handleCancel = (booking) => {
@@ -178,16 +188,22 @@ export default function BusBookingScreen({ navigation }) {
       {
         text: "Yes, Cancel",
         style: "destructive",
-        onPress: () => {
-          dispatch(cancelBusSeatBooking(booking.id)).catch((cancelError) => {
-            Alert.alert("Cancel Failed", cancelError.message || "Unable to cancel booking.");
-          });
-          sendLocalNotification({
-            key: `bus-cancel-${booking.id}`,
-            title: "Bus booking cancelled",
-            body: `${route?.name || "Your route"} booking has been cancelled.`,
-            data: { bookingId: booking.id, routeId: booking.routeId, type: "bus" },
-          }).catch(() => {});
+        onPress: async () => {
+          try {
+            await dispatch(cancelBusSeatBooking(booking.id));
+            sendLocalNotification({
+              key: `bus-cancel-${booking.id}`,
+              title: "Bus booking cancelled",
+              body: `${route?.name || "Your route"} booking has been cancelled.`,
+              data: { bookingId: booking.id, routeId: booking.routeId, type: "bus" },
+            }).catch(() => {});
+            Alert.alert(
+              "Booking Cancelled",
+              `Your booking for ${route?.name || "this route"} has been successfully cancelled.`
+            );
+          } catch (cancelError) {
+            Alert.alert("Cancel Failed", cancelError.message || "Unable to cancel booking. Please try again.");
+          }
         },
       },
     ]);
@@ -523,9 +539,10 @@ export default function BusBookingScreen({ navigation }) {
               </Text>
             </View>
             <Button
-              title="Book Ticket"
+              title={isBooking ? "Booking..." : "Book Ticket"}
               onPress={handleBook}
-              disabled={occupancy.availableSeatCount > 0 && !selectedSeatNumber}
+              loading={isBooking}
+              disabled={(occupancy.availableSeatCount > 0 && !selectedSeatNumber) || isBooking}
             />
           </View>
         ) : null}

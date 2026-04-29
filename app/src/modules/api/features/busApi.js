@@ -172,10 +172,8 @@ export async function updateBusRouteLocationRemote(routeId, payload = {}) {
 }
 
 export async function cancelBusBookingRemote(bookingId) {
-  await httpClient.patch(`/api/bus/bookings/${bookingId}/status`, {
-    body: {
-      status: "cancelled",
-    },
+  await httpClient.post(`/api/bus/bookings/${bookingId}/cancel`, {
+    body: {},
   });
 
   return { success: true };

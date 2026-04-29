@@ -66,14 +66,55 @@ async function createBooking(payload) {
     throw new AppError("Bus route not found", 404, "BUS_ROUTE_NOT_FOUND");
   }
 
-  // Auto-allocate seat or handle waitlist if needed (optional logic here)
-  // For now, simple creation
+  // Prevent duplicate booking: a user cannot book the same bus more than once
+  const existingBooking = await repository.findActiveBookingByUserAndRoute(
+    payload.userId,
+    payload.routeId
+  );
+  if (existingBooking) {
+    throw new AppError(
+      "You already have an active booking for this bus route.",
+      409,
+      "DUPLICATE_BUS_BOOKING"
+    );
+  }
+
   return repository.createBooking({
     routeId: payload.routeId,
     userId: payload.userId,
     seatNumber: payload.seatNumber,
     status: payload.status || "pending",
     fareAmount: route.fare_per_seat || 0,
+  });
+}
+
+async function cancelBooking(bookingId, userId) {
+  const booking = await repository.findBookingById(bookingId);
+  if (!booking) {
+    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
+  }
+
+  // Only the booking owner can cancel (unless admin – handled by role in controller)
+  if (userId && booking.user_id !== userId) {
+    throw new AppError("Not authorised to cancel this booking", 403, "FORBIDDEN");
+  }
+
+  if (booking.status === "cancelled") {
+    throw new AppError("Booking is already cancelled", 400, "ALREADY_CANCELLED");
+  }
+
+  if (booking.status === "verified") {
+    throw new AppError(
+      "Verified tickets cannot be cancelled.",
+      400,
+      "TICKET_ALREADY_VERIFIED"
+    );
+  }
+
+  return repository.updateBookingStatus({
+    bookingId,
+    status: "cancelled",
+    verifiedBy: null,
   });
 }
 
@@ -132,6 +173,7 @@ module.exports = {
   listApprovedBusDrivers,
   listBookings,
   createBooking,
+  cancelBooking,
   updateBookingStatus,
   addRouteStop,
   updateRouteLocation,
