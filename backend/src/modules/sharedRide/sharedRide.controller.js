@@ -1,25 +1,11 @@
 const { AppError, asyncHandler } = require("../../common/utils/helpers");
 const service = require("./sharedRide.service");
-const {
-  validateCreateSharedRidePayload,
-  validateJoinSharedRidePayload,
-  validateSharedRideStatusPayload,
-} = require("./sharedRide.schema");
+const { validateSharedRideStatusPayload, validateJoinSharedRidePayload } = require("./sharedRide.schema");
 
-const createSharedRide = asyncHandler(async (req, res) => {
-  const validation = validateCreateSharedRidePayload(req.body);
-  if (!validation.isValid) {
-    throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
-  }
-
-  const row = await service.createSharedRide(req.body);
-  res.status(201).json({
-    success: true,
-    message: "Shared ride created",
-    data: row,
-  });
-});
-
+/**
+ * GET /api/shared-rides?status=open
+ * List shared rides (defaults to OPEN + SCHEDULED).
+ */
 const listSharedRides = asyncHandler(async (req, res) => {
   const rows = await service.listSharedRides(req.query.status);
   res.status(200).json({
@@ -28,6 +14,10 @@ const listSharedRides = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/shared-rides/:sharedRideId
+ * Get a single shared ride including participant list.
+ */
 const getSharedRide = asyncHandler(async (req, res) => {
   const row = await service.getSharedRide(req.params.sharedRideId);
   res.status(200).json({
@@ -36,6 +26,10 @@ const getSharedRide = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * POST /api/shared-rides/:sharedRideId/join
+ * Join a shared ride.
+ */
 const joinSharedRide = asyncHandler(async (req, res) => {
   const validation = validateJoinSharedRidePayload(req.body);
   if (!validation.isValid) {
@@ -50,6 +44,10 @@ const joinSharedRide = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * PATCH /api/shared-rides/:sharedRideId/status
+ * Update shared ride status (driver/admin only).
+ */
 const updateStatus = asyncHandler(async (req, res) => {
   const validation = validateSharedRideStatusPayload(req.body);
   if (!validation.isValid) {
@@ -65,7 +63,6 @@ const updateStatus = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  createSharedRide,
   listSharedRides,
   getSharedRide,
   joinSharedRide,

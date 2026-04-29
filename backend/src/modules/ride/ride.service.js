@@ -2,6 +2,7 @@ const { AppError, calculateDistanceKm, toFiniteNumber } = require("../../common/
 const driverRepository = require("../driver/driver.repository");
 const { findNearestDriver } = require("../driver/driver.service");
 const repository = require("./ride.repository");
+const { withTransaction } = require("../../config/db");
 const { broadcastToDriverUsers, broadcastToUser, updateDriverSocketInfo } = require("../../common/utils/socket");
 const { calculateFare } = require("./rateCard");
 
@@ -17,7 +18,13 @@ function normalizeRideRequestPayload(payload = {}) {
     dropLatitude: payload.dropLatitude ?? drop.latitude,
     dropLongitude: payload.dropLongitude ?? drop.longitude,
     vehicleType: payload.vehicleType || payload.rideType || null,
-    isShared: Boolean(payload.isShared),
+    rideType: payload.rideType || (payload.isShared ? 'shared' : 'solo'),
+    isScheduled: Boolean(payload.isScheduled) || (payload.rideType === 'shared' || payload.isShared === true),
+    scheduledAt: payload.scheduledAt || null,
+    acceptanceDeadline: payload.acceptanceDeadline || null,
+    minVehicleCapacityAllowed: payload.minVehicleCapacityAllowed ? parseInt(payload.minVehicleCapacityAllowed, 10) : null,
+    joinAllowedUntil: payload.joinAllowedUntil || null,
+    passengersCount: payload.passengersCount ? parseInt(payload.passengersCount, 10) : 1,
     expiresAt: payload.expiresAt || null,
   };
 }
@@ -74,16 +81,81 @@ async function createRide(studentId, payload) {
     pickupLongitude,
     dropLatitude: Number(normalized.dropLatitude),
     dropLongitude: Number(normalized.dropLongitude),
-    isShared: Boolean(normalized.isShared),
+    rideType: normalized.rideType,
+    isScheduled: normalized.isScheduled,
+    scheduledAt: normalized.scheduledAt,
+    acceptanceDeadline: normalized.acceptanceDeadline,
+    minVehicleCapacityAllowed: normalized.minVehicleCapacityAllowed,
+    joinAllowedUntil: normalized.joinAllowedUntil,
     vehicleType: normalized.vehicleType,
     estimatedFare: tripQuote.estimatedFare,
     estimatedDistanceKm: tripQuote.distanceKm,
     expiresAt: normalized.expiresAt,
   });
 
-  const logMsgStart = `[${new Date().toISOString()}] [RideService] Dispatching ride request: requestId=${request.id}, vehicleType=${normalized.vehicleType}\n`;
-  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsgStart);
+  const isSharedOrScheduled = normalized.rideType === 'shared' || normalized.isScheduled;
 
+  if (isSharedOrScheduled) {
+    const ride = await repository.createRideWithoutDriver({
+      requestId: request.id,
+      studentId: studentId,
+      pickupLocation: String(normalized.pickupLocation).trim(),
+      dropLocation: String(normalized.dropLocation).trim(),
+      pickupLatitude,
+      pickupLongitude,
+      dropLatitude: Number(normalized.dropLatitude),
+      dropLongitude: Number(normalized.dropLongitude),
+      fare: tripQuote.estimatedFare,
+      distance: tripQuote.distanceKm,
+      rideType: normalized.rideType,
+      isScheduled: normalized.isScheduled,
+      scheduledAt: normalized.scheduledAt,
+      acceptanceDeadline: normalized.acceptanceDeadline,
+      minVehicleCapacityAllowed: normalized.minVehicleCapacityAllowed,
+      joinAllowedUntil: normalized.joinAllowedUntil,
+      vehicleType: normalized.vehicleType,
+    });
+
+    // Add the creator as the first participant
+    await participantsRepo.addParticipantToRide({
+      rideId: ride.id,
+      userId: studentId,
+      passengersCount: normalized.passengersCount,
+      pickupLocation: String(normalized.pickupLocation).trim(),
+      dropLocation: String(normalized.dropLocation).trim(),
+      pickupLatitude,
+      pickupLongitude,
+      dropLatitude: Number(normalized.dropLatitude),
+      dropLongitude: Number(normalized.dropLongitude),
+    });
+
+    // Set participant as creator
+    const { query } = require("../../config/db");
+    await query(`UPDATE ride_participants SET is_creator = TRUE WHERE ride_id = $1 AND user_id = $2`, [ride.id, studentId]);
+
+    // For scheduled rides, we don't automatically broadcast to all available drivers instantly unless we want to, 
+    // but the prompt says: "Scheduled rides are visible to drivers immediately".
+    // We can still broadcast them.
+    const candidateDriverUserIds = await repository.listEligibleDriverUserIdsForRequest({
+      pickupLatitude,
+      pickupLongitude,
+      vehicleType: normalized.vehicleType || tripQuote.vehicleType,
+      limit: 25,
+    });
+
+    broadcastToDriverUsers(candidateDriverUserIds, "new_scheduled_ride", {
+      ride,
+      tripQuote,
+    });
+
+    // Record candidates
+    await repository.createRideCandidates(request.id, candidateDriverUserIds);
+    await repository.updateRideRequest(request.id, { notified_driver_count: candidateDriverUserIds.length });
+
+    return { ...ride, is_ride: true };
+  }
+
+  // Standard Solo Instant Ride logic
   // Build candidates from DB-first eligibility so assignment does not depend on socket timing.
   const candidateDriverUserIds = await repository.listEligibleDriverUserIdsForRequest({
     pickupLatitude,
@@ -98,10 +170,6 @@ async function createRide(studentId, payload) {
     tripQuote,
   });
   const notifiedCount = candidateDriverUserIds.length;
-
-  const logMsgEnd = `[${new Date().toISOString()}] [RideService] Candidates=${notifiedCount}, delivered=${deliveredDriverUserIds.length}\n`;
-  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsgEnd);
-
   // Record candidates in DB so they appear in driver dashboard
   await repository.createRideCandidates(request.id, candidateDriverUserIds);
 
@@ -158,6 +226,38 @@ async function cancelRideRequest(requestId, studentId) {
   return updatedRide;
 }
 
+const participantsRepo = require("./ride.participants.repository");
+
+async function joinSharedRide(rideId, userId, payload) {
+  const normalized = normalizeRideRequestPayload(payload);
+  const participant = await participantsRepo.addParticipantToRide({
+    rideId,
+    userId,
+    passengersCount: normalized.passengersCount || 1,
+    pickupLocation: String(normalized.pickupLocation).trim(),
+    dropLocation: String(normalized.dropLocation).trim(),
+    pickupLatitude: Number(normalized.pickupLatitude),
+    pickupLongitude: Number(normalized.pickupLongitude),
+    dropLatitude: Number(normalized.dropLatitude),
+    dropLongitude: Number(normalized.dropLongitude),
+  });
+
+  const ride = await repository.getRideById(rideId);
+  const participants = await participantsRepo.getParticipants(rideId);
+  broadcastToUser(ride.student_id, "participant_added", { ride, participants });
+  // Could broadcast to all participants as requested
+  return { participant, ride };
+}
+
+async function leaveSharedRide(rideId, userId) {
+  await participantsRepo.removeParticipantFromRide({ rideId, userId });
+  const ride = await repository.getRideById(rideId);
+  const participants = await participantsRepo.getParticipants(rideId);
+  // Re-calculate fare and broadcast
+  broadcastToUser(ride.student_id, "participant_removed", { ride, participants });
+  return { success: true };
+}
+
 async function assignDriver(requestId, payload) {
   const driver = await driverRepository.findDriverById(payload.driverId);
   if (!driver) {
@@ -187,6 +287,90 @@ async function assignDriver(requestId, payload) {
   }
 
   return ride;
+}
+
+async function acceptRide(rideId, driverUserId, payload) {
+  // 1. Fetch driver profile to get vehicle info
+  const driver = await driverRepository.findDriverByUserId(driverUserId);
+  if (!driver) throw new AppError("Driver not found", 404, "DRIVER_NOT_FOUND");
+
+  // 2. Lock and fetch ride, then accept atomically
+  const updatedRide = await withTransaction(async (client) => {
+    const rideResult = await client.query(`SELECT * FROM rides WHERE id = $1 FOR UPDATE`, [rideId]);
+    const ride = rideResult.rows[0];
+
+    if (!ride) throw new AppError("Ride not found", 404, "RIDE_NOT_FOUND");
+    if (!['OPEN', 'SCHEDULED'].includes(ride.status)) {
+      throw new AppError("Ride is no longer available to accept", 400, "RIDE_UNAVAILABLE");
+    }
+
+    // 3. Check total passengers vs driver vehicle capacity
+    const partsResult = await client.query(
+      `SELECT COALESCE(SUM(passengers_count), 0)::int as total_passengers FROM ride_participants WHERE ride_id = $1 AND status != 'cancelled'`,
+      [rideId]
+    );
+    const totalPassengers = partsResult.rows[0].total_passengers || 0;
+    const vehicleSeats = payload?.vehicleSeats || driver.vehicle_seats || 4;
+
+    if (totalPassengers > vehicleSeats && !payload?.forceAcceptPartial) {
+      throw new AppError(
+        `Passenger count (${totalPassengers}) exceeds your vehicle capacity (${vehicleSeats}). Use forceAcceptPartial=true to confirm.`,
+        400,
+        "PARTIAL_ACCEPTANCE_REQUIRED"
+      );
+    }
+
+    // 4. Generate OTP for verification
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // 5. Update the ride row
+    const updatedResult = await client.query(
+      `
+      UPDATE rides
+      SET
+        status = 'ACCEPTED',
+        driver_id = $1,
+        vehicle_seats_snapshot = $2,
+        otp = $3,
+        updated_at = NOW()
+      WHERE id = $4
+      RETURNING *
+      `,
+      [driver.id, vehicleSeats, otp, rideId]
+    );
+
+    const updatedRideRow = updatedResult.rows[0];
+
+    // 6. Update driver state
+    await client.query(
+      `UPDATE drivers SET availability_status = 'on_ride', active_ride_id = $1, updated_at = NOW() WHERE id = $2`,
+      [rideId, driver.id]
+    );
+
+    // 7. Mark the ride_request as matched
+    if (updatedRideRow.request_id) {
+      await client.query(
+        `UPDATE ride_requests SET status = 'matched', locked = TRUE, updated_at = NOW() WHERE id = $1`,
+        [updatedRideRow.request_id]
+      );
+    }
+
+    return updatedRideRow;
+  });
+
+  // 8. Fetch full ride details with driver info
+  const fullRide = await repository.getRideById(rideId);
+
+  // 9. Broadcast to the ride creator
+  broadcastToUser(updatedRide.student_id, "ride_accepted", { ride: fullRide || updatedRide });
+
+  // 10. Update socket state — driver is now busy
+  updateDriverSocketInfo(driverUserId, {
+    isAvailable: false,
+    vehicleType: driver.vehicle_type || driver.vehicleType,
+  });
+
+  return fullRide || updatedRide;
 }
 
 async function getRide(rideId) {
@@ -297,6 +481,17 @@ async function rejectRideRequest(requestId, driverId) {
   return updated;
 }
 
+async function getAvailableSharedRides(query = {}) {
+  return repository.getAvailableSharedRides(query);
+}
+
+async function processStaleRides() {
+  const expiredRides = await repository.expireStaleRides();
+  for (const ride of expiredRides) {
+    broadcastToUser(ride.student_id, "ride_expired", { ride });
+  }
+}
+
 module.exports = {
   normalizeRideRequestPayload,
   getQuote,
@@ -311,4 +506,9 @@ module.exports = {
   verifyRideOtp,
   rateRide,
   rejectRideRequest,
+  joinSharedRide,
+  leaveSharedRide,
+  getAvailableSharedRides,
+  acceptRide,
+  processStaleRides
 };

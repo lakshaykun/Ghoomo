@@ -166,6 +166,10 @@ async function respondToCandidate(userId, requestId, status) {
   return candidate;
 }
 
+async function getScheduledRides() {
+  return repository.listScheduledRides();
+}
+
 module.exports = {
   registerDriver,
   getDriverProfile,
@@ -176,4 +180,5 @@ module.exports = {
   listCandidateRequests,
   getActiveRide,
   respondToCandidate,
+  getScheduledRides,
 };

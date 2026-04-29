@@ -64,6 +64,18 @@ export async function getDriverCandidateRequests() {
     : [];
 }
 
+export async function getDriverScheduledRides() {
+  const rows = await httpClient.get("/api/drivers/scheduled-rides");
+  return Array.isArray(rows) ? rows.map(row => normalizeRide(row)) : [];
+}
+
+export async function acceptScheduledRide(rideId, payload = {}) {
+  const row = await httpClient.post(`/api/rides/${rideId}/accept`, {
+    body: payload
+  });
+  return normalizeRide(row);
+}
+
 export async function getDriverActiveRide() {
   const row = await httpClient.get("/api/drivers/me/active-ride");
   if (!row) {
@@ -102,11 +114,12 @@ export async function respondToCandidateRequest(requestId, status) {
 }
 
 export async function buildDriverDashboard(driverUserId) {
-  const [driverProfile, candidateRequests, backendActiveRide, historyRes] = await Promise.all([
+  const [driverProfile, candidateRequests, backendActiveRide, historyRes, scheduledRes] = await Promise.all([
     getDriverProfile(),
     getDriverCandidateRequests(),
     getDriverActiveRide(),
     httpClient.get("/api/rides/history"),
+    getDriverScheduledRides().catch(() => []),
   ]);
 
   console.log("[DriverApi] Raw Profile:", driverProfile);
@@ -170,6 +183,7 @@ export async function buildDriverDashboard(driverUserId) {
     activeRide,
     assignedRides,
     completedRides,
+    scheduledRides: scheduledRes || [],
     stats: buildDriverStats(completedRides),
   };
 }

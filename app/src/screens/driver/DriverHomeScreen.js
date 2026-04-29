@@ -208,6 +208,11 @@ export default function DriverHomeScreen({ navigation }) {
       });
   };
 
+  const handleGoToScheduled = () => {
+    // ScheduledRequests is now a bottom tab, so navigate via the tab navigator
+    navigation.getParent()?.navigate("ScheduledRequests");
+  };
+
   const assignedRides = dashboard?.assignedRides || [];
   const activeRide =
     dashboard?.activeRide ||
@@ -216,18 +221,9 @@ export default function DriverHomeScreen({ navigation }) {
     assignedRides.find((ride) => ride.sourceType === "ride" && ride.status === BOOKING_STATUS.ACCEPTED) ||
     null;
   const completedRides = dashboard?.completedRides || [];
+  const scheduledRides = dashboard?.scheduledRides || [];
   const driverProfile = dashboard?.driver || user || {};
   const stats = dashboard?.stats || { todayEarnings: 0, ridesToday: 0, rating: user?.rating || 0 };
-
-  useEffect(() => {
-    console.log("[DriverHome] State check:", {
-      isOnline,
-      dashboardOnline: dashboard?.online,
-      userOnline: user?.online,
-      userId: user?.id,
-      hasDashboard: !!dashboard
-    });
-  }, [isOnline, dashboard?.online, user?.online]);
 
   useEffect(() => {
     if (activeRide?.status && [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ARRIVED, BOOKING_STATUS.OTP_VERIFIED, BOOKING_STATUS.IN_PROGRESS].includes(activeRide.status)) {
@@ -236,7 +232,6 @@ export default function DriverHomeScreen({ navigation }) {
       const destination = isHeadingToPickup ? activeRide.pickup : activeRide.drop;
 
       if (source?.latitude && source?.longitude && destination?.latitude && destination?.longitude) {
-        // Only fetch if they are different enough to matter (approx > 15m)
         const dLat = Math.abs(source.latitude - destination.latitude);
         const dLon = Math.abs(source.longitude - destination.longitude);
         if (dLat < 0.00015 && dLon < 0.00015) {
@@ -394,31 +389,75 @@ export default function DriverHomeScreen({ navigation }) {
                 <Card elevated style={styles.assignmentCard}>
                   <View style={styles.assignmentHeader}>
                     <View style={{ flex: 1, marginRight: SPACING.md }}>
-                      <Text style={styles.assignmentTitle} numberOfLines={1}>{activeRide.pickup?.name}</Text>
-                      <Text style={styles.assignmentSubtitle} numberOfLines={1}>To: {activeRide.drop?.name}</Text>
+                      <Text style={styles.assignmentTitle} numberOfLines={1}>
+                        {activeRide.pickup?.name}
+                      </Text>
+                      <Text style={styles.assignmentSubtitle} numberOfLines={1}>
+                        → {activeRide.drop?.name}
+                      </Text>
                     </View>
                     <Badge status={activeRide.status} />
                   </View>
+
+                  {/* Schedule badge */}
+                  {activeRide.isScheduled && activeRide.scheduledAt ? (
+                    <View style={styles.scheduledBadgeRow}>
+                      <Ionicons name="time" size={13} color={COLORS.primary} />
+                      <Text style={styles.scheduledBadgeText}>
+                        Scheduled for{" "}
+                        {new Date(activeRide.scheduledAt).toLocaleString([], {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </Text>
+                    </View>
+                  ) : null}
+
                   <View style={styles.assignmentMetaRow}>
-                    <Text style={styles.assignmentMeta}>Fare: ₹{activeRide.fare}</Text>
+                    <Text style={styles.assignmentMeta}>
+                      ₹{Number(activeRide.fare || 0).toFixed(0)}
+                    </Text>
+                    <Text style={styles.assignmentMeta}>
+                      {activeRide.rideType?.toUpperCase() || "AUTO"}
+                    </Text>
                     {routeData && routeData.duration !== undefined ? (
                       <>
-                        <Text style={styles.assignmentMeta}>{Number(routeData.distance / 1000 || 0).toFixed(1)} km</Text>
-                        <Text style={styles.assignmentMeta}>{Math.round(routeData.duration / 60)} min</Text>
+                        <Text style={styles.assignmentMeta}>
+                          {Number(routeData.distance / 1000 || 0).toFixed(1)} km
+                        </Text>
+                        <Text style={styles.assignmentMeta}>
+                          {Math.round(routeData.duration / 60)} min
+                        </Text>
                       </>
                     ) : (
-                      <>
-                        <Text style={styles.assignmentMeta}>{activeRide.distance} km</Text>
-                        <Text style={styles.assignmentMeta}>{activeRide.durationMinutes} min</Text>
-                      </>
+                      <Text style={styles.assignmentMeta}>
+                        {activeRide.distance} km
+                      </Text>
                     )}
                   </View>
-                  {activeRide.isShare && sharedRequest ? (
+
+                  {/* Passenger count — always visible for shared rides */}
+                  {activeRide.isShare ? (
+                    <View style={styles.passengerCountRow}>
+                      <Ionicons name="people" size={15} color={COLORS.success} />
+                      <Text style={styles.passengerCountText}>
+                        {activeRide.totalPassengers > 0
+                          ? `${activeRide.totalPassengers} passenger${activeRide.totalPassengers !== 1 ? "s" : ""}`
+                          : "Shared ride"}
+                        {activeRide.maxPassengers > 0
+                          ? ` / ${activeRide.maxPassengers} max`
+                          : ""}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Shared ride participant chips */}
+                  {activeRide.isShare && sharedRequest?.acceptedUsers?.length > 0 ? (
                     <View style={styles.sharedPassengersWrap}>
-                      <Text style={styles.sharedPassengersTitle}>Shared Ride Participants</Text>
+                      <Text style={styles.sharedPassengersTitle}>Participants</Text>
                       <View style={styles.sharedPassengersRow}>
                         <View style={[styles.sharedPassengerChip, styles.sharedPassengerOwner]}>
-                          <Text style={styles.sharedPassengerOwnerText}>Owner</Text>
+                          <Text style={styles.sharedPassengerOwnerText}>Creator</Text>
                         </View>
                         {sharedRequest.acceptedUsers.map((participant) => (
                           <View key={participant.userId} style={styles.sharedPassengerChip}>
@@ -428,18 +467,52 @@ export default function DriverHomeScreen({ navigation }) {
                       </View>
                     </View>
                   ) : null}
+
                   <View style={styles.actionRow}>
                     {activeRide.status === BOOKING_STATUS.ACCEPTED ? (
                       <View style={styles.otpStartWrap}>
-                        <Button title="Arrived at Pickup" onPress={() => handleMarkArrived(activeRide)} variant="primary" size="lg" style={{ flex: 1 }} />
-                        <Button title="Reject" onPress={() => handleRejectRide(activeRide)} variant="danger" variant2="outline" style={{ marginTop: SPACING.sm }} />
+                        <Button
+                          title="Arrived at Pickup"
+                          onPress={() => handleMarkArrived(activeRide)}
+                          variant="primary"
+                          size="lg"
+                          style={{ flex: 1 }}
+                        />
+                        <Button
+                          title="Reject"
+                          onPress={() => handleRejectRide(activeRide)}
+                          variant="danger"
+                          variant2="outline"
+                          style={{ marginTop: SPACING.sm }}
+                        />
                       </View>
                     ) : null}
                     {activeRide.status === BOOKING_STATUS.ARRIVED ? (
-                      <Button title="Enter OTP to Start" onPress={() => navigation.getParent()?.navigate("DriverOtp", { rideId: activeRide.id })} variant="primary" size="lg" style={{ flex: 1 }} />
+                      <Button
+                        title="Enter OTP to Start"
+                        onPress={() =>
+                          navigation.getParent()?.navigate("DriverOtp", { rideId: activeRide.id })
+                        }
+                        variant="primary"
+                        size="lg"
+                        style={{ flex: 1 }}
+                      />
                     ) : null}
-                    {activeRide.status === BOOKING_STATUS.IN_PROGRESS ? (
-                      <Button title="End Trip" onPress={() => handleRideAction(activeRide.id, BOOKING_STATUS.COMPLETED, { actor: "driver", sourceType: activeRide.sourceType })} variant="success" size="lg" style={{ flex: 1 }} />
+                    {activeRide.status === BOOKING_STATUS.IN_PROGRESS ||
+                    activeRide.status === "ON_TRIP" ||
+                    String(activeRide.status).toLowerCase() === "on_trip" ? (
+                      <Button
+                        title="End Trip"
+                        onPress={() =>
+                          handleRideAction(activeRide.id, BOOKING_STATUS.COMPLETED, {
+                            actor: "driver",
+                            sourceType: activeRide.sourceType,
+                          })
+                        }
+                        variant="success"
+                        size="lg"
+                        style={{ flex: 1 }}
+                      />
                     ) : null}
                   </View>
                 </Card>
@@ -529,6 +602,33 @@ export default function DriverHomeScreen({ navigation }) {
           </View>
 
           <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Scheduled Rides ({scheduledRides.length})</Text>
+              <TouchableOpacity onPress={handleGoToScheduled}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            {scheduledRides.length === 0 ? (
+              <Card style={styles.noRequests}>
+                <Ionicons name="calendar-outline" size={32} color={COLORS.borderStrong} />
+                <Text style={styles.noRequestsText}>No upcoming scheduled rides.</Text>
+              </Card>
+            ) : (
+              <Card elevated style={styles.rideCard}>
+                <View style={styles.requestHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickupName} numberOfLines={1}>{scheduledRides[0].pickup?.name}</Text>
+                    <Text style={styles.scheduledTime}>
+                      Next: {new Date(scheduledRides[0].scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    </Text>
+                  </View>
+                  <Button title="View" onPress={handleGoToScheduled} variant="primary" size="sm" />
+                </View>
+              </Card>
+            )}
+          </View>
+
+          <View style={styles.section}>
             <View style={styles.historyHeader}>
               <Text style={styles.sectionTitle}>Trip History</Text>
             </View>
@@ -581,7 +681,9 @@ const styles = StyleSheet.create({
   onlineSub: { ...TYPOGRAPHY.label, color: COLORS.surface, marginTop: 2, opacity: 0.9 },
   headerError: { marginTop: SPACING.md, ...TYPOGRAPHY.label, color: COLORS.error, fontWeight: "700" },
   section: { paddingHorizontal: SPACING.lg, marginTop: SPACING.xl },
-  sectionTitle: { ...TYPOGRAPHY.subtitle, marginBottom: SPACING.md },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.md },
+  sectionTitle: { ...TYPOGRAPHY.subtitle, fontWeight: "800" },
+  viewAllText: { ...TYPOGRAPHY.label, color: COLORS.primary, fontWeight: "700" },
   statsRow: { flexDirection: "row", gap: SPACING.md },
   statCard: { flex: 1, alignItems: "center", paddingVertical: SPACING.lg },
   statVal: { ...TYPOGRAPHY.title, marginTop: 8 },
@@ -604,17 +706,12 @@ const styles = StyleSheet.create({
   sharedPassengerOwnerText: { ...TYPOGRAPHY.caption, fontWeight: "700", color: COLORS.success },
   actionRow: { marginTop: SPACING.md },
   otpStartWrap: { flex: 1 },
-  noRequests: { alignItems: "center", paddingVertical: SPACING.xl, gap: 12 },
-  noRequestsText: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textAlign: "center" },
+  noRequests: { alignItems: "center", paddingVertical: 30, gap: 8 },
+  noRequestsText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
   rideCard: { marginBottom: SPACING.md },
-  requestHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: SPACING.md },
-  passengerName: { ...TYPOGRAPHY.body, fontWeight: "700", color: COLORS.text },
-  routeText: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginTop: 4 },
-  routeInfo: { marginTop: SPACING.sm },
-  routeSubText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
-  pendingActionRow: { marginTop: SPACING.md },
-  fareWrap: { alignItems: "flex-end", gap: 6 },
-  reqFare: { ...TYPOGRAPHY.subtitle, color: COLORS.primary },
+  requestHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: SPACING.md },
+  pickupName: { ...TYPOGRAPHY.body, fontWeight: "700", color: COLORS.text },
+  scheduledTime: { ...TYPOGRAPHY.label, color: COLORS.primary, fontWeight: "700", marginTop: 4 },
   historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.md },
   historyCard: { marginBottom: SPACING.sm },
   historyRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: SPACING.md },
@@ -623,4 +720,15 @@ const styles = StyleSheet.create({
   historyRight: { alignItems: "flex-end", gap: 6 },
   historyFare: { ...TYPOGRAPHY.body, fontWeight: "800", color: COLORS.text },
   ignoreBtn: { padding: SPACING.sm, marginLeft: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
+  scheduledBadgeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: SPACING.sm, backgroundColor: COLORS.primary + "12", borderRadius: RADIUS.sm, paddingHorizontal: 8, paddingVertical: 5 },
+  scheduledBadgeText: { ...TYPOGRAPHY.caption, fontWeight: "700", color: COLORS.primary, flex: 1 },
+  passengerCountRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.sm, paddingVertical: 4 },
+  passengerCountText: { ...TYPOGRAPHY.label, fontWeight: "700", color: COLORS.success },
+  routeInfo: { marginTop: 4 },
+  routeSubText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
+  passengerName: { ...TYPOGRAPHY.body, fontWeight: "700", color: COLORS.text },
+  routeText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
+  reqFare: { ...TYPOGRAPHY.label, fontWeight: "700", color: COLORS.text },
+  fareWrap: { alignItems: "flex-end", gap: 4 },
+  pendingActionRow: { flexDirection: "row", alignItems: "center", marginTop: SPACING.md, gap: SPACING.sm },
 });

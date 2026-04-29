@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  TextInput,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -68,7 +70,12 @@ export default function BookRideScreen({ navigation, route }) {
   const [selectedType, setSelectedType] = useState(initType);
   const [isShare, setIsShare] = useState(false);
   const [sharedSeatsWanted, setSharedSeatsWanted] = useState(1);
+  const [minVehicleCapacityAllowed, setMinVehicleCapacityAllowed] = useState(4);
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState(new Date(Date.now() + 30 * 60000)); // Default 30 mins from now
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const currentRide = RIDE_OPTIONS.find((r) => r.type === selectedType) || RIDE_OPTIONS[2];
   const estimate = currentQuote?.estimate;
@@ -133,7 +140,7 @@ export default function BookRideScreen({ navigation, route }) {
 
   const handleBook = () => {
     setStep(3);
-    
+
     // Clear any existing timeout/subscription just in case
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     wsUnsubRef.current?.();
@@ -144,7 +151,10 @@ export default function BookRideScreen({ navigation, route }) {
       drop: dropPlace,
       userId: user.id,
       isShare: isShare && currentRide?.shareable,
-      sharedSeatsWanted: isShare && currentRide?.shareable ? sharedSeatsWanted : 0,
+      sharedSeatsWanted: isShare && currentRide?.shareable ? sharedSeatsWanted : 1,
+      minVehicleCapacityAllowed: isShare && currentRide?.shareable ? minVehicleCapacityAllowed : null,
+      isScheduled,
+      scheduledAt: isScheduled ? scheduledAt.toISOString() : null,
       paymentMethod,
     }))
       .then((rideRequest) => {
@@ -156,6 +166,25 @@ export default function BookRideScreen({ navigation, route }) {
           console.log(`[BookRideScreen] Ride already active: status=${status}, navigating to tracking.`);
           dispatch(setActiveBooking(rideRequest));
           navigation.navigate("RideTracking");
+          return;
+        }
+
+        // If it's a scheduled ride, we don't wait for a driver.
+        // It's already created and visible to others/drivers.
+        if (isScheduled) {
+          Alert.alert(
+            "Ride Scheduled",
+            isShare 
+              ? "Your shared ride request has been posted. Others can now join!"
+              : "Your ride has been scheduled. Drivers will notify you once they accept.",
+            [{ text: "OK", onPress: () => {
+              if (isShare) {
+                navigation.navigate("SharedRides");
+              } else {
+                navigation.navigate("Home");
+              }
+            }}]
+          );
           return;
         }
 
@@ -206,7 +235,7 @@ export default function BookRideScreen({ navigation, route }) {
                 wsUnsubRef.current = null;
                 Alert.alert(
                   "No Driver Available",
-                  data.reason === "NO_DRIVERS_AVAILABLE" 
+                  data.reason === "NO_DRIVERS_AVAILABLE"
                     ? "Sorry, all nearby drivers are currently busy. Please try again in a few minutes."
                     : "Your ride request was cancelled.",
                   [{ text: "OK", onPress: () => setStep(2) }]
@@ -266,7 +295,7 @@ export default function BookRideScreen({ navigation, route }) {
             variant="secondary"
             onPress={() => {
               if (activeRequestRef.current?.id) {
-                api.cancelRequest(activeRequestRef.current.id).catch(() => {});
+                api.cancelRequest(activeRequestRef.current.id).catch(() => { });
               }
               if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
@@ -415,20 +444,111 @@ export default function BookRideScreen({ navigation, route }) {
               {currentRide.shareable && (
                 <>
                   <View style={styles.optionSep} />
-                  <TouchableOpacity 
-                    style={styles.shareToggleRow} 
-                    onPress={() => setIsShare(!isShare)}
+                  <TouchableOpacity
+                    style={styles.shareToggleRow}
+                    onPress={() => {
+                      const nextValue = !isShare;
+                      setIsShare(nextValue);
+                      if (nextValue) {
+                        setIsScheduled(true); // Shared rides must be scheduled
+                      }
+                    }}
                     activeOpacity={0.7}
                   >
                     <View style={styles.shareToggleInfo}>
                       <Text style={styles.shareToggleTitle}>Share this ride</Text>
-                      <Text style={styles.shareToggleDesc}>Allow others to join and split the fare</Text>
+                      <Text style={styles.shareToggleDesc}>Allow others to join (Requires scheduling)</Text>
                     </View>
                     <View style={[styles.toggleOuter, isShare && styles.toggleOuterActive]}>
                       <View style={[styles.toggleInner, isShare && styles.toggleInnerActive]} />
                     </View>
                   </TouchableOpacity>
+
+                  {isShare && (
+                    <View style={{ marginTop: SPACING.md }}>
+                      <Text style={styles.optionSubTitle}>Your Passengers</Text>
+                      <View style={styles.counterRow}>
+                        <TouchableOpacity style={styles.counterBtn} onPress={() => setSharedSeatsWanted(Math.max(1, sharedSeatsWanted - 1))}>
+                          <Ionicons name="remove" size={20} color={COLORS.text} />
+                        </TouchableOpacity>
+                        <Text style={styles.counterText}>{sharedSeatsWanted}</Text>
+                        <TouchableOpacity style={styles.counterBtn} onPress={() => setSharedSeatsWanted(Math.min(6, sharedSeatsWanted + 1))}>
+                          <Ionicons name="add" size={20} color={COLORS.text} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <Text style={[styles.optionSubTitle, { marginTop: SPACING.md }]}>Require Vehicle Minimum Seats</Text>
+                      <View style={styles.counterRow}>
+                        <TouchableOpacity style={styles.counterBtn} onPress={() => setMinVehicleCapacityAllowed(Math.max(sharedSeatsWanted, minVehicleCapacityAllowed - 1))}>
+                          <Ionicons name="remove" size={20} color={COLORS.text} />
+                        </TouchableOpacity>
+                        <Text style={styles.counterText}>{minVehicleCapacityAllowed}</Text>
+                        <TouchableOpacity style={styles.counterBtn} onPress={() => setMinVehicleCapacityAllowed(Math.min(10, minVehicleCapacityAllowed + 1))}>
+                          <Ionicons name="add" size={20} color={COLORS.text} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                 </>
+              )}
+
+              <View style={styles.optionSep} />
+              <TouchableOpacity
+                style={styles.shareToggleRow}
+                onPress={() => setIsScheduled(!isScheduled)}
+                activeOpacity={0.7}
+                disabled={isShare}
+              >
+                <View style={styles.shareToggleInfo}>
+                  <Text style={styles.shareToggleTitle}>Schedule Ride</Text>
+                  <Text style={styles.shareToggleDesc}>
+                    {isShare ? "Shared rides are always scheduled" : "Book up to 24h in advance"}
+                  </Text>
+                </View>
+                <View style={[styles.toggleOuter, (isScheduled || isShare) && styles.toggleOuterActive]}>
+                  <View style={[styles.toggleInner, (isScheduled || isShare) && styles.toggleInnerActive]} />
+                </View>
+              </TouchableOpacity>
+
+              {isScheduled && (
+                <View style={{ marginTop: SPACING.md }}>
+                  <Text style={styles.optionSubTitle}>Pickup Time</Text>
+                  <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+                    <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
+                      <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+                      <Text style={styles.datePickerText}>{scheduledAt.toLocaleDateString()}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowTimePicker(true)}>
+                      <Ionicons name="time-outline" size={18} color={COLORS.primary} />
+                      <Text style={styles.datePickerText}>
+                        {scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={scheduledAt}
+                      mode="date"
+                      minimumDate={new Date()}
+                      maximumDate={new Date(Date.now() + 24 * 60 * 60 * 1000)}
+                      onChange={(event, date) => {
+                        setShowDatePicker(false);
+                        if (date) setScheduledAt(date);
+                      }}
+                    />
+                  )}
+                  {showTimePicker && (
+                    <DateTimePicker
+                      value={scheduledAt}
+                      mode="time"
+                      onChange={(event, date) => {
+                        setShowTimePicker(false);
+                        if (date) setScheduledAt(date);
+                      }}
+                    />
+                  )}
+                </View>
               )}
             </Card>
           </View>
@@ -633,4 +753,14 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     lineHeight: 18,
   },
+  counterRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md },
+  counterBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.border, alignItems: "center", justifyContent: "center" },
+  counterText: { ...TYPOGRAPHY.title, fontSize: 18 },
+  datePickerBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    borderWidth: 1, borderColor: COLORS.border,
+    padding: SPACING.md, borderRadius: RADIUS.md,
+    justifyContent: "center"
+  },
+  datePickerText: { ...TYPOGRAPHY.body, fontWeight: "600", color: COLORS.text },
 });

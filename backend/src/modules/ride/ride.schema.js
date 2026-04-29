@@ -1,4 +1,18 @@
-const RIDE_STATUS = ["SEARCHING", "ACCEPTED", "DRIVER_ARRIVED", "OTP_VERIFIED", "ON_TRIP", "COMPLETED", "CANCELLED", "assigned", "arriving", "started", "completed", "cancelled"];
+const RIDE_STATUS = [
+  'CREATED',
+  'SCHEDULED',
+  'OPEN',
+  'FULL',
+  'ACCEPTED',
+  'ONGOING',
+  'COMPLETED',
+  'CANCELLED',
+  'EXPIRED',
+  'SEARCHING',
+  'DRIVER_ARRIVED',
+  'OTP_VERIFIED',
+  'ON_TRIP'
+];
 
 function validateQuotePayload(payload = {}) {
   const errors = [];

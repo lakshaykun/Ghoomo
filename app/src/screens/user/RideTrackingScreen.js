@@ -25,6 +25,7 @@ const STATUS_STEPS = [
 
 export default function RideTrackingScreen({ navigation }) {
   const dispatch = useDispatch();
+  const user = useSelector((s) => s.auth.user);
   const booking = useSelector((s) => s?.booking?.activeBooking);
   const authToken = useSelector((s) => s?.auth?.token || s?.auth?.accessToken || null);
   const lastBookingRef = useRef(null);
@@ -174,6 +175,24 @@ export default function RideTrackingScreen({ navigation }) {
     ]);
   };
 
+  const handleLeave = () => {
+    Alert.alert("Leave Shared Ride", "Are you sure you want to leave this shared ride?", [
+      { text: "No", style: "cancel" },
+      {
+        text: "Yes, Leave",
+        style: "destructive",
+        onPress: () => {
+          api.leaveSharedRide(booking.id, user.id)
+            .then(() => {
+              dispatch(setActiveBooking(null));
+              navigation.navigate("UserHome");
+            })
+            .catch((error) => Alert.alert("Leave Failed", error.message));
+        },
+      },
+    ]);
+  };
+
   const handleShareOtp = () => {
     Alert.alert("Share OTP", `Tell this OTP to your driver: ${booking.otp}`);
   };
@@ -263,6 +282,14 @@ export default function RideTrackingScreen({ navigation }) {
           )}
         </View>
 
+        {/* Fare Summary for Shared Rides */}
+        {booking.isShare && booking.final_fare_per_person && (
+          <View style={styles.fareSplitRow}>
+            <Text style={styles.fareSplitLabel}>Your Share:</Text>
+            <Text style={styles.fareSplitValue}>₹{Number(booking.final_fare_per_person).toFixed(2)}</Text>
+          </View>
+        )}
+
         {/* Progress Bar */}
         <View style={styles.progressRow}>
           {STATUS_STEPS.map((step, i) => (
@@ -319,10 +346,15 @@ export default function RideTrackingScreen({ navigation }) {
           {renderPrimaryAction()}
         </View>
 
-        {/* Secondary Action (Cancel) */}
-        {(booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) && (
-          <TouchableOpacity style={styles.secondaryAction} onPress={handleCancel}>
-            <Text style={styles.secondaryActionText}>Cancel Ride</Text>
+        {/* Secondary Action (Cancel / Leave) */}
+        {(booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED || booking.status === BOOKING_STATUS.PENDING || booking.status === 'OPEN' || booking.status === 'SCHEDULED') && (
+          <TouchableOpacity 
+            style={styles.secondaryAction} 
+            onPress={booking.isShare && sharedRequest?.ownerId !== user.id ? handleLeave : handleCancel}
+          >
+            <Text style={styles.secondaryActionText}>
+              {booking.isShare && sharedRequest?.ownerId !== user.id ? "Leave Shared Ride" : "Cancel Ride"}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -416,4 +448,7 @@ const styles = StyleSheet.create({
   ratingInput: { width: "100%", minHeight: 100, backgroundColor: COLORS.background, borderRadius: RADIUS.md, padding: SPACING.md, ...TYPOGRAPHY.body, textAlignVertical: "top", marginBottom: SPACING.lg },
   ratingError: { ...TYPOGRAPHY.label, color: COLORS.error, marginBottom: SPACING.md },
   ratingActions: { flexDirection: "row", gap: SPACING.md, width: "100%" },
+  fareSplitRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: COLORS.primaryLight + "15", padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.lg },
+  fareSplitLabel: { ...TYPOGRAPHY.body, fontWeight: "700", color: COLORS.primary },
+  fareSplitValue: { ...TYPOGRAPHY.subtitle, color: COLORS.primary, fontWeight: "900" },
 });

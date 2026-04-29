@@ -92,7 +92,12 @@ drop_longitude    DECIMAL(11,8) NOT NULL,
 request_time      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 expires_at        TIMESTAMPTZ,
 
-is_shared         BOOLEAN NOT NULL DEFAULT FALSE,
+ride_type         VARCHAR(20) NOT NULL DEFAULT 'solo' CHECK (ride_type IN ('solo', 'shared')),
+is_scheduled      BOOLEAN NOT NULL DEFAULT FALSE,
+scheduled_at      TIMESTAMPTZ,
+acceptance_deadline TIMESTAMPTZ,
+min_vehicle_capacity_allowed INT,
+join_allowed_until TIMESTAMPTZ,
 locked            BOOLEAN DEFAULT FALSE,
 vehicle_type      VARCHAR(20) NOT NULL DEFAULT 'auto',
 estimated_fare    DECIMAL(10,2),
@@ -133,7 +138,7 @@ id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 request_id      UUID UNIQUE REFERENCES ride_requests(id) ON DELETE SET NULL,
 
 student_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-driver_id       UUID NOT NULL REFERENCES drivers(id) ON DELETE RESTRICT,
+driver_id       UUID REFERENCES drivers(id) ON DELETE RESTRICT,
 
 pickup_location TEXT NOT NULL,
 drop_location   TEXT NOT NULL,
@@ -146,8 +151,8 @@ drop_longitude    DECIMAL(11,8) NOT NULL,
 fare            DECIMAL(10,2),
 distance        DECIMAL(10,3),
 
-status          VARCHAR(20) NOT NULL DEFAULT 'SEARCHING'
-CHECK (status IN ('SEARCHING', 'ACCEPTED', 'DRIVER_ARRIVED', 'OTP_VERIFIED', 'ON_TRIP', 'COMPLETED', 'CANCELLED', 'assigned', 'arriving', 'started', 'completed', 'cancelled')),
+status          VARCHAR(20) NOT NULL DEFAULT 'CREATED'
+CHECK (status IN ('CREATED', 'SCHEDULED', 'OPEN', 'FULL', 'ACCEPTED', 'ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED')),
 
 otp             VARCHAR(10),
 vehicle_type    VARCHAR(20) NOT NULL DEFAULT 'auto',
@@ -155,26 +160,24 @@ vehicle_type    VARCHAR(20) NOT NULL DEFAULT 'auto',
 start_time      TIMESTAMPTZ,
 end_time        TIMESTAMPTZ,
 
-is_shared       BOOLEAN NOT NULL DEFAULT FALSE,
+ride_type         VARCHAR(20) NOT NULL DEFAULT 'solo' CHECK (ride_type IN ('solo', 'shared')),
+is_scheduled      BOOLEAN NOT NULL DEFAULT FALSE,
+scheduled_at      TIMESTAMPTZ,
+acceptance_deadline TIMESTAMPTZ,
+vehicle_seats_snapshot INT,
+min_vehicle_capacity_allowed INT,
+join_allowed_until TIMESTAMPTZ,
 
 created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
--- SHARED RIDES
+-- RIDE PARTICIPANTS
 -- ============================================================
-CREATE TABLE IF NOT EXISTS shared_rides (
+CREATE TABLE IF NOT EXISTS ride_participants (
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-base_ride_id    UUID REFERENCES rides(id) ON DELETE CASCADE,
-status          VARCHAR(20) NOT NULL CHECK (status IN ('open','full','completed','cancelled')),
-max_participants INT DEFAULT 2,
-created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS shared_ride_participants (
-id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-shared_ride_id  UUID NOT NULL REFERENCES shared_rides(id) ON DELETE CASCADE,
+ride_id         UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE,
 user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
 pickup_location TEXT NOT NULL,
@@ -185,10 +188,14 @@ pickup_longitude  DECIMAL(11,8),
 drop_latitude     DECIMAL(10,8),
 drop_longitude    DECIMAL(11,8),
 
+passengers_count INT NOT NULL DEFAULT 1,
+is_creator       BOOLEAN NOT NULL DEFAULT FALSE,
+
 status          VARCHAR(20) NOT NULL CHECK (status IN ('joined','picked','dropped','cancelled')),
 fare_split      DECIMAL(10,2),
 
-UNIQUE(shared_ride_id, user_id)
+created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+UNIQUE(ride_id, user_id)
 );
 
 
@@ -343,8 +350,8 @@ CREATE INDEX IF NOT EXISTS idx_candidates_driver ON ride_request_candidates(driv
 CREATE INDEX IF NOT EXISTS idx_rides_driver ON rides(driver_id);
 CREATE INDEX IF NOT EXISTS idx_rides_status ON rides(status);
 
-CREATE INDEX IF NOT EXISTS idx_shared_rides_base_ride ON shared_rides(base_ride_id);
-CREATE INDEX IF NOT EXISTS idx_shared_rides_status ON shared_rides(status);
+CREATE INDEX IF NOT EXISTS idx_ride_participants_ride ON ride_participants(ride_id);
+CREATE INDEX IF NOT EXISTS idx_ride_participants_status ON ride_participants(status);
 
 CREATE INDEX IF NOT EXISTS idx_driver_ratings_driver ON driver_ratings(driver_id);
 CREATE INDEX IF NOT EXISTS idx_driver_ratings_student ON driver_ratings(student_id);

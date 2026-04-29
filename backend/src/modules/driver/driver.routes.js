@@ -17,4 +17,6 @@ router.patch("/me/location", requireRole("driver", "admin"), controller.updateLo
 router.get("/requests", requireRole("driver", "admin"), controller.listCandidateRequests);
 router.post("/requests/:requestId/respond", requireRole("driver", "admin"), controller.respondToCandidate);
 
+router.get("/scheduled-rides", requireRole("driver", "admin"), controller.getScheduledRides);
+
 module.exports = router;

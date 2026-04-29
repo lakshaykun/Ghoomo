@@ -16,14 +16,19 @@ const RIDE_DETAIL_SELECT = `
     loc.current_longitude AS driver_longitude,
     vehicle.vehicle_number AS driver_vehicle_number,
     vehicle.vehicle_type AS driver_vehicle_type,
-    r.vehicle_type
+    r.vehicle_type,
+    r.ride_type,
+    r.is_scheduled,
+    r.scheduled_at,
+    COALESCE(rp_stats.total_passengers, 1) AS total_passengers,
+    (r.fare / COALESCE(rp_stats.total_passengers, 1)) AS final_fare_per_person
   `;
 
 const RIDE_DETAIL_FROM = `
   FROM rides r
   INNER JOIN users student ON student.id = r.student_id
-  INNER JOIN drivers d ON d.id = r.driver_id
-  INNER JOIN users driver_user ON driver_user.id = d.user_id
+  LEFT JOIN drivers d ON d.id = r.driver_id
+  LEFT JOIN users driver_user ON driver_user.id = d.user_id
   LEFT JOIN driver_locations loc ON loc.driver_id = d.id
   LEFT JOIN LATERAL (
     SELECT v.vehicle_number, v.vehicle_type
@@ -33,6 +38,12 @@ const RIDE_DETAIL_FROM = `
     ORDER BY v.created_at DESC
     LIMIT 1
   ) vehicle ON TRUE
+  LEFT JOIN (
+    SELECT ride_id, SUM(passengers_count) as total_passengers 
+    FROM ride_participants 
+    WHERE status != 'cancelled' 
+    GROUP BY ride_id
+  ) rp_stats ON rp_stats.ride_id = r.id
 `;
 
 async function createRideRequest({
@@ -43,7 +54,12 @@ async function createRideRequest({
   pickupLongitude,
   dropLatitude,
   dropLongitude,
-  isShared,
+  rideType,
+  isScheduled,
+  scheduledAt,
+  acceptanceDeadline,
+  minVehicleCapacityAllowed,
+  joinAllowedUntil,
   vehicleType,
   estimatedFare,
   estimatedDistanceKm,
@@ -59,13 +75,18 @@ async function createRideRequest({
       pickup_longitude,
       drop_latitude,
       drop_longitude,
-      is_shared,
+      ride_type,
+      is_scheduled,
+      scheduled_at,
+      acceptance_deadline,
+      min_vehicle_capacity_allowed,
+      join_allowed_until,
       vehicle_type,
       estimated_fare,
       estimated_distance_km,
       expires_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     RETURNING *
     `,
     [
@@ -76,7 +97,12 @@ async function createRideRequest({
       pickupLongitude,
       dropLatitude,
       dropLongitude,
-      isShared,
+      rideType || 'solo',
+      isScheduled || false,
+      scheduledAt || null,
+      acceptanceDeadline || null,
+      minVehicleCapacityAllowed || null,
+      joinAllowedUntil || null,
       vehicleType || 'auto',
       estimatedFare ?? null,
       estimatedDistanceKm ?? null,
@@ -233,6 +259,26 @@ async function cancelRideRequest(requestId, studentId) {
   return result.rows[0] || null;
 }
 
+async function createRideWithoutDriver({
+  requestId, studentId, pickupLocation, dropLocation, pickupLatitude, pickupLongitude, dropLatitude, dropLongitude, fare, distance, rideType, isScheduled, scheduledAt, acceptanceDeadline, minVehicleCapacityAllowed, joinAllowedUntil, vehicleType
+}) {
+  const result = await query(
+    `
+    INSERT INTO rides (
+      request_id, student_id, driver_id, pickup_location, drop_location, pickup_latitude, pickup_longitude, drop_latitude, drop_longitude, fare, distance, ride_type, is_scheduled, scheduled_at, acceptance_deadline, min_vehicle_capacity_allowed, join_allowed_until, status, vehicle_type
+    )
+    VALUES (
+      $1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+    )
+    RETURNING *
+    `,
+    [
+      requestId, studentId, pickupLocation, dropLocation, pickupLatitude, pickupLongitude, dropLatitude, dropLongitude, fare, distance, rideType, isScheduled, scheduledAt, acceptanceDeadline, minVehicleCapacityAllowed, joinAllowedUntil, isScheduled ? 'SCHEDULED' : 'OPEN', vehicleType
+    ]
+  );
+  return result.rows[0];
+}
+
 async function createRideFromRequest({ requestId, driverId, fare, distance }) {
   return withTransaction(async (client) => {
     const requestResult = await client.query(
@@ -287,13 +333,18 @@ async function createRideFromRequest({ requestId, driverId, fare, distance }) {
         drop_longitude,
         fare,
         distance,
-        is_shared,
+        ride_type,
+        is_scheduled,
+        scheduled_at,
+        acceptance_deadline,
+        min_vehicle_capacity_allowed,
+        join_allowed_until,
         status,
         otp,
         vehicle_type
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACCEPTED', $13, $14
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'ACCEPTED', $18, $19
       )
       RETURNING *
       `,
@@ -309,7 +360,12 @@ async function createRideFromRequest({ requestId, driverId, fare, distance }) {
         request.drop_longitude,
         fare ?? request.estimated_fare ?? null,
         distance ?? request.estimated_distance_km ?? null,
-        request.is_shared,
+        request.ride_type,
+        request.is_scheduled,
+        request.scheduled_at,
+        request.acceptance_deadline,
+        request.min_vehicle_capacity_allowed,
+        request.join_allowed_until,
         otp,
         request.vehicle_type || 'auto'
       ]
@@ -317,16 +373,7 @@ async function createRideFromRequest({ requestId, driverId, fare, distance }) {
 
     const ride = rideInsertResult.rows[0];
 
-    if (request.is_shared) {
-      await client.query(
-        `
-        INSERT INTO shared_rides (base_ride_id, status, max_participants)
-        VALUES ($1, 'open', $2)
-        ON CONFLICT DO NOTHING
-        `,
-        [ride.id, 2] // Default 2 participants
-      );
-    }
+    // In the new architecture, the ride handles 'shared' logic intrinsically and via `ride_participants`.
 
     await client.query(
       `
@@ -420,17 +467,6 @@ async function updateRideStatus(rideId, status) {
         [ride.driver_id]
       );
 
-      // Also update shared ride status if it exists
-      if (ride.is_shared) {
-        await client.query(
-          `
-          UPDATE shared_rides
-          SET status = $1, updated_at = NOW()
-          WHERE base_ride_id = $2
-          `,
-          [upperStatus === 'COMPLETED' ? 'completed' : 'cancelled', ride.id]
-        );
-      }
     }
 
     return ride ? fetchRideById(rideId, client.query.bind(client)) : null;
@@ -515,11 +551,48 @@ async function incrementRejections(requestId) {
   return result.rows[0];
 }
 
+async function getAvailableSharedRides(queryPayload = {}) {
+  const status = String(queryPayload.status || '').toUpperCase();
+  const params = [];
+  let statusClause = "r.status IN ('OPEN', 'SCHEDULED')";
+  
+  if (status && ['OPEN', 'SCHEDULED', 'FULL', 'COMPLETED'].includes(status)) {
+    statusClause = "r.status = $1";
+    params.push(status);
+  }
+
+  const result = await query(
+    `
+    SELECT r.*,
+      (SELECT SUM(passengers_count) FROM ride_participants WHERE ride_id = r.id AND status != 'cancelled') AS total_passengers
+    FROM rides r
+    WHERE r.ride_type = 'shared' AND ${statusClause}
+    `,
+    params
+  );
+  return result.rows;
+}
+
+async function expireStaleRides() {
+  const result = await query(
+    `
+    UPDATE rides
+    SET status = 'EXPIRED', updated_at = NOW()
+    WHERE status IN ('OPEN', 'SCHEDULED')
+      AND acceptance_deadline IS NOT NULL
+      AND acceptance_deadline < NOW()
+    RETURNING *
+    `
+  );
+  return result.rows;
+}
+
 module.exports = {
   createRideRequest,
   getRideRequestById,
   updateRideRequest,
   cancelRideRequest,
+  createRideWithoutDriver,
   createRideFromRequest,
   createRideCandidates,
   listEligibleDriverUserIdsForRequest,
@@ -531,4 +604,6 @@ module.exports = {
   createOrUpdateDriverRating,
   refreshDriverRating,
   incrementRejections,
+  getAvailableSharedRides,
+  expireStaleRides,
 };

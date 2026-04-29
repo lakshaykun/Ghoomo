@@ -16,6 +16,7 @@ import RideHistoryScreen from "../screens/user/RideHistoryScreen";
 import ProfileScreen from "../screens/user/ProfileScreen";
 import SharedRidesScreen from "../screens/user/SharedRidesScreen";
 import SavedLocationsScreen from "../screens/user/SavedLocationsScreen";
+import RideHistoryDetailScreen from "../screens/user/RideHistoryDetailScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -30,6 +31,7 @@ function HomeStack() {
       <Stack.Screen name="BusLiveTracking" component={BusLiveTrackingScreen} />
       <Stack.Screen name="RideTracking" component={RideTrackingScreen} />
       <Stack.Screen name="SavedLocations" component={SavedLocationsScreen} />
+      <Stack.Screen name="RideHistoryDetail" component={RideHistoryDetailScreen} />
     </Stack.Navigator>
   );
 }

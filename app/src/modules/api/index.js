@@ -22,6 +22,8 @@ import {
   getNearbyDrivers,
   patchDriverLocation,
   setDriverAvailability,
+  getDriverScheduledRides,
+  acceptScheduledRide,
 } from "./features/driverApi";
 import { reverseGeocodeCoordinates, searchPlacesByText } from "./features/locationApi";
 import {
@@ -109,6 +111,8 @@ export const api = {
   closeSharedRide: (sharedRideId) => closeSharedRideById(sharedRideId),
 
   getDriverDashboard: (driverId) => buildDriverDashboard(driverId),
+  getDriverScheduledRides: () => getDriverScheduledRides(),
+  acceptScheduledRide: (rideId, payload) => acceptScheduledRide(rideId, payload),
   setDriverOnline: (driverId, online) =>
     setDriverAvailability({
       isAvailable: online,

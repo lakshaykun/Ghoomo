@@ -1,166 +1,140 @@
-const { query } = require("../../config/db");
+/**
+ * sharedRide.repository.js
+ *
+ * The old `shared_rides` / `shared_ride_participants` tables are GONE.
+ * Shared rides are now represented as rides with ride_type = 'shared' and
+ * their participants live in ride_participants.
+ *
+ * This module is a thin adapter that keeps the existing sharedRide.service.js
+ * interface intact while reading/writing from the new schema.
+ */
+const { query, withTransaction } = require("../../config/db");
 
-async function createSharedRide({ baseRideId, maxParticipants }) {
+/**
+ * List rides with ride_type='shared' filtered by an optional status.
+ * Status values are the new uppercase enum: OPEN, FULL, SCHEDULED, COMPLETED, CANCELLED …
+ * The legacy callers pass lowercase strings like "open" / "full" — we normalise.
+ */
+async function listSharedRides(status) {
+  const upper = status ? String(status).toUpperCase() : null;
+  const allowedStatuses = ["OPEN", "FULL", "SCHEDULED", "ACCEPTED", "COMPLETED", "CANCELLED", "EXPIRED"];
+
+  let whereClause = "r.ride_type = 'shared'";
+  const params = [];
+
+  if (upper && allowedStatuses.includes(upper)) {
+    whereClause += " AND r.status = $1";
+    params.push(upper);
+  } else {
+    // Default: only show open/scheduled rides
+    whereClause += " AND r.status IN ('OPEN', 'SCHEDULED')";
+  }
+
   const result = await query(
     `
-    INSERT INTO shared_rides (base_ride_id, status, max_participants)
-    VALUES ($1, 'open', $2)
-    RETURNING *
-    `,
-    [baseRideId, maxParticipants || 2]
-  );
-
-  return result.rows[0];
-}
-
-async function listSharedRides(status = "open") {
-  const result = await query(
-    `
-    SELECT 
-      sr.*,
-      r.pickup_location,
-      r.drop_location,
-      r.pickup_latitude,
-      r.pickup_longitude,
-      r.drop_latitude,
-      r.drop_longitude,
-      r.fare,
-      r.vehicle_type,
-      u.name as creator_name,
-      d_u.name as driver_name
-    FROM shared_rides sr
-    JOIN rides r ON r.id = sr.base_ride_id
+    SELECT
+      r.*,
+      u.name  AS creator_name,
+      (
+        SELECT SUM(passengers_count)
+        FROM ride_participants rp
+        WHERE rp.ride_id = r.id AND rp.status != 'cancelled'
+      ) AS total_passengers
+    FROM rides r
     JOIN users u ON u.id = r.student_id
-    JOIN drivers d ON d.id = r.driver_id
-    JOIN users d_u ON d_u.id = d.user_id
-    WHERE sr.status = COALESCE($1, sr.status)
-    ORDER BY sr.created_at DESC
+    WHERE ${whereClause}
+    ORDER BY r.created_at DESC
     `,
-    [status]
+    params
   );
 
   return result.rows;
 }
 
-async function getSharedRideById(sharedRideId) {
+/**
+ * Get a single shared ride by its ride id, including participants.
+ */
+async function getSharedRideById(rideId) {
   const result = await query(
     `
-    SELECT 
-      sr.*,
-      r.pickup_location,
-      r.drop_location,
-      r.pickup_latitude,
-      r.pickup_longitude,
-      r.drop_latitude,
-      r.drop_longitude,
-      r.fare,
-      r.vehicle_type,
-      u.name as creator_name,
-      d_u.name as driver_name
-    FROM shared_rides sr
-    JOIN rides r ON r.id = sr.base_ride_id
+    SELECT
+      r.*,
+      u.name AS creator_name,
+      (
+        SELECT SUM(passengers_count)
+        FROM ride_participants rp
+        WHERE rp.ride_id = r.id AND rp.status != 'cancelled'
+      ) AS total_passengers
+    FROM rides r
     JOIN users u ON u.id = r.student_id
-    JOIN drivers d ON d.id = r.driver_id
-    JOIN users d_u ON d_u.id = d.user_id
-    WHERE sr.id = $1
+    WHERE r.id = $1
     LIMIT 1
     `,
-    [sharedRideId]
+    [rideId]
   );
 
   return result.rows[0] || null;
 }
 
-async function listParticipants(sharedRideId) {
+/**
+ * Get participants of a shared ride.
+ */
+async function listParticipants(rideId) {
   const result = await query(
     `
-    SELECT *
-    FROM shared_ride_participants
-    WHERE shared_ride_id = $1
-    ORDER BY id ASC
+    SELECT
+      rp.*,
+      u.name  AS user_name,
+      u.phone AS user_phone
+    FROM ride_participants rp
+    JOIN users u ON u.id = rp.user_id
+    WHERE rp.ride_id = $1 AND rp.status != 'cancelled'
+    ORDER BY rp.created_at ASC
     `,
-    [sharedRideId]
+    [rideId]
   );
 
   return result.rows;
 }
 
-async function addParticipant({
-  sharedRideId,
-  userId,
-  pickupLocation,
-  dropLocation,
-  pickupLatitude,
-  pickupLongitude,
-  dropLatitude,
-  dropLongitude,
-  status,
-}) {
-  const result = await query(
-    `
-    INSERT INTO shared_ride_participants (
-      shared_ride_id,
-      user_id,
-      pickup_location,
-      drop_location,
-      pickup_latitude,
-      pickup_longitude,
-      drop_latitude,
-      drop_longitude,
-      status
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    RETURNING *
-    `,
-    [
-      sharedRideId,
-      userId,
-      pickupLocation,
-      dropLocation,
-      pickupLatitude || null,
-      pickupLongitude || null,
-      dropLatitude || null,
-      dropLongitude || null,
-      status || "joined",
-    ]
-  );
-
-  return result.rows[0];
-}
-
-async function countParticipants(sharedRideId) {
+/**
+ * Count non-cancelled participants of a shared ride.
+ */
+async function countParticipants(rideId) {
   const result = await query(
     `
     SELECT COUNT(*)::int AS count
-    FROM shared_ride_participants
-    WHERE shared_ride_id = $1 AND status != 'cancelled'
+    FROM ride_participants
+    WHERE ride_id = $1 AND status != 'cancelled'
     `,
-    [sharedRideId]
+    [rideId]
   );
 
   return result.rows[0].count;
 }
 
-async function updateSharedRideStatus(sharedRideId, status) {
+/**
+ * Update the status of a shared ride (operates on the rides table).
+ */
+async function updateSharedRideStatus(rideId, status) {
+  const upper = String(status || "").toUpperCase();
   const result = await query(
     `
-    UPDATE shared_rides
-    SET status = $1
+    UPDATE rides
+    SET status = $1, updated_at = NOW()
     WHERE id = $2
     RETURNING *
     `,
-    [status, sharedRideId]
+    [upper, rideId]
   );
 
   return result.rows[0] || null;
 }
 
 module.exports = {
-  createSharedRide,
   listSharedRides,
   getSharedRideById,
   listParticipants,
-  addParticipant,
   countParticipants,
   updateSharedRideStatus,
 };

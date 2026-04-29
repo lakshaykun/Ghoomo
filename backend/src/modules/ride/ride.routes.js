@@ -17,7 +17,12 @@ router.post("/requests/:requestId/assign", requireRole("admin", "driver"), contr
 router.get("/history", controller.getMyHistory);
 router.get("/history/:userId", controller.getHistoryByUserId);
 
+router.get("/shared", controller.getAvailableSharedRides);
+
 router.get("/:rideId", controller.getRide);
+router.post("/:rideId/join", controller.joinSharedRide);
+router.post("/:rideId/leave", controller.leaveSharedRide);
+router.post("/:rideId/accept", requireRole("driver", "admin"), controller.acceptRide);
 router.patch("/:rideId/status", requireRole("driver", "admin"), controller.updateRideStatus);
 router.post("/:rideId/verify-otp", requireRole("driver"), controller.verifyOtp);
 router.post("/requests/:requestId/reject", requireRole("driver"), controller.rejectRideRequest);

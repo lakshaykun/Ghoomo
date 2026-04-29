@@ -318,7 +318,20 @@ export const createRideBooking = (payload) => async (dispatch) => {
   console.log(`[BookingSlice] createRideBooking: payload=${JSON.stringify(payload)}`);
   dispatch(requestStart());
   try {
-    const { ride, sharedRequest } = await api.createRide(payload);
+    const backendPayload = {
+      ...payload,
+      passengersCount: payload.sharedSeatsWanted || 1,
+      minVehicleCapacityAllowed: payload.minVehicleCapacityAllowed || null,
+      isScheduled: payload.isScheduled || false,
+      scheduledAt: payload.scheduledAt || null,
+      joinAllowedUntil: payload.joinAllowedUntil || null,
+    };
+    const response = await api.createRide(backendPayload);
+    // The backend now returns `{ ...ride, is_ride: true }` for shared/scheduled rides, 
+    // or standard response for instant ones.
+    const ride = response.ride || response;
+    const sharedRequest = response.sharedRequest || null;
+
     console.log(`[BookingSlice] createRideBooking SUCCESS:`, ride);
     await sendLocalNotification({
       key: `ride-created-${ride.id}`,

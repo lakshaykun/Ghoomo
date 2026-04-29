@@ -306,7 +306,8 @@ async function getAnalytics({ days, limit }) {
         r.status,
         r.fare,
         r.distance,
-        r.is_shared,
+        r.ride_type,
+        r.is_scheduled,
         r.created_at,
         r.updated_at
       FROM rides r
@@ -327,7 +328,8 @@ async function getAnalytics({ days, limit }) {
         rr.pickup_location,
         rr.drop_location,
         rr.status,
-        rr.is_shared,
+        rr.ride_type,
+        rr.is_scheduled,
         rr.expires_at,
         rr.created_at,
         rr.updated_at,

@@ -1,6 +1,7 @@
 const { Server } = require("ws");
 const { verifyAuthToken } = require("./helpers");
 const driverRepository = require("../../modules/driver/driver.repository");
+const logger = require("./logger");
 
 let wss = null;
 // userId -> { ws, role }
@@ -10,8 +11,7 @@ function initializeWebSocket(server) {
   wss = new Server({ server, path: "/socket" });
 
   wss.on("connection", (ws, req) => {
-    const connLog = `[${new Date().toISOString()}] New WebSocket connection attempt: ${req.url}\n`;
-    require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', connLog);
+    logger.info("New WebSocket connection attempt", { url: req.url });
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const token = url.searchParams.get("token");
@@ -32,8 +32,7 @@ function initializeWebSocket(server) {
         // Refresh with fresh driver info from DB
         driverRepository.findDriverByUserId(userId).then(driver => {
           if (driver) {
-            const logMsg = `[${new Date().toISOString()}] Socket identified driver ${userId}: type=${driver.vehicle_type}, available=${driver.is_available}\n`;
-            require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
+            logger.info("Socket identified driver", { userId, type: driver.vehicle_type, available: driver.is_available });
             const driverInfo = {
               ws,
               role: "driver",
@@ -45,8 +44,7 @@ function initializeWebSocket(server) {
             ws.vehicleType = driver.vehicle_type;
           }
         }).catch(err => {
-          const logMsg = `[${new Date().toISOString()}] Socket error fetching driver ${userId}: ${err.message}\n`;
-          require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
+          logger.error("Socket error fetching driver", { userId, error: err.message });
         });
       }
     } catch (err) {
@@ -132,7 +130,6 @@ function broadcastToNearbyDrivers(event, payload) {
   const notifiedUserIds = [];
 
   const allClients = Array.from(connectedClients.keys());
-  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] broadcastToNearbyDrivers: vehicleType=${vehicleType}, connectedClients=${JSON.stringify(allClients)}\n`);
 
   for (const [uid, client] of connectedClients.entries()) {
     const { ws, role, vehicleType: driverVehicleType } = client;
@@ -143,32 +140,22 @@ function broadcastToNearbyDrivers(event, payload) {
     }
 
     if (role === "driver") {
-      const logMsg = `[${new Date().toISOString()}] Candidate driver ${uid}: isAvailable=${client.isAvailable}, vehicleType=${driverVehicleType}\n`;
-      require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
       // Only notify if driver is available
       if (client.isAvailable === false) {
-        require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] Skipping busy driver ${uid}\n`);
         continue;
       }
-
-      require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] Checking driver ${uid}: requested=${vehicleType}, driver=${driverVehicleType}\n`);
       // If we know the vehicle types, filter; otherwise fallback to sending to all drivers
       if (vehicleType && driverVehicleType) {
         if (String(vehicleType).toLowerCase() === String(driverVehicleType).toLowerCase()) {
           ws.send(message);
           notifiedUserIds.push(uid);
-          require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] SUCCESS: Notified driver ${uid}\n`);
-        } else {
-          require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] MISMATCH: requested ${vehicleType} vs driver ${driverVehicleType}\n`);
         }
       } else {
         ws.send(message);
         notifiedUserIds.push(uid);
-        require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] FALLBACK SUCCESS: Notified driver ${uid} (missing type info)\n`);
       }
     }
   }
-  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', `[${new Date().toISOString()}] Broadcast complete for ${event}. Notified: ${notifiedUserIds.length} drivers.\n`);
   return notifiedUserIds;
 }
 

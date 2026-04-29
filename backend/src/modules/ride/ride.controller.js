@@ -22,9 +22,6 @@ const quote = asyncHandler(async (req, res) => {
 });
 
 const createRequest = asyncHandler(async (req, res) => {
-  const logMsg = `[${new Date().toISOString()}] [RideController] createRequest: userId=${req.user.id}, body=${JSON.stringify(req.body)}\n`;
-  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
-  
   const normalizedPayload = rideService.normalizeRideRequestPayload(req.body);
   const validation = validateCreateRideRequestPayload(normalizedPayload);
   if (!validation.isValid) {
@@ -166,6 +163,41 @@ const rejectRideRequest = asyncHandler(async (req, res) => {
   });
 });
 
+const joinSharedRide = asyncHandler(async (req, res) => {
+  const result = await rideService.joinSharedRide(req.params.rideId, req.user.id, req.body);
+  res.status(200).json({
+    success: true,
+    message: "Successfully joined shared ride",
+    data: result,
+  });
+});
+
+const leaveSharedRide = asyncHandler(async (req, res) => {
+  const result = await rideService.leaveSharedRide(req.params.rideId, req.user.id);
+  res.status(200).json({
+    success: true,
+    message: "Successfully left shared ride",
+    data: result,
+  });
+});
+
+const getAvailableSharedRides = asyncHandler(async (req, res) => {
+  const rides = await rideService.getAvailableSharedRides(req.query);
+  res.status(200).json({
+    success: true,
+    data: rides,
+  });
+});
+
+const acceptRide = asyncHandler(async (req, res) => {
+  const result = await rideService.acceptRide(req.params.rideId, req.user.id, req.body);
+  res.status(200).json({
+    success: true,
+    message: "Ride accepted successfully",
+    data: result,
+  });
+});
+
 module.exports = {
   quote,
   createRequest,
@@ -180,4 +212,8 @@ module.exports = {
   getHistoryByUserId,
   rateRide,
   rejectRideRequest,
+  joinSharedRide,
+  leaveSharedRide,
+  getAvailableSharedRides,
+  acceptRide,
 };

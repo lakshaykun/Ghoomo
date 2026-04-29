@@ -103,6 +103,14 @@ const respondToCandidate = asyncHandler(async (req, res) => {
   });
 });
 
+const getScheduledRides = asyncHandler(async (req, res) => {
+  const rows = await driverService.getScheduledRides();
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
 module.exports = {
   registerDriver,
   getProfile,
@@ -112,4 +120,5 @@ module.exports = {
   listCandidateRequests,
   getActiveRide,
   respondToCandidate,
+  getScheduledRides,
 };

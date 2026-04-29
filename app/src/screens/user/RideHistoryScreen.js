@@ -32,25 +32,42 @@ export default function RideHistoryScreen({ navigation }) {
     const isShare = item.isShare;
 
     return (
-      <Card elevated style={styles.card}>
-        <View style={styles.row}>
-          <View style={[styles.iconWrap, { backgroundColor: color + "20" }]}>
-            <Ionicons name={icon} size={24} color={color} />
-          </View>
-          <View style={styles.info}>
-            <View style={styles.titleRow}>
-              <Text style={styles.type}>{rideType?.charAt(0).toUpperCase() + rideType?.slice(1)}{isShare ? " (Shared)" : ""}</Text>
-              <Badge status={item.status} />
+      <TouchableOpacity 
+        activeOpacity={0.7} 
+        onPress={() => navigation.navigate("RideHistoryDetail", { ride: item })}
+      >
+        <Card elevated style={styles.card}>
+          <View style={styles.row}>
+            <View style={[styles.iconWrap, { backgroundColor: color + "20" }]}>
+              <Ionicons name={icon} size={24} color={color} />
             </View>
-            {item.pickup && <Text style={styles.route} numberOfLines={1}>{item.pickup?.name || item.pickup} → {item.drop?.name || item.drop}</Text>}
-            {item.routeId && <Text style={styles.route}>Bus Route • Seat {item.seatNumber}</Text>}
-            <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Text>
+            <View style={styles.info}>
+              <View style={styles.titleRow}>
+                <Text style={styles.type}>{rideType?.charAt(0).toUpperCase() + rideType?.slice(1)}{isShare ? " (Shared)" : ""}</Text>
+                <Badge status={item.status} />
+              </View>
+              {item.pickup && <Text style={styles.route} numberOfLines={1}>{item.pickup?.name || item.pickup} → {item.drop?.name || item.drop}</Text>}
+              {item.routeId && <Text style={styles.route}>Bus Route • Seat {item.seatNumber}</Text>}
+              
+              {isShare && item.total_passengers > 0 && (
+                <Text style={styles.participantsText}>
+                  <Ionicons name="people" size={12} color={COLORS.textSecondary} /> {item.total_passengers} Participants
+                </Text>
+              )}
+
+              <Text style={styles.date}>{new Date(item.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Text>
+            </View>
+            {rideType === "bus" || item.routeId ? null : (
+              <View style={styles.fareContainer}>
+                <Text style={styles.fare}>₹{Number(item.final_fare_per_person || item.fare).toFixed(2)}</Text>
+                {isShare && item.final_fare_per_person && (
+                  <Text style={styles.perPersonLabel}>per person</Text>
+                )}
+              </View>
+            )}
           </View>
-          {rideType === "bus" || item.routeId ? null : (
-            <Text style={styles.fare}>₹{item.fare}</Text>
-          )}
-        </View>
-      </Card>
+        </Card>
+      </TouchableOpacity>
     );
   };
 
@@ -87,7 +104,10 @@ const styles = StyleSheet.create({
   type: { fontSize: 14, fontWeight: "700", color: COLORS.text },
   route: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
   date: { fontSize: 11, color: COLORS.gray },
+  participantsText: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 2, fontWeight: "600" },
+  fareContainer: { alignItems: "flex-end" },
   fare: { fontSize: 16, fontWeight: "900", color: COLORS.text },
+  perPersonLabel: { fontSize: 10, color: COLORS.textSecondary, fontWeight: "600" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontSize: 20, fontWeight: "800", color: COLORS.text, marginTop: 16 },
   emptyText: { fontSize: 14, color: COLORS.textSecondary, marginTop: 8 },

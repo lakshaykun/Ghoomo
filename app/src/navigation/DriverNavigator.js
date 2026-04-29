@@ -10,6 +10,7 @@ import BusDriverRouteScreen from "../screens/driver/BusDriverRouteScreen";
 import DriverHistoryScreen from "../screens/driver/DriverHistoryScreen";
 import DriverProfileScreen from "../screens/driver/DriverProfileScreen";
 import DriverOtpScreen from "../screens/driver/DriverOtpScreen";
+import ScheduledRequestsScreen from "../screens/driver/ScheduledRequestsScreen";
 import { COLORS, TYPOGRAPHY, SHADOWS } from "../constants";
 
 const Stack = createNativeStackNavigator();
@@ -55,6 +56,14 @@ function DriverTabs() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={24} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="ScheduledRequests"
+        component={ScheduledRequestsScreen}
+        options={{
+          title: "Scheduled",
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar" size={24} color={color} />,
         }}
       />
     </Tab.Navigator>

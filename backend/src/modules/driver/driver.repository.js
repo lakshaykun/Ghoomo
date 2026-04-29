@@ -86,13 +86,6 @@ async function findDriverByUserId(userId) {
     `,
     [userId]
   );
-  if (result.rows[0]) {
-    const logMsg = `[${new Date().toISOString()}] Found profile: userId=${userId}, is_available=${result.rows[0].is_available}, availability_status=${result.rows[0].availability_status}\n`;
-    require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
-  } else {
-    const logMsg = `[${new Date().toISOString()}] Profile NOT found: userId=${userId}\n`;
-    require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
-  }
   return result.rows[0] || null;
 }
 
@@ -176,8 +169,6 @@ async function registerDriver({ userId, vehicleNumber, vehicleType }) {
 
 async function updateAvailabilityByUserId(userId, { isAvailable, status }) {
   const availabilityStatus = isAvailable ? 'idle' : 'offline';
-  const logMsg = `[${new Date().toISOString()}] Updating availability: userId=${userId}, isAvailable=${isAvailable}, status=${availabilityStatus}\n`;
-  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
   const result = await query(
     `
     UPDATE drivers
@@ -329,7 +320,8 @@ async function listCandidateRequestsByUserId(userId) {
       rr.pickup_longitude,
       rr.drop_latitude,
       rr.drop_longitude,
-      rr.is_shared,
+      rr.ride_type,
+      rr.is_scheduled,
       rr.estimated_fare,
       rr.estimated_distance_km,
       rr.request_time,
@@ -369,7 +361,8 @@ async function findActiveRideByUserId(userId) {
       r.status,
       r.start_time,
       r.end_time,
-      r.is_shared,
+      r.ride_type,
+      r.is_scheduled,
       r.created_at,
       r.updated_at,
       loc.is_inside_campus AS driver_is_inside_campus
@@ -420,6 +413,19 @@ async function markRideRequestMatched(requestId) {
   return result.rows[0] || null;
 }
 
+async function listScheduledRides() {
+  const result = await query(
+    `
+    SELECT r.*,
+      (SELECT SUM(passengers_count) FROM ride_participants WHERE ride_id = r.id AND status != 'cancelled') AS total_passengers
+    FROM rides r
+    WHERE r.is_scheduled = TRUE AND r.status IN ('SCHEDULED', 'OPEN')
+    ORDER BY r.scheduled_at ASC
+    `
+  );
+  return result.rows;
+}
+
 module.exports = {
   findDriverByUserId,
   findDriverById,
@@ -432,4 +438,5 @@ module.exports = {
   findActiveRideByUserId,
   updateCandidateStatus,
   markRideRequestMatched,
+  listScheduledRides,
 };

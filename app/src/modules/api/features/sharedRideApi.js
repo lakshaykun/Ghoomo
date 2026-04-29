@@ -1,192 +1,100 @@
 import { httpClient } from "../core/httpClient";
 import { toPlace } from "./mappers";
-import { getRideByIdOrRequest } from "./rideApi";
 
-function dedupeRows(rows = []) {
-  const map = new Map();
-  rows.forEach((row) => {
-    if (row?.id) {
-      map.set(row.id, row);
-    }
-  });
-  return [...map.values()];
-}
-
-async function listRowsByStatus(status) {
-  const query = new URLSearchParams();
-  if (status) query.set("status", status);
-
-  const suffix = query.toString();
-  const path = suffix ? `/api/shared-rides?${suffix}` : "/api/shared-rides";
-  const rows = await httpClient.get(path, { auth: false });
-
-  return Array.isArray(rows) ? rows : [];
-}
-
-function toParticipantModel(participant = {}, index = 0) {
-  return {
-    userId: participant.user_id || participant.userId || `participant-${index}`,
-    name: participant.name || `Rider ${index + 1}`,
-    status: participant.status || "joined",
-  };
-}
-
-function buildJoinPayload(baseRide, fallback = {}) {
-  const pickup = baseRide?.pickup ||
-    toPlace({
-      name: fallback.pickup_location,
-      address: fallback.pickup_location,
-      latitude: fallback.pickup_latitude,
-      longitude: fallback.pickup_longitude,
-    });
-
-  const drop = baseRide?.drop ||
-    toPlace({
-      name: fallback.drop_location,
-      address: fallback.drop_location,
-      latitude: fallback.drop_latitude,
-      longitude: fallback.drop_longitude,
-    });
-
-  return {
-    pickupLocation: pickup.name || "Pickup",
-    dropLocation: drop.name || "Drop",
-    pickupLatitude: pickup.latitude,
-    pickupLongitude: pickup.longitude,
-    dropLatitude: drop.latitude,
-    dropLongitude: drop.longitude,
-  };
-}
-
-async function toSharedRideModel(sharedRideRow = {}, currentUserId) {
-  const sharedRideId = sharedRideRow.id || sharedRideRow.sharedRideId;
-  if (!sharedRideId) return null;
-
-  const detail = await httpClient.get(`/api/shared-rides/${sharedRideId}`, {
-    auth: false,
-  });
-
-  const participants = Array.isArray(detail.participants) ? detail.participants : [];
-  const acceptedParticipants = participants.filter((participant) => participant.status !== "cancelled");
-  const acceptedUsers = acceptedParticipants.map((participant, index) =>
-    toParticipantModel(participant, index)
-  );
-
-  const baseRideId = detail.base_ride_id || detail.baseRideId || null;
-  let baseRide = null;
-
-  if (baseRideId) {
-    try {
-      const rideResult = await getRideByIdOrRequest(baseRideId);
-      baseRide = rideResult?.ride || null;
-    } catch {
-      baseRide = null;
-    }
-  }
-
-  const requestedSeats = Number(detail.max_participants || detail.maxParticipants || 2);
-  const acceptedCount = acceptedUsers.length;
-  const remainingSeats = Math.max(0, requestedSeats - acceptedCount);
-
-  const firstParticipant = acceptedParticipants[0] || participants[0] || {};
-  const pickup =
-    baseRide?.pickup ||
-    toPlace({
-      name: firstParticipant.pickup_location,
-      address: firstParticipant.pickup_location,
-      latitude: firstParticipant.pickup_latitude,
-      longitude: firstParticipant.pickup_longitude,
-    });
-  const drop =
-    baseRide?.drop ||
-    toPlace({
-      name: firstParticipant.drop_location,
-      address: firstParticipant.drop_location,
-      latitude: firstParticipant.drop_latitude,
-      longitude: firstParticipant.drop_longitude,
-    });
-
-  const ownerId = baseRide?.userId || baseRide?.student_id || null;
-
-  return {
-    id: sharedRideId,
-    rideId: baseRideId,
-    ownerId,
-    ownerName: ownerId && ownerId === currentUserId ? "You" : "Rider",
-    rideType: baseRide?.rideType || "cab",
-    pickup,
-    drop,
-    requestedSeats,
-    acceptedCount,
-    remainingSeats,
-    acceptedUsers,
-    status: detail.status || "open",
-    createdAt: detail.created_at || null,
-    updatedAt: detail.updated_at || null,
-  };
-}
-
+/**
+ * Fetch all shared rides for a user.
+ * Splits into myRequests (created by this user) and availableRequests (joinable).
+ */
 export async function fetchSharedRidesForUser(userId) {
-  const [openRows, fullRows] = await Promise.all([
-    listRowsByStatus("open"),
-    listRowsByStatus("full"),
+  // Fetch open + scheduled rides from the backend
+  const [openRows, scheduledRows] = await Promise.all([
+    httpClient.get("/api/shared-rides?status=open").catch(() => []),
+    httpClient.get("/api/shared-rides?status=scheduled").catch(() => []),
   ]);
 
-  const rows = dedupeRows([...openRows, ...fullRows]);
+  const allRows = dedupeById([
+    ...(Array.isArray(openRows) ? openRows : []),
+    ...(Array.isArray(scheduledRows) ? scheduledRows : []),
+  ]);
 
-  const requests = (
-    await Promise.all(
-      rows.map((row) =>
-        toSharedRideModel(row, userId).catch(() => null)
-      )
-    )
-  ).filter(Boolean);
+  const requests = allRows.map((row) => toSharedRideModel(row, userId));
 
-  const myRequests = requests.filter((request) => request.ownerId && request.ownerId === userId);
+  const myRequests = requests.filter((r) => r.ownerId === userId);
   const availableRequests = requests.filter(
-    (request) => request.ownerId !== userId && request.status === "open" && request.remainingSeats > 0
+    (r) =>
+      r.ownerId !== userId &&
+      ["open", "scheduled"].includes(String(r.status || "").toLowerCase()) &&
+      r.remainingSeats > 0
   );
 
-  return {
-    requests,
-    myRequests,
-    availableRequests,
-  };
+  return { requests, myRequests, availableRequests };
 }
 
-export async function joinSharedRideById(sharedRideId, userId) {
-  const detail = await httpClient.get(`/api/shared-rides/${sharedRideId}`, {
-    auth: false,
-  });
+/**
+ * Get a single shared ride detail (with participants) by its id.
+ */
+export async function findSharedRideByRideId(rideId, userId = null) {
+  try {
+    const data = await httpClient.get(`/api/shared-rides/${rideId}`);
+    if (!data) return { request: null };
+    const request = toSharedRideModelFromDetail(data, userId);
+    return { request };
+  } catch {
+    return { request: null };
+  }
+}
 
-  let baseRide = null;
-  if (detail.base_ride_id) {
-    try {
-      const rideResult = await getRideByIdOrRequest(detail.base_ride_id);
-      baseRide = rideResult?.ride || null;
-    } catch {
-      baseRide = null;
-    }
+/**
+ * Join a shared ride.
+ * The rideId IS the shared ride id in the new schema (rides.id).
+ */
+export async function joinSharedRideById(rideId, userId) {
+  // Fetch ride detail to get pickup/drop for the join payload
+  let pickupLocation = "";
+  let dropLocation = "";
+  let pickupLatitude = null;
+  let pickupLongitude = null;
+  let dropLatitude = null;
+  let dropLongitude = null;
+
+  try {
+    const detail = await httpClient.get(`/api/shared-rides/${rideId}`);
+    pickupLocation = detail.pickup_location || "";
+    dropLocation = detail.drop_location || "";
+    pickupLatitude = detail.pickup_latitude ? Number(detail.pickup_latitude) : null;
+    pickupLongitude = detail.pickup_longitude ? Number(detail.pickup_longitude) : null;
+    dropLatitude = detail.drop_latitude ? Number(detail.drop_latitude) : null;
+    dropLongitude = detail.drop_longitude ? Number(detail.drop_longitude) : null;
+  } catch {
+    // Use defaults – backend will validate
   }
 
-  await httpClient.post(`/api/shared-rides/${sharedRideId}/join`, {
-    body: buildJoinPayload(baseRide),
+  const result = await httpClient.post(`/api/shared-rides/${rideId}/join`, {
+    body: {
+      pickupLocation,
+      dropLocation,
+      pickupLatitude,
+      pickupLongitude,
+      dropLatitude,
+      dropLongitude,
+      passengersCount: 1,
+    },
   });
 
-  const request = await toSharedRideModel({ id: sharedRideId }, userId);
-  return { request };
+  return result;
 }
 
-export async function closeSharedRideById(sharedRideId) {
+/**
+ * Close / cancel a shared ride (driver or admin).
+ */
+export async function closeSharedRideById(rideId) {
   try {
-    await httpClient.patch(`/api/shared-rides/${sharedRideId}/status`, {
-      body: {
-        status: "cancelled",
-      },
+    await httpClient.patch(`/api/shared-rides/${rideId}/status`, {
+      body: { status: "CANCELLED" },
     });
   } catch (error) {
     if (error?.status === 403) {
-      throw new Error("Only driver/admin accounts can close shared rides in the current backend.");
+      throw new Error("Only driver/admin accounts can close shared rides.");
     }
     throw error;
   }
@@ -194,21 +102,107 @@ export async function closeSharedRideById(sharedRideId) {
   return { success: true };
 }
 
-export async function findSharedRideByRideId(rideId, userId = null) {
-  const [openRows, fullRows, completedRows] = await Promise.all([
-    listRowsByStatus("open"),
-    listRowsByStatus("full"),
-    listRowsByStatus("completed"),
-  ]);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  const row = [...openRows, ...fullRows, ...completedRows].find(
-    (item) => (item.base_ride_id || item.baseRideId) === rideId
-  );
+function dedupeById(rows) {
+  const map = new Map();
+  rows.forEach((row) => {
+    if (row?.id) map.set(row.id, row);
+  });
+  return [...map.values()];
+}
 
-  if (!row) {
-    return { request: null };
-  }
+/**
+ * Map a list-level row (from GET /api/shared-rides) to the shared ride model the UI expects.
+ */
+function toSharedRideModel(row = {}, currentUserId) {
+  const rideId = row.id;
+  const ownerId = row.student_id || null;
+  const maxParticipants = Number(row.max_participants || row.min_vehicle_capacity_allowed || 4);
+  const totalPassengers = Number(row.total_passengers || 0);
+  const remainingSeats = Math.max(0, maxParticipants - totalPassengers);
 
-  const request = await toSharedRideModel(row, userId);
-  return { request };
+  const pickup = toPlace({
+    name: row.pickup_location,
+    address: row.pickup_location,
+    latitude: row.pickup_latitude,
+    longitude: row.pickup_longitude,
+  });
+
+  const drop = toPlace({
+    name: row.drop_location,
+    address: row.drop_location,
+    latitude: row.drop_latitude,
+    longitude: row.drop_longitude,
+  });
+
+  return {
+    id: rideId,
+    rideId,
+    ownerId,
+    ownerName: ownerId && ownerId === currentUserId ? "You" : row.creator_name || "Rider",
+    rideType: row.vehicle_type || row.ride_type || "auto",
+    pickup,
+    drop,
+    requestedSeats: maxParticipants,
+    acceptedCount: totalPassengers,
+    remainingSeats,
+    status: String(row.status || "open").toLowerCase(),
+    scheduledAt: row.scheduled_at || null,
+    isScheduled: Boolean(row.is_scheduled),
+    fare: row.fare,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+/**
+ * Map a detail-level row (from GET /api/shared-rides/:id) to the shared ride model.
+ */
+function toSharedRideModelFromDetail(detail = {}, currentUserId) {
+  const participants = Array.isArray(detail.participants) ? detail.participants : [];
+  const maxParticipants = Number(detail.max_participants || 4);
+  const totalPassengers = Number(detail.total_passengers || participants.length);
+  const remainingSeats = Math.max(0, maxParticipants - totalPassengers);
+
+  const pickup = toPlace({
+    name: detail.pickup_location,
+    address: detail.pickup_location,
+    latitude: detail.pickup_latitude,
+    longitude: detail.pickup_longitude,
+  });
+
+  const drop = toPlace({
+    name: detail.drop_location,
+    address: detail.drop_location,
+    latitude: detail.drop_latitude,
+    longitude: detail.drop_longitude,
+  });
+
+  return {
+    id: detail.id,
+    rideId: detail.id,
+    ownerId: detail.student_id || null,
+    ownerName:
+      detail.student_id && detail.student_id === currentUserId
+        ? "You"
+        : detail.creator_name || "Rider",
+    rideType: detail.vehicle_type || detail.ride_type || "auto",
+    pickup,
+    drop,
+    requestedSeats: maxParticipants,
+    acceptedCount: totalPassengers,
+    remainingSeats,
+    acceptedUsers: participants.map((p, i) => ({
+      userId: p.user_id,
+      name: p.name || `Rider ${i + 1}`,
+      status: p.status,
+    })),
+    status: String(detail.status || "open").toLowerCase(),
+    scheduledAt: detail.scheduled_at || null,
+    isScheduled: Boolean(detail.is_scheduled),
+    fare: detail.fare,
+    createdAt: detail.created_at || null,
+    updatedAt: detail.updated_at || null,
+  };
 }

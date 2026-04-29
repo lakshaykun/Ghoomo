@@ -4,12 +4,13 @@ const { authenticate, requireRole } = require("../../common/middleware/auth.midd
 
 const router = express.Router();
 
+// Public routes
 router.get("/", controller.listSharedRides);
 router.get("/:sharedRideId", controller.getSharedRide);
 
+// Authenticated routes
 router.use(authenticate);
 
-router.post("/", controller.createSharedRide);
 router.post("/:sharedRideId/join", controller.joinSharedRide);
 router.patch("/:sharedRideId/status", requireRole("driver", "admin"), controller.updateStatus);
 
