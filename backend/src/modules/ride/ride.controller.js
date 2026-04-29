@@ -22,6 +22,9 @@ const quote = asyncHandler(async (req, res) => {
 });
 
 const createRequest = asyncHandler(async (req, res) => {
+  const logMsg = `[${new Date().toISOString()}] [RideController] createRequest: userId=${req.user.id}, body=${JSON.stringify(req.body)}\n`;
+  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
+  
   const normalizedPayload = rideService.normalizeRideRequestPayload(req.body);
   const validation = validateCreateRideRequestPayload(normalizedPayload);
   if (!validation.isValid) {
@@ -105,7 +108,7 @@ const updateRideStatus = asyncHandler(async (req, res) => {
 });
 
 const getMyHistory = asyncHandler(async (req, res) => {
-  const rides = await rideService.getRideHistory(req.user.id);
+  const rides = await rideService.getRideHistory(req.user.id, req.user.role);
   res.status(200).json({
     success: true,
     data: rides,
@@ -119,7 +122,7 @@ const getHistoryByUserId = asyncHandler(async (req, res) => {
     throw new AppError("You can only fetch your own ride history", 403, "FORBIDDEN");
   }
 
-  const rides = await rideService.getRideHistory(requestedUserId);
+  const rides = await rideService.getRideHistory(requestedUserId, req.user.role);
   res.status(200).json({
     success: true,
     data: rides,
@@ -140,6 +143,29 @@ const rateRide = asyncHandler(async (req, res) => {
   });
 });
 
+const verifyOtp = asyncHandler(async (req, res) => {
+  const { otp } = req.body;
+  if (!otp || String(otp).trim().length < 4) {
+    throw new AppError("Valid OTP is required", 400, "VALIDATION_ERROR");
+  }
+
+  const ride = await rideService.verifyRideOtp(req.params.rideId, String(otp).trim());
+  res.status(200).json({
+    success: true,
+    message: "OTP verified. Ride is now ON_TRIP.",
+    data: ride,
+  });
+});
+
+const rejectRideRequest = asyncHandler(async (req, res) => {
+  const row = await rideService.rejectRideRequest(req.params.requestId, req.user.id);
+  res.status(200).json({
+    success: true,
+    message: "Request rejected",
+    data: row,
+  });
+});
+
 module.exports = {
   quote,
   createRequest,
@@ -149,7 +175,9 @@ module.exports = {
   assignDriver,
   getRide,
   updateRideStatus,
+  verifyOtp,
   getMyHistory,
   getHistoryByUserId,
   rateRide,
+  rejectRideRequest,
 };

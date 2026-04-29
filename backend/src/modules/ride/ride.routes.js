@@ -19,6 +19,8 @@ router.get("/history/:userId", controller.getHistoryByUserId);
 
 router.get("/:rideId", controller.getRide);
 router.patch("/:rideId/status", requireRole("driver", "admin"), controller.updateRideStatus);
+router.post("/:rideId/verify-otp", requireRole("driver"), controller.verifyOtp);
+router.post("/requests/:requestId/reject", requireRole("driver"), controller.rejectRideRequest);
 router.post("/:rideId/rate", controller.rateRide);
 
 module.exports = router;

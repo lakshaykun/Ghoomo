@@ -67,10 +67,18 @@ async function updateById(userId, fields) {
 async function listSavedLocations(userId) {
   const result = await query(
     `
-    SELECT id, user_id, name, address, latitude, longitude, created_at
-    FROM saved_locations
-    WHERE user_id = $1
-    ORDER BY created_at DESC
+    SELECT
+      uf.id,
+      uf.user_id,
+      COALESCE(uf.label, gp.name) AS name,
+      gp.address,
+      gp.latitude,
+      gp.longitude,
+      uf.created_at
+    FROM user_favourites uf
+    INNER JOIN global_places gp ON gp.id = uf.place_id
+    WHERE uf.user_id = $1
+    ORDER BY uf.created_at DESC
     `,
     [userId]
   );
@@ -79,22 +87,46 @@ async function listSavedLocations(userId) {
 }
 
 async function createSavedLocation({ userId, name, address, latitude, longitude }) {
-  const result = await query(
+  const normalizedName = String(name || "").trim().toLowerCase();
+  const placeResult = await query(
     `
-    INSERT INTO saved_locations (user_id, name, address, latitude, longitude)
+    INSERT INTO global_places (name, normalized_name, address, latitude, longitude)
     VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, user_id, name, address, latitude, longitude, created_at
+    ON CONFLICT (normalized_name, latitude, longitude)
+    DO UPDATE SET
+      name = EXCLUDED.name,
+      address = EXCLUDED.address,
+      updated_at = NOW()
+    RETURNING id, name, address, latitude, longitude
     `,
-    [userId, name, address, latitude, longitude]
+    [name, normalizedName, address, latitude, longitude]
   );
 
-  return result.rows[0];
+  const place = placeResult.rows[0];
+  const result = await query(
+    `
+    INSERT INTO user_favourites (user_id, place_id, label)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (user_id, place_id)
+    DO UPDATE SET label = EXCLUDED.label
+    RETURNING id, user_id, created_at
+    `,
+    [userId, place.id, name]
+  );
+
+  return {
+    ...result.rows[0],
+    name,
+    address: place.address,
+    latitude: place.latitude,
+    longitude: place.longitude,
+  };
 }
 
 async function deleteSavedLocation(userId, locationId) {
   const result = await query(
     `
-    DELETE FROM saved_locations
+    DELETE FROM user_favourites
     WHERE user_id = $1 AND id = $2
     `,
     [userId, locationId]

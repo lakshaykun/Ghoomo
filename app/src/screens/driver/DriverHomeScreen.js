@@ -29,6 +29,8 @@ import OsmRouteMap from "../../components/map/OsmRouteMap";
 import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS, BOOKING_STATUS } from "../../constants";
 import { ensureDriverBackgroundLocation, stopDriverBackgroundLocation } from "../../services/backgroundLocation";
 import { api } from "../../services/api";
+import { subscribeGlobalRealtime } from "../../services/realtime";
+import { fetchOSRMRoute } from "../../utils/map";
 
 export default function DriverHomeScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -36,28 +38,39 @@ export default function DriverHomeScreen({ navigation }) {
   const { dashboard, loading, error } = useSelector((state) => state.driver);
   const watchSubscriptionRef = useRef(null);
   const webWatchIdRef = useRef(null);
+  const wsUnsubRef = useRef(null);
   const [sharedRequest, setSharedRequest] = useState(null);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [routeData, setRouteData] = useState(null);
+
+  const authToken = useSelector((state) => state.auth.token || state.auth.accessToken || null);
+  const isOnline = Boolean(dashboard?.online ?? user?.online);
+  const driverUserId = user?.id || dashboard?.driver?.userId || null;
 
   useEffect(() => {
-    if (!user?.id) return undefined;
+    if (!driverUserId) return undefined;
 
-    dispatch(fetchDriverDashboard(user.id)).catch(() => {});
+    dispatch(fetchDriverDashboard(driverUserId)).catch(() => { });
     const intervalId = setInterval(() => {
-      dispatch(fetchDriverDashboard(user.id)).catch(() => {});
+      dispatch(fetchDriverDashboard(driverUserId)).catch(() => { });
     }, 10000);
 
     return () => clearInterval(intervalId);
-  }, [dispatch, user?.id]);
+  }, [dispatch, driverUserId]);
 
   useEffect(() => {
     let mounted = true;
 
     const startTracking = async () => {
-      if (!dashboard?.online || !user?.id) return;
+      if (!dashboard?.online || !driverUserId) return;
       try {
         if (Platform.OS !== "web") await ensureDriverBackgroundLocation();
       } catch (permissionError) {
-        if (mounted) Alert.alert("Location Permission Required", permissionError.message);
+        // We only alert if it's a critical foreground error.
+        // ensureDriverBackgroundLocation now handles background denial silently.
+        if (mounted && permissionError.message.includes("Foreground")) {
+          Alert.alert("Location Permission Required", permissionError.message);
+        }
       }
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted" || !mounted) return;
@@ -65,24 +78,24 @@ export default function DriverHomeScreen({ navigation }) {
       const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       if (mounted) {
         dispatch(
-          updateDriverLocation(user.id, {
+          updateDriverLocation(driverUserId, {
             latitude: current.coords.latitude,
             longitude: current.coords.longitude,
           })
-        ).catch(() => {});
+        ).catch(() => { });
       }
 
       if (Platform.OS === "web" && globalThis.navigator?.geolocation?.watchPosition) {
         const watchId = globalThis.navigator.geolocation.watchPosition(
           (position) => {
             dispatch(
-              updateDriverLocation(user.id, {
+              updateDriverLocation(driverUserId, {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
               })
-            ).catch(() => {});
+            ).catch(() => { });
           },
-          () => {},
+          () => { },
           { enableHighAccuracy: false, maximumAge: 5000, timeout: 10000 }
         );
 
@@ -95,17 +108,17 @@ export default function DriverHomeScreen({ navigation }) {
         { accuracy: Location.Accuracy.Balanced, distanceInterval: 20, timeInterval: 7000 },
         (position) => {
           dispatch(
-            updateDriverLocation(user.id, {
+            updateDriverLocation(driverUserId, {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
             })
-          ).catch(() => {});
+          ).catch(() => { });
         }
       );
 
       if (mounted) watchSubscriptionRef.current = subscription;
       else {
-        try { subscription.remove?.(); } catch (_error) {}
+        try { subscription.remove?.(); } catch (_error) { }
       }
     };
 
@@ -118,23 +131,52 @@ export default function DriverHomeScreen({ navigation }) {
         webWatchIdRef.current = null;
       }
       if (watchSubscriptionRef.current) {
-        try { watchSubscriptionRef.current.remove?.(); } catch (_error) {}
+        try { watchSubscriptionRef.current.remove?.(); } catch (_error) { }
         watchSubscriptionRef.current = null;
       }
     };
-  }, [dashboard?.online, dispatch, user?.id]);
+  }, [dashboard?.online, dispatch, driverUserId]);
 
   const handleToggleOnline = (nextValue) => {
-    if (!nextValue) stopDriverBackgroundLocation().catch(() => {});
-    dispatch(toggleDriverOnline(user.id, nextValue)).catch((toggleError) =>
+    if (!nextValue) stopDriverBackgroundLocation().catch(() => { });
+    dispatch(toggleDriverOnline(driverUserId, nextValue)).catch((toggleError) =>
       Alert.alert("Update Failed", toggleError.message)
     );
   };
 
+  // Subscribe to real-time ride requests via WebSocket when online
+  useEffect(() => {
+    if (!isOnline || !authToken) {
+      wsUnsubRef.current?.();
+      return undefined;
+    }
+    const unsubscribe = subscribeGlobalRealtime(authToken, {
+      onEvent: (event, data) => {
+        console.log(`[DriverWS] Event: ${event}`, data);
+        if (event === "new_ride_request" && data?.request) {
+          setIncomingRequests((prev) => {
+            const exists = prev.some((r) => r.id === data.request.id);
+            return exists ? prev : [data.request, ...prev].slice(0, 10);
+          });
+          // Also refresh the dashboard
+          dispatch(fetchDriverDashboard(driverUserId)).catch(() => { });
+        }
+      },
+    });
+    wsUnsubRef.current = unsubscribe;
+    return () => unsubscribe();
+  }, [isOnline, authToken, dispatch, driverUserId]);
+
   const handleRideAction = (rideId, status, extra = {}) => {
-    dispatch(driverUpdateRideStatus(user.id, rideId, status, extra)).catch((rideError) =>
-      Alert.alert("Ride Update Failed", rideError.message)
-    );
+    dispatch(driverUpdateRideStatus(driverUserId, rideId, status, extra))
+      .then(() => {
+        if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED].includes(status)) {
+          dispatch(fetchDriverDashboard(driverUserId)).catch(() => { });
+        }
+      })
+      .catch((rideError) =>
+        Alert.alert("Ride Update Failed", rideError.message)
+      );
   };
 
   const handleAcceptRide = (ride) => {
@@ -145,8 +187,23 @@ export default function DriverHomeScreen({ navigation }) {
     handleRideAction(ride.id, BOOKING_STATUS.ACCEPTED, {
       actor: "driver",
       sourceType: ride.sourceType,
-      driverId: user?.id,
+      driverId: driverUserId,
     });
+  };
+
+  const handleAcceptIncomingRequest = (requestId, request) => {
+    setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+    api.assignDriver(requestId, {
+      driverId: driverUserId,
+      fare: request.fare,
+      distance: request.distance,
+    })
+      .then(() => {
+        dispatch(fetchDriverDashboard(driverUserId)).catch(() => { });
+      })
+      .catch((err) => {
+        Alert.alert("Assignment Failed", err.message || "Someone else might have accepted this ride.");
+      });
   };
 
   const assignedRides = dashboard?.assignedRides || [];
@@ -159,7 +216,40 @@ export default function DriverHomeScreen({ navigation }) {
   const completedRides = dashboard?.completedRides || [];
   const driverProfile = dashboard?.driver || user || {};
   const stats = dashboard?.stats || { todayEarnings: 0, ridesToday: 0, rating: user?.rating || 0 };
-  const isOnline = Boolean(dashboard?.online ?? user?.online);
+
+  useEffect(() => {
+    console.log("[DriverHome] State check:", {
+      isOnline,
+      dashboardOnline: dashboard?.online,
+      userOnline: user?.online,
+      userId: user?.id,
+      hasDashboard: !!dashboard
+    });
+  }, [isOnline, dashboard?.online, user?.online]);
+
+  useEffect(() => {
+    if (activeRide?.status && [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ARRIVED, BOOKING_STATUS.OTP_VERIFIED, BOOKING_STATUS.IN_PROGRESS].includes(activeRide.status)) {
+      const isHeadingToPickup = [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ARRIVED].includes(activeRide.status);
+      const source = dashboard?.location || activeRide.driver || activeRide.pickup;
+      const destination = isHeadingToPickup ? activeRide.pickup : activeRide.drop;
+
+      if (source?.latitude && source?.longitude && destination?.latitude && destination?.longitude) {
+        // Only fetch if they are different enough to matter (approx > 15m)
+        const dLat = Math.abs(source.latitude - destination.latitude);
+        const dLon = Math.abs(source.longitude - destination.longitude);
+        if (dLat < 0.00015 && dLon < 0.00015) {
+           setRouteData({ points: [source, destination], distance: 0, duration: 0 });
+           return;
+        }
+
+        fetchOSRMRoute(source, destination, true).then((res) => {
+          if (res && res.points && res.points.length > 0) {
+            setRouteData(res);
+          }
+        }).catch(() => {});
+      }
+    }
+  }, [activeRide?.driver?.latitude, activeRide?.driver?.longitude, activeRide?.pickup, activeRide?.drop, activeRide?.status, dashboard?.location]);
 
   useEffect(() => {
     if (!activeRide?.id || !activeRide?.isShare) {
@@ -218,7 +308,6 @@ export default function DriverHomeScreen({ navigation }) {
       Alert.alert("Ride Update Failed", rideError.message);
     }
   };
-
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <KeyboardAvoidingView
@@ -297,7 +386,7 @@ export default function DriverHomeScreen({ navigation }) {
                     pickup={activeRide.pickup}
                     drop={activeRide.drop}
                     driver={activeRide.driver}
-                    routePoints={activeRide.route?.geometry || []}
+                    routePoints={routeData?.points || activeRide.route?.geometry || []}
                   />
                 </View>
                 <Card elevated style={styles.assignmentCard}>
@@ -310,8 +399,17 @@ export default function DriverHomeScreen({ navigation }) {
                   </View>
                   <View style={styles.assignmentMetaRow}>
                     <Text style={styles.assignmentMeta}>Fare: ₹{activeRide.fare}</Text>
-                    <Text style={styles.assignmentMeta}>{activeRide.distance} km</Text>
-                    <Text style={styles.assignmentMeta}>{activeRide.durationMinutes} min</Text>
+                    {routeData && routeData.duration !== undefined ? (
+                      <>
+                        <Text style={styles.assignmentMeta}>{Number(routeData.distance / 1000 || 0).toFixed(1)} km</Text>
+                        <Text style={styles.assignmentMeta}>{Math.round(routeData.duration / 60)} min</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.assignmentMeta}>{activeRide.distance} km</Text>
+                        <Text style={styles.assignmentMeta}>{activeRide.durationMinutes} min</Text>
+                      </>
+                    )}
                   </View>
                   {activeRide.isShare && sharedRequest ? (
                     <View style={styles.sharedPassengersWrap}>
@@ -351,6 +449,48 @@ export default function DriverHomeScreen({ navigation }) {
                   {dashboard?.online ? "Listening for nearby trip requests..." : "Go online to start receiving trips."}
                 </Text>
               </Card>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Available Requests ({incomingRequests.length})</Text>
+            {incomingRequests.length === 0 ? (
+              <Card style={styles.noRequests}>
+                <Ionicons name="notifications-outline" size={32} color={COLORS.border} />
+                <Text style={styles.noRequestsText}>No new requests nearby.</Text>
+              </Card>
+            ) : (
+              incomingRequests.map((request) => (
+                <Card key={request.id} elevated style={[styles.rideCard, { borderColor: COLORS.success + "40", borderLeftWidth: 4 }]}>
+                  <View style={styles.requestHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.passengerName} numberOfLines={1}>{request.pickup_location}</Text>
+                      <Text style={styles.routeText} numberOfLines={1}>To: {request.drop_location}</Text>
+                    </View>
+                    <View style={styles.fareWrap}>
+                      <Text style={[styles.reqFare, { color: COLORS.success }]}>{request.vehicle_type?.toUpperCase() || "AUTO"}</Text>
+                      <Badge status="SEARCHING" />
+                    </View>
+                  </View>
+                  <View style={styles.pendingActionRow}>
+                    <Button
+                      title="Accept Ride"
+                      onPress={() => handleAcceptIncomingRequest(request.id, request)}
+                      variant="success"
+                      style={{ flex: 1 }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        api.rejectRideRequest(request.id).catch(() => { });
+                        setIncomingRequests(prev => prev.filter(r => r.id !== request.id));
+                      }}
+                      style={styles.ignoreBtn}
+                    >
+                      <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              ))
             )}
           </View>
 
@@ -480,4 +620,5 @@ const styles = StyleSheet.create({
   historySub: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 4 },
   historyRight: { alignItems: "flex-end", gap: 6 },
   historyFare: { ...TYPOGRAPHY.body, fontWeight: "800", color: COLORS.text },
+  ignoreBtn: { padding: SPACING.sm, marginLeft: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
 });

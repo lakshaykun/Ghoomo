@@ -23,10 +23,11 @@ export const USER_ROLES = {
 };
 
 export const BOOKING_STATUS = {
-  PENDING: 'pending',
-  ACCEPTED: 'accepted',
-  ARRIVED: 'arrived',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled',
+  PENDING: 'searching',
+  ACCEPTED: 'ACCEPTED',
+  ARRIVED: 'DRIVER_ARRIVED',
+  OTP_VERIFIED: 'OTP_VERIFIED',
+  IN_PROGRESS: 'ON_TRIP',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
 };

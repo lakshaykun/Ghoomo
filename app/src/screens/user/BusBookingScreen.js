@@ -37,12 +37,10 @@ export default function BusBookingScreen({ navigation }) {
   const liveRoutes = useSelector((state) => state.busRoutes.routes);
   const routes = liveRoutes;
   const [selectedRoute, setSelectedRoute] = useState(null);
+  const [selectedSeatNumber, setSelectedSeatNumber] = useState(null);
   const [step, setStep] = useState("routes");
   const [lastBooking, setLastBooking] = useState(null);
   const [now, setNow] = useState(new Date());
-  const canUpdateBusBookingStatus = ["driver", "admin", "bus_driver"].includes(
-    String(user?.role || "").toLowerCase()
-  );
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 30000);
@@ -78,6 +76,10 @@ export default function BusBookingScreen({ navigation }) {
       setStep("routes");
     }
   }, [selectedRoute, step]);
+
+  useEffect(() => {
+    setSelectedSeatNumber(null);
+  }, [selectedRoute?.id, step]);
 
   const userBusBookings = useMemo(
     () => busBookings.filter((booking) => booking.userId === user?.id && booking.status !== "cancelled"),
@@ -130,6 +132,7 @@ export default function BusBookingScreen({ navigation }) {
           routeId: selectedRoute.id,
           userId: user.id,
           userName: user.name,
+          seatNumber: selectedSeatNumber,
         })
       );
 
@@ -159,14 +162,6 @@ export default function BusBookingScreen({ navigation }) {
   };
 
   const handleCancel = (booking) => {
-    if (!canUpdateBusBookingStatus) {
-      Alert.alert(
-        "Cancellation Not Allowed",
-        "The current backend allows bus-booking cancellation only for driver/admin roles."
-      );
-      return;
-    }
-
     const route = routes.find((item) => item.id === booking.routeId);
     const bookingWindow = route ? getBookingWindow(route, now) : null;
     if (booking.verified) {
@@ -295,6 +290,7 @@ export default function BusBookingScreen({ navigation }) {
                     <Text style={styles.myBookingMeta}>
                       {booking.isWaiting ? `WL ${booking.waitlistPosition}` : `Seat ${booking.seatNumber}`}
                     </Text>
+                    <Text style={styles.myBookingMeta}>Fare: Rs {Number(booking.fareAmount || 0).toFixed(2)}</Text>
                     <Text style={styles.bookingIdMeta}>Booking ID: {booking.id}</Text>
                       {route ? (
                         <Text style={styles.routeWindowText}>
@@ -311,18 +307,18 @@ export default function BusBookingScreen({ navigation }) {
                   <TouchableOpacity
                     style={[
                       styles.cancelBtn,
-                      (bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus
+                      (bookingWindow && !bookingWindow.canCancel) || booking.verified
                         ? styles.cancelBtnDisabled
                         : null,
                     ]}
                     onPress={() => handleCancel(booking)}
-                    disabled={Boolean((bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus)}
+                    disabled={Boolean((bookingWindow && !bookingWindow.canCancel) || booking.verified)}
                   >
                     <Ionicons
                       name="close-circle"
                       size={16}
                       color={
-                        (bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus
+                        (bookingWindow && !bookingWindow.canCancel) || booking.verified
                           ? COLORS.gray
                           : COLORS.error
                       }
@@ -330,14 +326,12 @@ export default function BusBookingScreen({ navigation }) {
                     <Text
                       style={[
                         styles.cancelBtnText,
-                        (bookingWindow && !bookingWindow.canCancel) || booking.verified || !canUpdateBusBookingStatus
+                        (bookingWindow && !bookingWindow.canCancel) || booking.verified
                           ? styles.cancelBtnTextDisabled
                           : null,
                       ]}
                     >
-                      {!canUpdateBusBookingStatus
-                        ? "Cancellation restricted by backend role policy"
-                        : booking.verified
+                      {booking.verified
                         ? "Verified • Cannot cancel"
                         : bookingWindow && !bookingWindow.canCancel
                           ? "Cancellation closed"
@@ -487,6 +481,27 @@ export default function BusBookingScreen({ navigation }) {
                         : "No seats or waiting list spots are available for this route right now."}
                   </Text>
                 </Card>
+                {occupancy.availableSeatCount > 0 ? (
+                  <>
+                    <Text style={styles.selectionTitle}>Select Seat</Text>
+                    <View style={styles.availableSeatGrid}>
+                      {occupancy.availableSeats.map((seat) => {
+                        const active = selectedSeatNumber === seat;
+                        return (
+                          <TouchableOpacity
+                            key={`seat-${seat}`}
+                            style={[styles.availableSeatChip, active && styles.availableSeatChipActive]}
+                            onPress={() => setSelectedSeatNumber(seat)}
+                          >
+                            <Text style={[styles.availableSeatText, active && styles.availableSeatTextActive]}>
+                              {seat}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
               </>
             ) : null}
 
@@ -501,11 +516,17 @@ export default function BusBookingScreen({ navigation }) {
             <View style={styles.selectedSeatInfo}>
               <Text style={styles.selectedSeatText}>
                 {occupancy.availableSeatCount > 0
-                  ? "Seat will be assigned automatically"
+                  ? selectedSeatNumber
+                    ? `Seat ${selectedSeatNumber} selected • Fare Rs ${Number(selectedRoute?.farePerSeat || 0).toFixed(2)}`
+                    : `Choose a seat • Fare Rs ${Number(selectedRoute?.farePerSeat || 0).toFixed(2)}`
                   : "Waitlist booking will be created automatically"}
               </Text>
             </View>
-            <Button title="Book Ticket" onPress={handleBook} />
+            <Button
+              title="Book Ticket"
+              onPress={handleBook}
+              disabled={occupancy.availableSeatCount > 0 && !selectedSeatNumber}
+            />
           </View>
         ) : null}
       </SafeAreaView>

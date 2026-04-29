@@ -5,6 +5,7 @@ const {
   validateBookingPayload,
   validateBookingStatusPayload,
   validateRouteStopPayload,
+  validateBusLocationPayload,
 } = require("./bus.schema");
 
 const listRoutes = asyncHandler(async (req, res) => {
@@ -70,7 +71,7 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
     throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
   }
 
-  const row = await service.updateBookingStatus(req.params.bookingId, req.body.status, req.user.id);
+  const row = await service.updateBookingStatus(req.params.bookingId, req.body.status, req.user);
   res.status(200).json({
     success: true,
     message: "Bus booking status updated",
@@ -92,6 +93,28 @@ const addRouteStop = asyncHandler(async (req, res) => {
   });
 });
 
+const updateRouteLocation = asyncHandler(async (req, res) => {
+  const validation = validateBusLocationPayload(req.body);
+  if (!validation.isValid) {
+    throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
+  }
+
+  const row = await service.updateRouteLocation(req.params.routeId, req.body, req.user.id);
+  res.status(200).json({
+    success: true,
+    message: "Bus live location updated",
+    data: row,
+  });
+});
+
+const getRouteTracking = asyncHandler(async (req, res) => {
+  const payload = await service.getRouteTracking(req.params.routeId);
+  res.status(200).json({
+    success: true,
+    data: payload,
+  });
+});
+
 module.exports = {
   listRoutes,
   createRoute,
@@ -99,4 +122,6 @@ module.exports = {
   createBooking,
   updateBookingStatus,
   addRouteStop,
+  updateRouteLocation,
+  getRouteTracking,
 };

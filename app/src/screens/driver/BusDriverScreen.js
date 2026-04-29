@@ -64,6 +64,7 @@ export default function BusDriverScreen({ navigation }) {
   }
   const routeBookings = busBookings.filter(b => b.routeId === selectedRoute.id && b.status !== "cancelled");
   const verifiedCount = routeBookings.filter(b => b.verified).length;
+  const routeCapacity = Number.isFinite(Number(selectedRoute.totalSeats)) ? Number(selectedRoute.totalSeats) : 0;
 
   const todayPassengers = routeBookings.length;
 
@@ -86,7 +87,7 @@ export default function BusDriverScreen({ navigation }) {
             <View style={styles.statDivider} />
             <View style={styles.stat}><Text style={styles.statVal}>{verifiedCount}</Text><Text style={styles.statLabel}>Verified</Text></View>
             <View style={styles.statDivider} />
-            <View style={styles.stat}><Text style={styles.statVal}>{selectedRoute.totalSeats - routeBookings.length}</Text><Text style={styles.statLabel}>Empty Seats</Text></View>
+            <View style={styles.stat}><Text style={styles.statVal}>{Math.max(0, routeCapacity - routeBookings.length)}</Text><Text style={styles.statLabel}>Empty Seats</Text></View>
           </View>
         </LinearGradient>
 

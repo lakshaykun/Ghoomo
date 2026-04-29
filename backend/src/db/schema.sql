@@ -85,6 +85,9 @@ expires_at        TIMESTAMPTZ,
 
 is_shared         BOOLEAN NOT NULL DEFAULT FALSE,
 locked            BOOLEAN DEFAULT FALSE,
+vehicle_type      VARCHAR(20) NOT NULL DEFAULT 'auto',
+estimated_fare    DECIMAL(10,2),
+estimated_distance_km DECIMAL(10,3),
 
 status            VARCHAR(20) NOT NULL DEFAULT 'searching'
 CHECK (status IN ('searching','matched','cancelled','expired')),
@@ -134,8 +137,11 @@ drop_longitude    DECIMAL(11,8) NOT NULL,
 fare            DECIMAL(10,2),
 distance        DECIMAL(10,3),
 
-status          VARCHAR(20) NOT NULL DEFAULT 'assigned'
-CHECK (status IN ('assigned','arriving','started','completed','cancelled')),
+status          VARCHAR(20) NOT NULL DEFAULT 'SEARCHING'
+CHECK (status IN ('SEARCHING', 'ACCEPTED', 'DRIVER_ARRIVED', 'OTP_VERIFIED', 'ON_TRIP', 'COMPLETED', 'CANCELLED', 'assigned', 'arriving', 'started', 'completed', 'cancelled')),
+
+otp             VARCHAR(10),
+vehicle_type    VARCHAR(20) NOT NULL DEFAULT 'auto',
 
 start_time      TIMESTAMPTZ,
 end_time        TIMESTAMPTZ,
@@ -224,6 +230,8 @@ id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 name           TEXT NOT NULL,
 departure_time TIME NOT NULL,
 arrival_time   TIME NOT NULL,
+total_seats    INT NOT NULL DEFAULT 40 CHECK (total_seats > 0),
+fare_per_seat  DECIMAL(10,2) NOT NULL DEFAULT 0,
 created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -255,9 +263,21 @@ user_id       UUID REFERENCES users(id) ON DELETE SET NULL,
 status        VARCHAR(20) NOT NULL CHECK (status IN ('pending','verified','cancelled','missing')),
 verified_by   UUID REFERENCES users(id) ON DELETE SET NULL,
 seat_number   INT,
+fare_amount   DECIMAL(10,2) NOT NULL DEFAULT 0,
 created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 UNIQUE(route_id, seat_number)
+);
+
+CREATE TABLE IF NOT EXISTS bus_route_live_locations (
+route_id        UUID PRIMARY KEY REFERENCES bus_routes(id) ON DELETE CASCADE,
+driver_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+latitude        DECIMAL(10,8) NOT NULL,
+longitude       DECIMAL(11,8) NOT NULL,
+speed_kmph      DECIMAL(8,2),
+heading_deg     DECIMAL(7,2),
+delay_minutes   INT NOT NULL DEFAULT 0,
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
@@ -271,6 +291,27 @@ address    TEXT NOT NULL,
 latitude   DECIMAL(10,8) NOT NULL,
 longitude  DECIMAL(11,8) NOT NULL,
 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS global_places (
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+name            TEXT NOT NULL,
+normalized_name TEXT NOT NULL,
+address         TEXT NOT NULL,
+latitude        DECIMAL(10,8) NOT NULL,
+longitude       DECIMAL(11,8) NOT NULL,
+created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+UNIQUE(normalized_name, latitude, longitude)
+);
+
+CREATE TABLE IF NOT EXISTS user_favourites (
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+place_id        UUID NOT NULL REFERENCES global_places(id) ON DELETE CASCADE,
+label           VARCHAR(100),
+created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+UNIQUE(user_id, place_id)
 );
 
 
@@ -301,8 +342,11 @@ CREATE INDEX IF NOT EXISTS idx_bus_routes_created_at ON bus_routes(created_at DE
 
 
 CREATE INDEX IF NOT EXISTS idx_bus_bookings_user ON bus_bookings(user_id);
+CREATE INDEX IF NOT EXISTS idx_bus_route_live_locations_updated_at ON bus_route_live_locations(updated_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_saved_locations_user ON saved_locations(user_id);
+CREATE INDEX IF NOT EXISTS idx_global_places_normalized_name ON global_places(normalized_name);
+CREATE INDEX IF NOT EXISTS idx_user_favourites_user ON user_favourites(user_id);
 
 -- ============================================================
 -- TRIGGERS
@@ -329,6 +373,9 @@ BEFORE UPDATE ON ride_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at()
 
 CREATE TRIGGER trg_bus_bookings_updated_at
 BEFORE UPDATE ON bus_bookings FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER trg_global_places_updated_at
+BEFORE UPDATE ON global_places FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
 -- RLS

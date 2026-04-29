@@ -2,6 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 import { api } from "../../services/api";
 import { BOOKING_STATUS } from "../../constants";
 import { sendLocalNotification } from "../../services/notifications";
+import { updateProfile } from "./authSlice";
 
 const initialState = {
   dashboard: null,
@@ -82,7 +83,11 @@ export const fetchDriverDashboard = (driverId) => async (dispatch, getState) => 
           ? "Ride started successfully."
           : nextActiveRide.status === BOOKING_STATUS.COMPLETED
             ? "Ride completed and marked closed."
-            : "Ride status changed.";
+            : nextActiveRide.status === BOOKING_STATUS.ARRIVED
+              ? "Driver has arrived at pickup."
+              : nextActiveRide.status === BOOKING_STATUS.OTP_VERIFIED
+                ? "OTP verified — trip starting."
+                : "Ride status changed.";
       await sendLocalNotification({
         key: `driver-status-${nextActiveRide.id}-${nextActiveRide.status}`,
         title: "Trip updated",
@@ -101,6 +106,7 @@ export const fetchDriverDashboard = (driverId) => async (dispatch, getState) => 
 
 export const toggleDriverOnline = (driverId, online) => async (dispatch) => {
   dispatch(setDriverOnlineState(online));
+  dispatch(updateProfile({ online: Boolean(online) }));
   dispatch(driverRequestStart());
   try {
     await api.setDriverOnline(driverId, online);
@@ -112,6 +118,7 @@ export const toggleDriverOnline = (driverId, online) => async (dispatch) => {
       data: { driverId, online },
     });
     dispatch(setDriverDashboard(dashboard));
+    dispatch(updateProfile({ online: dashboard.online }));
     return dashboard;
   } catch (error) {
     dispatch(setDriverOnlineState(!online));

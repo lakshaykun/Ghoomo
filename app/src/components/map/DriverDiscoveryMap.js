@@ -6,17 +6,17 @@ import { getMapRegion } from "../../utils/map";
 
 function AnimatedDriverMarker({ driver }) {
   const coordinate = useRef(new AnimatedRegion({
-    latitude: driver.latitude,
-    longitude: driver.longitude,
+    latitude: Number(driver.latitude) || 30.7333,
+    longitude: Number(driver.longitude) || 76.7794,
     latitudeDelta: 0,
     longitudeDelta: 0,
   })).current;
 
   useEffect(() => {
-    if (Platform.OS !== 'web') {
+    if (Platform.OS !== 'web' && driver.latitude && driver.longitude) {
       coordinate.timing({
-        latitude: driver.latitude,
-        longitude: driver.longitude,
+        latitude: Number(driver.latitude),
+        longitude: Number(driver.longitude),
         duration: 1300,
         useNativeDriver: false,
       }).start();
@@ -58,16 +58,23 @@ export default function DriverDiscoveryMap({
   }, [drivers]);
 
   const allPoints = useMemo(() => [normPickup, ...filteredDrivers].filter(Boolean), [normPickup, filteredDrivers]);
-  const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
+  const autoRegion = useMemo(() => {
+    const res = getMapRegion(allPoints);
+    return {
+      latitude: Number(res.latitude) || 30.7333,
+      longitude: Number(res.longitude) || 76.7794,
+      zoom: Number(res.zoom) || 13
+    };
+  }, [allPoints]);
   const mapRef = useRef(null);
 
   useEffect(() => {
     if (mapRef.current && allPoints.length > 0) {
       mapRef.current.animateToRegion({
-        latitude: autoRegion.latitude,
-        longitude: autoRegion.longitude,
-        latitudeDelta: Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom)),
-        longitudeDelta: Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom)),
+        latitude: Number(autoRegion.latitude),
+        longitude: Number(autoRegion.longitude),
+        latitudeDelta: Number(Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom))),
+        longitudeDelta: Number(Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom))),
       }, 1000);
     }
   }, [normPickup]);
@@ -80,16 +87,24 @@ export default function DriverDiscoveryMap({
     );
   }
 
+  if (!autoRegion || !autoRegion.latitude || !autoRegion.longitude) {
+    return (
+      <View style={[styles.wrapper, style, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: COLORS.textSecondary }}>Loading drivers map...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrapper, style]}>
       <MapView
         ref={mapRef}
         style={styles.map}
         initialRegion={{
-          latitude: autoRegion.latitude,
-          longitude: autoRegion.longitude,
-          latitudeDelta: Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom)),
-          longitudeDelta: Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom)),
+          latitude: Number(autoRegion.latitude),
+          longitude: Number(autoRegion.longitude),
+          latitudeDelta: Number(Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom))),
+          longitudeDelta: Number(Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom))),
         }}
         mapType="none"
         showsUserLocation={false}

@@ -8,13 +8,19 @@ const router = express.Router();
 router.get("/bus/routes", controller.listRoutes);
 router.post("/bus/routes", authenticate, requireRole("admin"), controller.createRoute);
 router.post("/bus/routes/:routeId/stops", authenticate, requireRole("admin"), controller.addRouteStop);
+router.get("/bus/routes/:routeId/tracking", authenticate, controller.getRouteTracking);
+router.patch(
+  "/bus/routes/:routeId/location",
+  authenticate,
+  requireRole("admin", "bus_driver", "driver"),
+  controller.updateRouteLocation
+);
 
 router.get("/bus/bookings", authenticate, controller.listBookings);
 router.post("/bus/bookings", authenticate, controller.createBooking);
 router.patch(
   "/bus/bookings/:bookingId/status",
   authenticate,
-  requireRole("admin", "driver", "bus_driver"),
   controller.updateBookingStatus
 );
 

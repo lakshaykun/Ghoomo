@@ -13,12 +13,44 @@
     },
     "android": {
       "package": "com.ghoomo.app",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
+      ]
     },
+    "ios": {
+      "bundleIdentifier": "com.ghoomo.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Ghoomo needs your location to find nearby rides and show your progress on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ghoomo needs your location to track rides even when the app is in the background.",
+        "NSLocationAlwaysUsageDescription": "Ghoomo needs your location to provide accurate arrival times and safety tracking.",
+        "NSLocationUsageDescription": "Ghoomo needs your location to provide ride-tracking services.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Ghoomo to use your location even when the app is in the background.",
+          "locationWhenInUsePermission": "Allow Ghoomo to use your location to find nearby rides.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      "expo-web-browser"
+    ],
     "orientation": "portrait",
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "extra": {
       "apiBaseUrl": "https://backend-fawn-seven-41.vercel.app",
       "eas": {

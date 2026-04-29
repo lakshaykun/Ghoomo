@@ -62,25 +62,36 @@ export async function registerDriverProfile(payload = {}) {
 
   const vehicleType = normalizeVehicleTypeForBackend(payload.vehicleType);
 
-  const driverProfile = await httpClient.post("/api/drivers/register", {
+  const { driver: driverProfile, token } = await httpClient.post("/api/drivers/register", {
     body: {
       vehicleNumber,
       vehicleType,
     },
   });
 
-  return normalizeUser(
-    {
-      role: "driver",
-      vehicle_type: driverProfile?.vehicle_type || vehicleType,
-      vehicle_number: driverProfile?.vehicle_number || vehicleNumber,
-    },
-    {
-      role: "driver",
-      vehicleType: driverProfile?.vehicle_type || vehicleType,
-      vehicleNo: driverProfile?.vehicle_number || vehicleNumber,
-    }
-  );
+  return {
+    token,
+    user: normalizeUser(
+      {
+        id: driverProfile?.user_id || driverProfile?.userId || null,
+        name: driverProfile?.name || payload.name || "",
+        email: driverProfile?.email || payload.email || "",
+        phone: driverProfile?.phone || payload.phone || "",
+        role: "driver",
+        vehicle_type: driverProfile?.vehicle_type || vehicleType,
+        vehicle_number: driverProfile?.vehicle_number || vehicleNumber,
+      },
+      {
+        id: driverProfile?.user_id || driverProfile?.userId || null,
+        role: "driver",
+        name: driverProfile?.name || payload.name || "",
+        email: driverProfile?.email || payload.email || "",
+        phone: driverProfile?.phone || payload.phone || "",
+        vehicleType: driverProfile?.vehicle_type || vehicleType,
+        vehicleNo: driverProfile?.vehicle_number || vehicleNumber,
+      }
+    ),
+  };
 }
 
 export async function getCurrentUserProfile() {

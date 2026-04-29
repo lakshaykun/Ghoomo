@@ -15,11 +15,6 @@ import {
 } from "./driverRuntime";
 import { getDriverProfile, getNearbyDrivers, respondToCandidateRequest } from "./driverApi";
 
-const FARE_RULES = {
-  auto: { base: 30, perKm: 12 },
-  cab: { base: 50, perKm: 18 },
-};
-
 function toBackendVehicleType(rideType) {
   const normalized = String(rideType || "").trim().toLowerCase();
   return normalized === "cab" ? "cab" : "auto";
@@ -42,17 +37,11 @@ function toPickupDrop(payload = {}) {
   };
 }
 
-function calculateEstimatedFare(distanceKm, vehicleType, isShared) {
-  const fareRule = FARE_RULES[vehicleType] || FARE_RULES.auto;
-  const baseFare = fareRule.base + distanceKm * fareRule.perKm;
-  const discounted = isShared ? baseFare * 0.7 : baseFare;
-  return Number(discounted.toFixed(2));
-}
-
 function updateDriverRuntime(driverId, ride) {
   if (!driverId || !ride?.id) return;
 
-  if (["completed", "cancelled"].includes(ride.status)) {
+  const status = String(ride.status || "").toLowerCase();
+  if (["completed", "cancelled"].includes(status)) {
     addDriverCompletedRide(driverId, ride);
     clearDriverActiveRide(driverId);
     return;
@@ -100,10 +89,7 @@ export async function fetchRideQuote(payload = {}) {
 
   const nearbyDrivers = Array.isArray(nearby.drivers) ? nearby.drivers : [];
   const distanceKm = toNumber(quoteData?.distanceKm, haversineDistanceKm(pickup, drop));
-  const fare = toNumber(
-    quoteData?.estimatedFare,
-    calculateEstimatedFare(distanceKm, vehicleType, Boolean(payload.isShare || payload.isShared))
-  );
+  const fare = toNumber(quoteData?.estimatedFare, null);
 
   return {
     pickup: {
@@ -144,9 +130,7 @@ export async function fetchRideQuote(payload = {}) {
 export async function createRideRequest(payload = {}) {
   const { pickup, drop } = toPickupDrop(payload);
   const vehicleType = toBackendVehicleType(payload.rideType || payload.vehicleType);
-  const distanceKm = haversineDistanceKm(pickup, drop);
-  const fare = calculateEstimatedFare(distanceKm, vehicleType, Boolean(payload.isShare));
-
+  console.log(`[RideApi] createRideRequest START: payload=${JSON.stringify(payload)}`);
   const row = await httpClient.post("/api/rides/requests", {
     body: {
       pickupLocation: pickup?.name || pickup?.address,
@@ -160,6 +144,7 @@ export async function createRideRequest(payload = {}) {
       expiresAt: payload.scheduledAt || null,
     },
   });
+  console.log(`[RideApi] createRideRequest SUCCESS:`, row);
 
   const isRideResponse = Boolean(
     row?.driver_id || row?.driver_user_id || row?.driver_name || row?.driver_vehicle_number || row?.driver
@@ -167,21 +152,17 @@ export async function createRideRequest(payload = {}) {
 
   const ride = isRideResponse
     ? normalizeRide(row, {
-        isShare: Boolean(payload.isShare),
-        paymentMethod: payload.paymentMethod,
-        scheduledAt: payload.scheduledAt,
-        distance: distanceKm,
-        fare,
-        userId: payload.userId,
-      })
+      isShare: Boolean(payload.isShare),
+      paymentMethod: payload.paymentMethod,
+      scheduledAt: payload.scheduledAt,
+      userId: payload.userId,
+    })
     : normalizeRideRequest(row, {
-        isShare: Boolean(payload.isShare),
-        paymentMethod: payload.paymentMethod,
-        scheduledAt: payload.scheduledAt,
-        distance: distanceKm,
-        fare,
-        userId: payload.userId,
-      });
+      isShare: Boolean(payload.isShare),
+      paymentMethod: payload.paymentMethod,
+      scheduledAt: payload.scheduledAt,
+      userId: payload.userId,
+    });
 
   return {
     ride,
@@ -226,9 +207,9 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
       },
     });
 
-    await respondToCandidateRequest(rideId, "accepted").catch(() => {});
+    await respondToCandidateRequest(rideId, "ACCEPTED").catch(() => { });
 
-    const ride = normalizeRide(assignedRide, { status: "assigned" });
+    const ride = normalizeRide(assignedRide, { status: "ACCEPTED" });
     updateDriverRuntime(runtimeDriverId, ride);
     return { ride };
   }
@@ -237,10 +218,24 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
     const runtimeDriverId = extra.driverId || extra.driverUserId;
 
     if (extra?.actor !== "driver" && extra?.actor !== "admin") {
+      const isRequest = extra.sourceType === "ride_request";
+      
+      if (!isRequest) {
+        try {
+          const row = await httpClient.patch(`/api/rides/${rideId}/status`, {
+            body: { status: "CANCELLED" },
+          });
+          return { ride: normalizeRide(row) };
+        } catch (err) {
+          if (err.status !== 404) throw err;
+          // If 404, proceed to try request cancellation
+        }
+      }
+
       const requestRow = await httpClient.patch(`/api/rides/requests/${rideId}/cancel`);
       return {
         ride: normalizeRideRequest(requestRow, {
-          status: "cancelled",
+          status: "CANCELLED",
           userId: extra.userId,
         }),
       };
@@ -250,7 +245,7 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
 
     try {
       const row = await httpClient.patch(`/api/rides/${resolvedRideId}/status`, {
-        body: { status: "cancelled" },
+        body: { status: "CANCELLED" },
       });
 
       const ride = normalizeRide(row);
@@ -270,7 +265,7 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
         return {
           ride: {
             id: rideId,
-            status: "cancelled",
+            status: "CANCELLED",
           },
         };
       } catch (requestError) {
@@ -301,6 +296,26 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
   const ride = normalizeRide(row);
   updateDriverRuntime(extra.driverId, ride);
   return { ride };
+}
+
+export async function verifyRideOtpRemote(rideId, otp) {
+  const row = await httpClient.post(`/api/rides/${rideId}/verify-otp`, {
+    body: { otp },
+  });
+  return normalizeRide(row);
+}
+
+export async function rejectRideRequestRemote(requestId) {
+  return httpClient.post(`/api/rides/requests/${requestId}/reject`);
+}
+
+export async function cancelRideRequestRemote(requestId) {
+  const row = await httpClient.patch(`/api/rides/requests/${requestId}/cancel`);
+  return normalizeRideRequest(row);
+}
+
+export async function assignDriverRemote(requestId, options = {}) {
+  return updateRideStatusRemote(requestId, "ACCEPTED", { actor: "driver", ...options });
 }
 
 export async function getRideHistoryForCurrentUser(userId) {

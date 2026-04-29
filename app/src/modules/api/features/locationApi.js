@@ -1,3 +1,5 @@
+import { httpClient } from "../core/httpClient";
+
 const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
 const DEFAULT_TIMEOUT_MS = 12000;
 
@@ -40,13 +42,13 @@ async function nominatimRequest(path, params = {}) {
 
 function mapPlace(item = {}, index = 0) {
   const name = item.display_name || item.name || item.address?.road || "Location";
-  const latitude = toNumber(item.lat, null);
-  const longitude = toNumber(item.lon, null);
+  const latitude = toNumber(item.latitude ?? item.lat, null);
+  const longitude = toNumber(item.longitude ?? item.lon, null);
 
   return {
-    id: String(item.place_id || `${name}-${index}`),
+    id: String(item.place_id || item.id || `${name}-${index}`),
     name,
-    address: item.display_name || name,
+    address: item.display_name || item.address?.road || item.address || name,
     latitude,
     longitude,
   };
@@ -58,13 +60,19 @@ export async function searchPlacesByText({ query, latitude, longitude }) {
     return { places: [] };
   }
 
-  const payload = await nominatimRequest("/search", {
-    format: "jsonv2",
-    q: searchText,
-    limit: 8,
-    addressdetails: 1,
-    lat: latitude,
-    lon: longitude,
+  const params = new URLSearchParams({
+    query: searchText,
+    limit: "8",
+  });
+  if (latitude !== undefined && latitude !== null) {
+    params.set("latitude", String(latitude));
+  }
+  if (longitude !== undefined && longitude !== null) {
+    params.set("longitude", String(longitude));
+  }
+
+  const payload = await httpClient.get(`/api/places/search?${params.toString()}`, {
+    auth: false,
   });
 
   const places = Array.isArray(payload) ? payload.map((item, index) => mapPlace(item, index)) : [];

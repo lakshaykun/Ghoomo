@@ -42,8 +42,11 @@ async function joinSharedRide(sharedRideId, userId, payload) {
     throw new AppError("Shared ride is not open for joining", 400, "SHARED_RIDE_NOT_OPEN");
   }
 
-  const count = await repository.countParticipants(sharedRideId);
-  if (count >= Number(sharedRide.max_participants || 2)) {
+  const currentCount = await repository.countParticipants(sharedRideId);
+  const maxParticipants = Number(sharedRide.max_participants || 2);
+  
+  // maxParticipants includes the creator. So co-riders allowed = maxParticipants - 1
+  if (currentCount >= maxParticipants - 1) {
     await repository.updateSharedRideStatus(sharedRideId, "full");
     throw new AppError("Shared ride is already full", 400, "SHARED_RIDE_FULL");
   }
@@ -51,17 +54,17 @@ async function joinSharedRide(sharedRideId, userId, payload) {
   const participant = await repository.addParticipant({
     sharedRideId,
     userId,
-    pickupLocation: String(payload.pickupLocation).trim(),
-    dropLocation: String(payload.dropLocation).trim(),
+    pickupLocation: String(payload.pickupLocation || "").trim(),
+    dropLocation: String(payload.dropLocation || "").trim(),
     pickupLatitude: payload.pickupLatitude !== undefined ? Number(payload.pickupLatitude) : null,
     pickupLongitude: payload.pickupLongitude !== undefined ? Number(payload.pickupLongitude) : null,
     dropLatitude: payload.dropLatitude !== undefined ? Number(payload.dropLatitude) : null,
     dropLongitude: payload.dropLongitude !== undefined ? Number(payload.dropLongitude) : null,
-    status: payload.status,
+    status: payload.status || "joined",
   });
 
   const nextCount = await repository.countParticipants(sharedRideId);
-  if (nextCount >= Number(sharedRide.max_participants || 2)) {
+  if (nextCount >= maxParticipants - 1) {
     await repository.updateSharedRideStatus(sharedRideId, "full");
   }
 

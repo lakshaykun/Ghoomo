@@ -1,8 +1,6 @@
 import { httpClient } from "../core/httpClient";
 import { normalizeBusBooking, normalizeBusRoute, toNumber } from "./mappers";
 
-const WAITLIST_LIMIT = 10;
-
 let routeCache = [];
 
 function setRouteCache(routes) {
@@ -25,8 +23,11 @@ function withQuery(path, params = {}) {
   return suffix ? `${path}?${suffix}` : path;
 }
 
-function computeSeatAssignment(route, busBookings = []) {
-  const totalSeats = toNumber(route?.totalSeats, 40);
+function computeSeatAssignment(route, busBookings = [], requestedSeat = null) {
+  const totalSeats = toNumber(route?.totalSeats, null);
+  if (!Number.isFinite(totalSeats) || totalSeats <= 0) {
+    throw new Error("Route capacity is not configured correctly.");
+  }
   const confirmedSeatNumbers = new Set(
     busBookings
       .filter((booking) => !booking.isWaiting && booking.status !== "cancelled")
@@ -35,9 +36,18 @@ function computeSeatAssignment(route, busBookings = []) {
       .map((seat) => Number(seat))
   );
 
-  const availableSeat = Array.from({ length: totalSeats }, (_, index) => index + 1).find(
+  const availableSeats = Array.from({ length: totalSeats }, (_, index) => index + 1).filter(
     (seat) => !confirmedSeatNumbers.has(seat)
   );
+  const requested = Number(requestedSeat);
+  if (Number.isInteger(requested) && requested > 0) {
+    if (!availableSeats.includes(requested)) {
+      throw new Error(`Seat ${requested} is no longer available.`);
+    }
+    return { seatNumber: requested, waitlistPosition: null };
+  }
+
+  const availableSeat = availableSeats[0];
 
   if (availableSeat) {
     return { seatNumber: availableSeat, waitlistPosition: null };
@@ -47,7 +57,8 @@ function computeSeatAssignment(route, busBookings = []) {
     (booking) => booking.isWaiting && booking.status !== "cancelled"
   ).length;
 
-  if (waitingCount >= WAITLIST_LIMIT) {
+  const waitlistLimit = Number.isFinite(Number(route?.waitlistLimit)) ? Number(route.waitlistLimit) : 10;
+  if (waitingCount >= waitlistLimit) {
     throw new Error("This route is full and the waiting list is also full.");
   }
 
@@ -70,6 +81,8 @@ export async function createBusRouteRemote(payload = {}) {
       name: payload.name,
       departureTime: payload.departureTime,
       arrivalTime: payload.arrivalTime,
+      totalSeats: payload.totalSeats,
+      farePerSeat: payload.farePerSeat,
     },
   });
 
@@ -110,7 +123,7 @@ export async function createBusBookingRemote(payload = {}) {
     throw new Error("You already have an active booking for this bus route.");
   }
 
-  const { seatNumber, waitlistPosition } = computeSeatAssignment(route, existingBookings);
+  const { seatNumber, waitlistPosition } = computeSeatAssignment(route, existingBookings, payload.seatNumber);
 
   const body = {
     routeId: payload.routeId,
@@ -130,6 +143,7 @@ export async function createBusBookingRemote(payload = {}) {
       user_name: payload.userName,
       waitlist_position: waitlistPosition,
       is_waiting: seatNumber === null,
+      fare_amount: row?.fare_amount,
     },
     {
       fallbackUserName: payload.userName || "Passenger",
@@ -137,6 +151,24 @@ export async function createBusBookingRemote(payload = {}) {
   );
 
   return { booking };
+}
+
+export async function fetchBusRouteTrackingRemote(routeId) {
+  const payload = await httpClient.get(`/api/bus/routes/${routeId}/tracking`);
+  return payload || null;
+}
+
+export async function updateBusRouteLocationRemote(routeId, payload = {}) {
+  const row = await httpClient.patch(`/api/bus/routes/${routeId}/location`, {
+    body: {
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      speedKmph: payload.speedKmph,
+      headingDeg: payload.headingDeg,
+      delayMinutes: payload.delayMinutes,
+    },
+  });
+  return row;
 }
 
 export async function cancelBusBookingRemote(bookingId) {

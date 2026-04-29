@@ -1,19 +1,27 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, StatusBar } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from "../../constants";
 import Button from "../../components/common/Button";
 import OsmRouteMap from "../../components/map/OsmRouteMap";
+import { api } from "../../services/api";
 
 const { width } = Dimensions.get("window");
 
 export default function HomeScreen({ navigation }) {
   const user = useSelector((s) => s.auth.user);
   const activeBooking = useSelector((s) => s.booking.activeBooking);
+  const [savedPlaces, setSavedPlaces] = React.useState([]);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+
+  React.useEffect(() => {
+    api.getSavedLocations()
+      .then(({ locations }) => setSavedPlaces(locations))
+      .catch(() => {});
+  }, []);
 
   // Dummy coordinate for Map Preview
   const previewLoc = { lat: 28.6139, lon: 77.209 };
@@ -41,7 +49,7 @@ export default function HomeScreen({ navigation }) {
             <OsmRouteMap pickup={previewLoc} />
           </View>
           <View style={styles.mapOverlay}>
-            <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate("RideTypeSelection")} activeOpacity={0.9}>
+            <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate("BookRide")} activeOpacity={0.9}>
               <Ionicons name="search" size={20} color={COLORS.primary} />
               <Text style={styles.searchText}>Where to?</Text>
             </TouchableOpacity>
@@ -65,35 +73,39 @@ export default function HomeScreen({ navigation }) {
             <Button
               title="Request a Ride"
               icon={<Ionicons name="car" size={20} color={COLORS.white} />}
-              onPress={() => navigation.navigate("RideTypeSelection")}
+              onPress={() => navigation.navigate("BookRide")}
               size="lg"
             />
           )}
         </View>
 
-        {/* Smart Defaults / Saved Places */}
+        {/* Saved Places */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Saved Places</Text>
           <View style={styles.placesList}>
-            <TouchableOpacity style={styles.placeItem} onPress={() => navigation.navigate("BookRide", { rideType: "auto", destination: "Home" })}>
-              <View style={[styles.placeIcon, { backgroundColor: COLORS.primaryLight }]}>
-                <Ionicons name="home" size={20} color={COLORS.primary} />
-              </View>
-              <View>
-                <Text style={styles.placeName}>Home</Text>
-                <Text style={styles.placeAddress}>Hostel Block A</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.placeItem} onPress={() => navigation.navigate("BookRide", { rideType: "auto", destination: "Campus" })}>
-              <View style={[styles.placeIcon, { backgroundColor: COLORS.grayLight }]}>
-                <Ionicons name="school" size={20} color={COLORS.textSecondary} />
-              </View>
-              <View>
-                <Text style={styles.placeName}>Campus</Text>
-                <Text style={styles.placeAddress}>Main Gate</Text>
-              </View>
-            </TouchableOpacity>
+            {savedPlaces.length === 0 ? (
+              <Text style={{ color: COLORS.textSecondary, fontSize: 14 }}>No saved places yet.</Text>
+            ) : (
+              savedPlaces.map((place) => (
+                <TouchableOpacity 
+                  key={place.id} 
+                  style={styles.placeItem} 
+                  onPress={() => navigation.navigate("BookRide", { 
+                    destination: place.name,
+                    dropLatitude: place.latitude,
+                    dropLongitude: place.longitude
+                  })}
+                >
+                  <View style={[styles.placeIcon, { backgroundColor: COLORS.primaryLight }]}>
+                    <Ionicons name="location" size={20} color={COLORS.primary} />
+                  </View>
+                  <View>
+                    <Text style={styles.placeName}>{place.name}</Text>
+                    <Text style={styles.placeAddress} numberOfLines={1}>{place.address}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </View>
 

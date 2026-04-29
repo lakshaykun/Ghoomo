@@ -16,10 +16,25 @@ async function createSharedRide({ baseRideId, maxParticipants }) {
 async function listSharedRides(status = "open") {
   const result = await query(
     `
-    SELECT *
-    FROM shared_rides
-    WHERE status = COALESCE($1, status)
-    ORDER BY created_at DESC
+    SELECT 
+      sr.*,
+      r.pickup_location,
+      r.drop_location,
+      r.pickup_latitude,
+      r.pickup_longitude,
+      r.drop_latitude,
+      r.drop_longitude,
+      r.fare,
+      r.vehicle_type,
+      u.name as creator_name,
+      d_u.name as driver_name
+    FROM shared_rides sr
+    JOIN rides r ON r.id = sr.base_ride_id
+    JOIN users u ON u.id = r.student_id
+    JOIN drivers d ON d.id = r.driver_id
+    JOIN users d_u ON d_u.id = d.user_id
+    WHERE sr.status = COALESCE($1, sr.status)
+    ORDER BY sr.created_at DESC
     `,
     [status]
   );
@@ -30,9 +45,24 @@ async function listSharedRides(status = "open") {
 async function getSharedRideById(sharedRideId) {
   const result = await query(
     `
-    SELECT *
-    FROM shared_rides
-    WHERE id = $1
+    SELECT 
+      sr.*,
+      r.pickup_location,
+      r.drop_location,
+      r.pickup_latitude,
+      r.pickup_longitude,
+      r.drop_latitude,
+      r.drop_longitude,
+      r.fare,
+      r.vehicle_type,
+      u.name as creator_name,
+      d_u.name as driver_name
+    FROM shared_rides sr
+    JOIN rides r ON r.id = sr.base_ride_id
+    JOIN users u ON u.id = r.student_id
+    JOIN drivers d ON d.id = r.driver_id
+    JOIN users d_u ON d_u.id = d.user_id
+    WHERE sr.id = $1
     LIMIT 1
     `,
     [sharedRideId]

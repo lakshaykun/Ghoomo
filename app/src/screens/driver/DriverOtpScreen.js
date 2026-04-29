@@ -15,6 +15,7 @@ import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import { COLORS, SPACING, BOOKING_STATUS } from "../../constants";
 import { driverUpdateRideStatus } from "../../store/slices/driverSlice";
+import { api } from "../../services/api";
 
 export default function DriverOtpScreen({ navigation, route }) {
   const dispatch = useDispatch();
@@ -53,18 +54,17 @@ export default function DriverOtpScreen({ navigation, route }) {
 
     setSubmitting(true);
     try {
+      // Call the dedicated OTP verification endpoint — server validates and transitions to ON_TRIP
+      await api.verifyRideOtp(ride.id, enteredOtp.trim());
+      // Refresh driver dashboard to pick up new ride status
       await dispatch(
         driverUpdateRideStatus(user.id, ride.id, BOOKING_STATUS.IN_PROGRESS, {
           actor: "driver",
-          otp: enteredOtp.trim(),
           sourceType: ride.sourceType,
         })
-      );
+      ).catch(() => {});  // dashboard refresh; status already set server-side
       Alert.alert("Ride Started", "OTP verified. Trip is now in progress.", [
-        {
-          text: "OK",
-          onPress: () => navigation.goBack(),
-        },
+        { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
       Alert.alert("OTP Verification Failed", error.message || "Please check OTP and try again.");

@@ -1,14 +1,16 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Platform } from "react-native";
 import { COLORS, TYPOGRAPHY, SHADOWS } from "../constants";
 
 import HomeScreen from "../screens/user/HomeScreen";
-import RideTypeSelectionScreen from "../screens/user/RideTypeSelectionScreen";
 import BookRideScreen from "../screens/user/BookRideScreen";
-import BusBookingScreen from "../screens/user/BusBookingScreen";
+import BusModuleScreen from "../screens/user/BusModuleScreen";
+import BusBookingFlowScreen from "../screens/user/BusBookingFlowScreen";
+import BusLiveTrackingScreen from "../screens/user/BusLiveTrackingScreen";
 import RideTrackingScreen from "../screens/user/RideTrackingScreen";
 import RideHistoryScreen from "../screens/user/RideHistoryScreen";
 import ProfileScreen from "../screens/user/ProfileScreen";
@@ -22,9 +24,10 @@ function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="UserHome" component={HomeScreen} />
-      <Stack.Screen name="RideTypeSelection" component={RideTypeSelectionScreen} />
       <Stack.Screen name="BookRide" component={BookRideScreen} />
-      <Stack.Screen name="BusBooking" component={BusBookingScreen} />
+      <Stack.Screen name="BusBooking" component={BusModuleScreen} />
+      <Stack.Screen name="BusBookingFlow" component={BusBookingFlowScreen} />
+      <Stack.Screen name="BusLiveTracking" component={BusLiveTrackingScreen} />
       <Stack.Screen name="RideTracking" component={RideTrackingScreen} />
       <Stack.Screen name="SavedLocations" component={SavedLocationsScreen} />
     </Stack.Navigator>
@@ -51,7 +54,19 @@ export default function UserNavigator() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={HomeStack} />
+      <Tab.Screen 
+        name="Home" 
+        component={HomeStack} 
+        options={({ route }) => ({
+          tabBarStyle: ((route) => {
+            const routeName = getFocusedRouteNameFromRoute(route) ?? "UserHome";
+            if (["BusBooking", "BusBookingFlow", "BusLiveTracking"].includes(routeName)) {
+              return { display: "none" };
+            }
+            return styles.tabBar;
+          })(route),
+        })}
+      />
       <Tab.Screen name="Shared" component={SharedRidesScreen} />
       <Tab.Screen name="History" component={RideHistoryScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />

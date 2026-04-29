@@ -9,7 +9,6 @@ import { useDispatch, useSelector } from "react-redux";
 import { enableScreens } from "react-native-screens";
 import { store } from "./src/store";
 import RootNavigator from "./src/navigation/RootNavigator";
-import { initializeNotifications } from "./src/services/notifications";
 import { checkAndApplyOtaUpdate } from "./src/services/appUpdate";
 import { hydrateAuthSession } from "./src/store/slices/authSlice";
 import { prefetchPopularPlaces } from "./src/modules/api/popularPlacesAPI";
@@ -48,7 +47,6 @@ export default function App() {
       }
     }
 
-    initializeNotifications().catch(() => {});
     prefetchPopularPlaces();
 
     const updateTimer = setTimeout(() => {

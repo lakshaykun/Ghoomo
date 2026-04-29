@@ -1,6 +1,7 @@
 const express = require("express");
 const { asyncHandler } = require("../../common/utils/helpers");
 const service = require("../admin/popularPlaces.service");
+const controller = require("./places.controller");
 
 const router = express.Router();
 
@@ -14,5 +15,7 @@ router.get("/popular", asyncHandler(async (_req, res) => {
   }));
   res.status(200).json({ success: true, data: payload });
 }));
+
+router.get("/search", controller.searchPlaces);
 
 module.exports = router;

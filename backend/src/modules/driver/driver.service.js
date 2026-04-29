@@ -1,7 +1,8 @@
-const { AppError, normalizeRole, toFiniteNumber } = require("../../common/utils/helpers");
+const { AppError, normalizeRole, toFiniteNumber, signAuthToken } = require("../../common/utils/helpers");
 const { haversineDistance } = require("../../common/utils/distance");
 const userRepository = require("../user/user.repository");
 const repository = require("./driver.repository");
+const { updateDriverSocketInfo, broadcastToUser } = require("../../common/utils/socket");
 
 async function registerDriver({ userId, vehicleNumber, vehicleType }) {
   const existingUser = await userRepository.findById(userId);
@@ -19,11 +20,19 @@ async function registerDriver({ userId, vehicleNumber, vehicleType }) {
     throw new AppError("Driver profile already exists for this user", 409, "DRIVER_ALREADY_EXISTS");
   }
 
-  return repository.registerDriver({
+  const driver = await repository.registerDriver({
     userId,
     vehicleNumber: String(vehicleNumber).trim(),
     vehicleType,
   });
+
+  const token = signAuthToken({
+    sub: existingUser.id,
+    role: 'driver',
+    email: existingUser.email,
+  });
+
+  return { driver, token };
 }
 
 async function getDriverProfile(userId) {
@@ -44,6 +53,13 @@ async function updateAvailability(userId, payload) {
     throw new AppError("Driver profile not found", 404, "DRIVER_NOT_FOUND");
   }
 
+  if (driver) {
+    updateDriverSocketInfo(userId, {
+      isAvailable: driver.is_available,
+      vehicleType: driver.vehicle_type || driver.vehicleType,
+    });
+  }
+
   return driver;
 }
 
@@ -55,6 +71,21 @@ async function updateLocation(userId, payload) {
 
   if (!driver) {
     throw new AppError("Driver profile not found", 404, "DRIVER_NOT_FOUND");
+  }
+
+  // Broadcast location update to the student if the driver is on an active ride
+  try {
+    const activeRide = await repository.findActiveRideByUserId(userId);
+    if (activeRide && activeRide.student_id) {
+      broadcastToUser(activeRide.student_id, "driver_location_updated", {
+        rideId: activeRide.id,
+        latitude: Number(payload.latitude),
+        longitude: Number(payload.longitude),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error(`[DriverService] Failed to broadcast location update: ${err.message}`);
   }
 
   return driver;

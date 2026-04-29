@@ -31,9 +31,13 @@ export async function ensureDriverBackgroundLocation() {
     throw new Error("Foreground location permission is required for live driver tracking.");
   }
 
+  // Background permission is no longer a strict constraint.
+  // We check it but don't throw if it's missing.
   const background = await Location.requestBackgroundPermissionsAsync();
   if (background.status !== "granted") {
-    throw new Error("Background location permission is required to share driver location when the app is closed.");
+    console.warn("[Location] Background permission not granted. Tracking will only work in foreground.");
+    // We still return true to allow the driver to proceed with foreground tracking
+    return true; 
   }
 
   const started = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);

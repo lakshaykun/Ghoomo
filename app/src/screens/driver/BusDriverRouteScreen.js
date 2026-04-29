@@ -14,6 +14,8 @@ import { COLORS, SPACING } from "../../constants";
 import { getBookingWindow } from "../../utils/bus";
 import { sendLocalNotification } from "../../services/notifications";
 import { subscribeBusRealtime } from "../../services/realtime";
+import * as Location from "expo-location";
+import { api } from "../../services/api";
 
 export default function BusDriverRouteScreen({ route, navigation }) {
   const dispatch = useDispatch();
@@ -27,6 +29,7 @@ export default function BusDriverRouteScreen({ route, navigation }) {
   const [scanned, setScanned] = useState(false);
   const [passengerNameInput, setPassengerNameInput] = useState("");
   const [selectedPassengerBookingId, setSelectedPassengerBookingId] = useState(null);
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
 
   useEffect(() => {
     dispatch(fetchBusRoutes()).catch(() => {});
@@ -52,6 +55,43 @@ export default function BusDriverRouteScreen({ route, navigation }) {
       requestPermission();
     }
   }, [permission, requestPermission]);
+
+  useEffect(() => {
+    if (!trackingEnabled || !selectedRoute?.id) return undefined;
+    let mounted = true;
+    let watcher = null;
+
+    const start = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted" || !mounted) return;
+        watcher = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: 15,
+            timeInterval: 5000,
+          },
+          (position) => {
+            api.updateBusLocation(selectedRoute.id, {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              speedKmph: position.coords.speed ? Number(position.coords.speed) * 3.6 : null,
+              headingDeg: position.coords.heading ?? null,
+              delayMinutes: 0,
+            }).catch(() => {});
+          }
+        );
+      } catch (_error) {}
+    };
+
+    start();
+    return () => {
+      mounted = false;
+      try {
+        watcher?.remove?.();
+      } catch (_error) {}
+    };
+  }, [selectedRoute?.id, trackingEnabled]);
 
   const sortedRoutes = useMemo(() => {
     return [...routes].sort((a, b) => {
@@ -81,6 +121,7 @@ export default function BusDriverRouteScreen({ route, navigation }) {
   const routeBookings = busBookings.filter(b => b.routeId === selectedRoute.id && b.status !== "cancelled");
   const verifiedCount = routeBookings.filter(b => b.verified).length;
   const todayPassengers = routeBookings.length;
+  const routeCapacity = Number.isFinite(Number(selectedRoute.totalSeats)) ? Number(selectedRoute.totalSeats) : 0;
 
   const matchingPassengers = useMemo(() => {
     const normalizedName = String(passengerNameInput || "").trim().toLowerCase();
@@ -202,13 +243,17 @@ export default function BusDriverRouteScreen({ route, navigation }) {
             <View style={styles.statDivider} />
             <View style={styles.stat}><Text style={styles.statVal}>{verifiedCount}</Text><Text style={styles.statLabel}>Verified</Text></View>
             <View style={styles.statDivider} />
-            <View style={styles.stat}><Text style={styles.statVal}>{selectedRoute.totalSeats - routeBookings.length}</Text><Text style={styles.statLabel}>Empty Seats</Text></View>
+            <View style={styles.stat}><Text style={styles.statVal}>{Math.max(0, routeCapacity - routeBookings.length)}</Text><Text style={styles.statLabel}>Empty Seats</Text></View>
           </View>
         </LinearGradient>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Route Details</Text>
           <Card elevated>
+            <TouchableOpacity style={styles.liveToggle} onPress={() => setTrackingEnabled((prev) => !prev)}>
+              <Ionicons name={trackingEnabled ? "radio-button-on" : "radio-button-off"} size={16} color={trackingEnabled ? COLORS.success : COLORS.gray} />
+              <Text style={styles.liveToggleText}>{trackingEnabled ? "Live bus tracking ON" : "Live bus tracking OFF"}</Text>
+            </TouchableOpacity>
             <View style={styles.routeStopsRow}>
               {selectedRoute.stops.map((stop, i) => (
                 <View key={`${stop}-${i}`} style={styles.stopRow}>
@@ -442,6 +487,8 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
   backText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
   routeStopsRow: {},
+  liveToggle: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  liveToggleText: { fontSize: 12, fontWeight: "700", color: COLORS.textSecondary },
   stopRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   stopDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.primary, marginRight: 12 },
   stopName: { fontSize: 14, color: COLORS.text, fontWeight: "500" },

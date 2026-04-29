@@ -78,8 +78,11 @@ const bookingSlice = createSlice({
     finalizeBooking: (state, action) => {
       state.loading = false;
       state.error = null;
-      if (action.payload) {
-        state.bookingHistory.unshift(action.payload);
+      if (action.payload?.id) {
+        state.bookingHistory = [
+          action.payload,
+          ...state.bookingHistory.filter((item) => item.id !== action.payload.id),
+        ];
       }
       state.activeBooking = null;
       state.currentQuote = null;
@@ -203,7 +206,22 @@ const bookingSlice = createSlice({
       }
     },
     setHistory: (state, action) => {
-      state.bookingHistory = [...action.payload, ...state.bookingHistory.filter((item) => item.type === "bus")];
+      const newHistory = action.payload || [];
+      const existingBus = state.bookingHistory.filter((item) => item.type === "bus");
+      
+      // Combine and remove duplicates by ID
+      const combined = [...newHistory, ...existingBus];
+      const unique = [];
+      const seen = new Set();
+      
+      for (const item of combined) {
+        if (item?.id && !seen.has(item.id)) {
+          seen.add(item.id);
+          unique.push(item);
+        }
+      }
+      
+      state.bookingHistory = unique;
     },
     setBusBookings: (state, action) => {
       state.busBookings = Array.isArray(action.payload) ? action.payload : [];
@@ -264,13 +282,6 @@ export const createBusSeatBooking = (payload) => async (dispatch) => {
 };
 
 export const cancelBusSeatBooking = (bookingId) => async (dispatch, getState) => {
-  const role = String(getState().auth.user?.role || "").toLowerCase();
-  if (!["driver", "admin", "bus_driver"].includes(role)) {
-    const message = "The current backend allows bus-booking cancellation only for driver/admin roles.";
-    dispatch(requestFailure(message));
-    throw new Error(message);
-  }
-
   dispatch(requestStart());
   try {
     await api.cancelBusBooking(bookingId);
@@ -304,9 +315,11 @@ export const verifyBusTicketRemote = (bookingId, verifiedBy) => async (dispatch,
 };
 
 export const createRideBooking = (payload) => async (dispatch) => {
+  console.log(`[BookingSlice] createRideBooking: payload=${JSON.stringify(payload)}`);
   dispatch(requestStart());
   try {
     const { ride, sharedRequest } = await api.createRide(payload);
+    console.log(`[BookingSlice] createRideBooking SUCCESS:`, ride);
     await sendLocalNotification({
       key: `ride-created-${ride.id}`,
       title: ride.status === BOOKING_STATUS.PENDING ? "Ride request sent" : "Ride booked",
@@ -334,11 +347,11 @@ export const createRideBooking = (payload) => async (dispatch) => {
   }
 };
 
-export const syncRideStatus = (rideId, status) => async (dispatch, getState) => {
+export const syncRideStatus = (rideId, status, extra = {}) => async (dispatch, getState) => {
   dispatch(requestStart());
   try {
     const userId = getState().auth.user?.id;
-    const { ride } = await api.updateRideStatus(rideId, status, { userId });
+    const { ride } = await api.updateRideStatus(rideId, status, { userId, ...extra });
     await sendLocalNotification({
       key: `ride-status-${ride.id}-${ride.status}`,
       title:

@@ -15,6 +15,18 @@ function validateRoutePayload(payload = {}) {
   if (!payload.arrivalTime) {
     errors.push({ field: "arrivalTime", message: "arrivalTime is required (HH:MM[:SS])" });
   }
+  if (payload.totalSeats !== undefined) {
+    const seats = Number(payload.totalSeats);
+    if (!Number.isInteger(seats) || seats <= 0) {
+      errors.push({ field: "totalSeats", message: "totalSeats must be a positive integer" });
+    }
+  }
+  if (payload.farePerSeat !== undefined) {
+    const fare = Number(payload.farePerSeat);
+    if (!Number.isFinite(fare) || fare < 0) {
+      errors.push({ field: "farePerSeat", message: "farePerSeat must be a non-negative number" });
+    }
+  }
 
   return {
     isValid: errors.length === 0,
@@ -38,6 +50,38 @@ function validateBookingPayload(payload = {}) {
 
   if (payload.status !== undefined && !BOOKING_STATUS.includes(payload.status)) {
     errors.push({ field: "status", message: `status must be one of: ${BOOKING_STATUS.join(", ")}` });
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+function validateBusLocationPayload(payload = {}) {
+  const errors = [];
+  const latitude = Number(payload.latitude);
+  const longitude = Number(payload.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    errors.push({ field: "latitude", message: "latitude must be between -90 and 90" });
+  }
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    errors.push({ field: "longitude", message: "longitude must be between -180 and 180" });
+  }
+  if (payload.speedKmph !== undefined) {
+    const speed = Number(payload.speedKmph);
+    if (!Number.isFinite(speed) || speed < 0) {
+      errors.push({ field: "speedKmph", message: "speedKmph must be non-negative" });
+    }
+  }
+  if (payload.headingDeg !== undefined) {
+    const heading = Number(payload.headingDeg);
+    if (!Number.isFinite(heading) || heading < 0 || heading > 360) {
+      errors.push({ field: "headingDeg", message: "headingDeg must be between 0 and 360" });
+    }
+  }
+  if (payload.delayMinutes !== undefined && !Number.isInteger(Number(payload.delayMinutes))) {
+    errors.push({ field: "delayMinutes", message: "delayMinutes must be an integer" });
   }
 
   return {
@@ -89,4 +133,5 @@ module.exports = {
   validateBookingPayload,
   validateBookingStatusPayload,
   validateRouteStopPayload,
+  validateBusLocationPayload,
 };

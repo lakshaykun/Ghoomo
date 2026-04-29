@@ -10,19 +10,44 @@ const MAX_ZOOM = 18;
 export default function OsmRouteMap({ pickup, drop, driver, routePoints = [], style, children, onRegionChangeComplete, mapRef }) {
   const normalizePoint = (p) => {
     if (!p) return null;
-    if (Array.isArray(p) && p.length >= 2) return { latitude: Number(p[1]), longitude: Number(p[0]) };
-    if (p.lat !== undefined && p.lng !== undefined) return { latitude: Number(p.lat), longitude: Number(p.lng) };
-    if (p.latitude !== undefined && p.longitude !== undefined) return { latitude: Number(p.latitude), longitude: Number(p.longitude) };
+    let lat, lon;
+    if (Array.isArray(p) && p.length >= 2) {
+      lon = Number(p[0]);
+      lat = Number(p[1]);
+    } else if (p.lat !== undefined && p.lng !== undefined) {
+      lat = Number(p.lat);
+      lon = Number(p.lng);
+    } else if (p.latitude !== undefined && p.longitude !== undefined) {
+      lat = Number(p.latitude);
+      lon = Number(p.longitude);
+    }
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return { latitude: lat, longitude: lon };
+    }
     return null;
   };
 
   const normPickup = useMemo(() => normalizePoint(pickup), [pickup]);
   const normDrop = useMemo(() => normalizePoint(drop), [drop]);
   const normDriver = useMemo(() => normalizePoint(driver), [driver]);
-  const normRoutePoints = useMemo(() => (routePoints || []).map(normalizePoint).filter(Boolean), [routePoints]);
+  const normRoutePoints = useMemo(() => {
+    let pts = routePoints || [];
+    if (!Array.isArray(pts)) {
+      pts = pts.coordinates || pts.geometry?.coordinates || pts.geometry || [];
+      if (!Array.isArray(pts)) pts = [];
+    }
+    return pts.map(normalizePoint).filter(Boolean);
+  }, [routePoints]);
 
   const allPoints = [normPickup, normDrop, normDriver, ...normRoutePoints].filter(Boolean);
-  const autoRegion = useMemo(() => getMapRegion(allPoints), [allPoints]);
+  const autoRegion = useMemo(() => {
+    const res = getMapRegion(allPoints);
+    return {
+      latitude: Number(res.latitude) || 30.7333,
+      longitude: Number(res.longitude) || 76.7794,
+      zoom: Number(res.zoom) || 13
+    };
+  }, [allPoints]);
   
   const internalRef = useRef(null);
   const ref = mapRef || internalRef;
@@ -45,16 +70,24 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [], st
     );
   }
 
+  if (!autoRegion || !autoRegion.latitude || !autoRegion.longitude) {
+    return (
+      <View style={[styles.wrapper, style, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: COLORS.textSecondary }}>Loading map...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrapper, style]}>
       <MapView
         ref={ref}
         style={styles.map}
         initialRegion={{
-          latitude: autoRegion.latitude,
-          longitude: autoRegion.longitude,
-          latitudeDelta: Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom)),
-          longitudeDelta: Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom)),
+          latitude: Number(autoRegion.latitude),
+          longitude: Number(autoRegion.longitude),
+          latitudeDelta: Number(Math.max(0.01, 180 / Math.pow(2, autoRegion.zoom))),
+          longitudeDelta: Number(Math.max(0.01, 360 / Math.pow(2, autoRegion.zoom))),
         }}
         mapType="none"
         minZoomLevel={MIN_ZOOM}

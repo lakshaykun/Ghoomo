@@ -140,3 +140,65 @@ export function subscribeBusRealtime({ onBusUpdate, onError } = {}) {
     socket?.close?.();
   };
 }
+
+/**
+ * Connects to the backend WebSocket for real-time ride events:
+ *   ride_accepted, ride_status_updated, new_ride_request
+ *
+ * @param {string} token  - JWT auth token for authentication
+ * @param {{ onEvent, onError }} handlers
+ * @returns {() => void}  cleanup function
+ */
+export function subscribeGlobalRealtime(token, { onEvent, onError } = {}) {
+  if (!token) return noopUnsubscribe();
+
+  const baseUrl = getApiBaseUrl();
+  const wsUrl = `${toWebSocketUrl(baseUrl)}/socket?token=${encodeURIComponent(token)}`;
+  console.log(`[Realtime] Connecting to: ${wsUrl}`);
+  let socket;
+  let reconnectTimer;
+  let closedByClient = false;
+
+  const connect = () => {
+    console.log(`[Realtime] connect() called`);
+    socket = new WebSocket(wsUrl);
+
+    socket.onopen = () => {
+      console.log(`[Realtime] WebSocket OPENED`);
+    };
+
+    socket.onmessage = (event) => {
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+        console.log(`[Realtime] Message received:`, payload);
+      } catch (err) {
+        console.warn(`[Realtime] Failed to parse message:`, event.data);
+        return;
+      }
+      // Server sends: { event: string, data: any }
+      if (payload?.event) {
+        onEvent?.(payload.event, payload.data);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error(`[Realtime] WebSocket ERROR:`, error);
+      onError?.(error);
+    };
+
+    socket.onclose = (e) => {
+      console.log(`[Realtime] WebSocket CLOSED: code=${e.code}, reason=${e.reason}`);
+      if (closedByClient) return;
+      reconnectTimer = setTimeout(connect, 2000);
+    };
+  };
+
+  connect();
+
+  return () => {
+    closedByClient = true;
+    clearTimeout(reconnectTimer);
+    socket?.close?.();
+  };
+}

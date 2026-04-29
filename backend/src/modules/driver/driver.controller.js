@@ -36,6 +36,7 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 const updateAvailability = asyncHandler(async (req, res) => {
+  console.log(`[DriverController] updateAvailability: userId=${req.user.id}, body=`, req.body);
   const validation = validateAvailabilityPayload(req.body);
   if (!validation.isValid) {
     throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);
@@ -50,6 +51,7 @@ const updateAvailability = asyncHandler(async (req, res) => {
 });
 
 const updateLocation = asyncHandler(async (req, res) => {
+  console.log(`[DriverController] updateLocation: userId=${req.user.id}, body=`, req.body);
   const validation = validateLocationPayload(req.body);
   if (!validation.isValid) {
     throw new AppError("Validation failed", 400, "VALIDATION_ERROR", validation.errors);

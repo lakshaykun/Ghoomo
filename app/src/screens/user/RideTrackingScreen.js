@@ -8,20 +8,23 @@ import { COLORS, SPACING, RADIUS, TYPOGRAPHY, SHADOWS, BOOKING_STATUS } from "..
 import Card from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import OsmRouteMap from "../../components/map/OsmRouteMap";
+import { subscribeGlobalRealtime, subscribeRideRealtime } from "../../services/realtime";
+import { fetchOSRMRoute } from "../../utils/map";
 import { api } from "../../services/api";
-import { subscribeRideRealtime } from "../../services/realtime";
 
 const STATUS_STEPS = [
   { key: BOOKING_STATUS.PENDING, label: "Finding Driver", icon: "search", color: COLORS.warning },
   { key: BOOKING_STATUS.ACCEPTED, label: "Driver Assigned", icon: "person", color: COLORS.primary },
   { key: BOOKING_STATUS.ARRIVED, label: "Driver Arrived", icon: "pin", color: COLORS.success },
+  { key: BOOKING_STATUS.OTP_VERIFIED, label: "OTP Verified", icon: "key", color: COLORS.success },
   { key: BOOKING_STATUS.IN_PROGRESS, label: "On Trip", icon: "navigate", color: COLORS.success },
   { key: BOOKING_STATUS.COMPLETED, label: "Completed", icon: "checkmark-circle", color: COLORS.success },
 ];
 
 export default function RideTrackingScreen({ navigation }) {
   const dispatch = useDispatch();
-  const booking = useSelector((s) => s.booking.activeBooking);
+  const booking = useSelector((s) => s?.booking?.activeBooking);
+  const authToken = useSelector((s) => s?.auth?.token || s?.auth?.accessToken || null);
   const lastBookingRef = useRef(null);
   const isRedirectingRef = useRef(false);
   const [sharedRequest, setSharedRequest] = useState(null);
@@ -30,6 +33,7 @@ export default function RideTrackingScreen({ navigation }) {
   const [ratingComment, setRatingComment] = useState("");
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [ratingError, setRatingError] = useState(null);
+  const [routeData, setRouteData] = useState(null);
 
   const goHomeFast = () => {
     if (isRedirectingRef.current) return;
@@ -77,33 +81,67 @@ export default function RideTrackingScreen({ navigation }) {
     const refresh = () => dispatch(refreshActiveRide(booking.id)).catch(() => {});
     refresh();
 
-    const unsubscribeRealtime = subscribeRideRealtime(booking.id, {
-      onRideUpdate: (ride) => {
-        if (ride.status === BOOKING_STATUS.COMPLETED) {
-          setCompletionRide(ride);
-          dispatch(setActiveBooking(ride));
-          return;
+    const unsubscribeGlobal = subscribeGlobalRealtime(authToken, {
+      onEvent: (event, data) => {
+        if (event === "driver_location_updated" && data.rideId === booking?.id) {
+          dispatch(setActiveBooking({
+            ...booking,
+            driver: {
+              ...(booking?.driver || {}),
+              latitude: data.latitude,
+              longitude: data.longitude,
+            }
+          }));
+        } else if (event === "ride_status_updated" && (data.ride?.id === booking?.id || data.id === booking?.id)) {
+          const updatedRide = data.ride || data;
+          if (updatedRide.status === BOOKING_STATUS.COMPLETED) {
+            setCompletionRide(updatedRide);
+            dispatch(setActiveBooking(updatedRide));
+          } else if (updatedRide.status === BOOKING_STATUS.CANCELLED) {
+            goHomeFast();
+            dispatch(finalizeBooking(updatedRide));
+          } else {
+            dispatch(setActiveBooking(updatedRide));
+          }
         }
-        if (ride.status === BOOKING_STATUS.CANCELLED) {
-          goHomeFast();
-          dispatch(finalizeBooking(ride));
-          return;
-        }
-        dispatch(setActiveBooking(ride));
       },
       onError: () => refresh(),
     });
 
-    api.getSharedRideByRide(booking.id).then(({ request }) => setSharedRequest(request)).catch(() => setSharedRequest(null));
+    api.getSharedRideByRide(booking?.id).then(({ request }) => setSharedRequest(request)).catch(() => setSharedRequest(null));
     const intervalId = setInterval(() => {
-      api.getSharedRideByRide(booking.id).then(({ request }) => setSharedRequest(request)).catch(() => setSharedRequest(null));
+      api.getSharedRideByRide(booking?.id).then(({ request }) => setSharedRequest(request)).catch(() => setSharedRequest(null));
     }, 7000);
 
     return () => {
-      unsubscribeRealtime();
+      unsubscribeGlobal();
       clearInterval(intervalId);
     };
   }, [booking?.id, dispatch]);
+
+  useEffect(() => {
+    if (booking?.status && [BOOKING_STATUS.PENDING, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ARRIVED, BOOKING_STATUS.OTP_VERIFIED, BOOKING_STATUS.IN_PROGRESS].includes(booking.status)) {
+      // Like Uber: always show the trip path (pickup -> drop)
+      const source = booking.pickup;
+      const destination = booking.drop;
+
+      if (source?.latitude && source?.longitude && destination?.latitude && destination?.longitude) {
+        // Only fetch if they are different enough to matter (approx > 15m)
+        const dLat = Math.abs(source.latitude - destination.latitude);
+        const dLon = Math.abs(source.longitude - destination.longitude);
+        if (dLat < 0.00015 && dLon < 0.00015) {
+           setRouteData({ points: [source, destination], distance: 0, duration: 0 });
+           return;
+        }
+
+        fetchOSRMRoute(source, destination, true).then((res) => {
+          if (res && res.points && res.points.length > 0) {
+            setRouteData(res);
+          }
+        }).catch(() => {});
+      }
+    }
+  }, [booking?.pickup?.latitude, booking?.pickup?.longitude, booking?.drop?.latitude, booking?.drop?.longitude, booking?.status]);
 
   if (!booking) {
     return (
@@ -126,7 +164,7 @@ export default function RideTrackingScreen({ navigation }) {
         text: "Yes, Cancel",
         style: "destructive",
         onPress: () => {
-          dispatch(syncRideStatus(booking.id, BOOKING_STATUS.CANCELLED))
+          dispatch(syncRideStatus(booking?.id, BOOKING_STATUS.CANCELLED, { sourceType: booking?.sourceType }))
             .then(() => navigation.navigate("UserHome"))
             .catch((error) => Alert.alert("Cancel Failed", error.message));
         },
@@ -174,15 +212,10 @@ export default function RideTrackingScreen({ navigation }) {
       return <Button title="Cancel Search" onPress={handleCancel} variant="danger" size="lg" />;
     }
     if (booking.status === BOOKING_STATUS.ACCEPTED || booking.status === BOOKING_STATUS.ARRIVED) {
-      return <Button title={`Share OTP: ${booking.otp}`} onPress={handleShareOtp} variant="primary" size="lg" />;
+      return <Button title={`Share OTP: ${booking.otp || "----"}`} onPress={handleShareOtp} variant="primary" size="lg" />;
     }
     if (booking.status === BOOKING_STATUS.IN_PROGRESS) {
-      return (
-        <View style={styles.etaContainer}>
-          <Text style={styles.etaLabel}>Arriving in</Text>
-          <Text style={styles.etaValue}>{booking.durationMinutes} min</Text>
-        </View>
-      );
+      return null; // Don't show "Arriving in" block after OTP/trip starts
     }
     return null;
   };
@@ -190,7 +223,7 @@ export default function RideTrackingScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.mapArea}>
-        <OsmRouteMap pickup={booking.pickup} drop={booking.drop} driver={booking.driver} routePoints={booking.route?.geometry || []} />
+        <OsmRouteMap pickup={booking.pickup} drop={booking.drop} driver={booking.driver} routePoints={routeData?.points || booking.route?.geometry || []} />
       </View>
 
       <View style={styles.bottomSheet}>
@@ -205,13 +238,22 @@ export default function RideTrackingScreen({ navigation }) {
             <Text style={styles.statusLabel}>{currentStep.label}</Text>
             <Text style={styles.statusSub}>
               {booking.status === BOOKING_STATUS.PENDING ? "Searching for nearby drivers"
-                : booking.status === BOOKING_STATUS.ACCEPTED ? `${booking.driver?.name} is on the way`
+                : booking.status === BOOKING_STATUS.ACCEPTED ? (booking?.driver?.name ? `${booking.driver.name} is on the way` : "Driver is being assigned...")
                 : booking.status === BOOKING_STATUS.ARRIVED ? "Driver is waiting at pickup"
-                : booking.status === BOOKING_STATUS.IN_PROGRESS ? `Heading to ${booking.drop?.name}`
+                : booking.status === BOOKING_STATUS.OTP_VERIFIED ? "OTP verified, start trip"
+                : booking.status === BOOKING_STATUS.IN_PROGRESS ? `Heading to ${booking.drop?.name || "destination"}`
                 : "Trip completed"}
             </Text>
           </View>
-          {booking.status === BOOKING_STATUS.ACCEPTED && (
+          {routeData && routeData.duration !== undefined && [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ARRIVED, BOOKING_STATUS.OTP_VERIFIED, BOOKING_STATUS.IN_PROGRESS].includes(booking.status) ? (
+            <View style={{ alignItems: "flex-end" }}>
+              <View style={styles.etaPill}>
+                <Text style={styles.etaPillVal}>{Math.round(routeData.duration / 60)}</Text>
+                <Text style={styles.etaPillLabel}>MIN</Text>
+              </View>
+              <Text style={{ ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 }}>{Number(routeData.distance / 1000 || 0).toFixed(1)} km</Text>
+            </View>
+          ) : booking.status === BOOKING_STATUS.ACCEPTED && (
             <View style={styles.etaPill}>
               <Text style={styles.etaPillVal}>{booking.driver?.etaMinutes || "--"}</Text>
               <Text style={styles.etaPillLabel}>MIN</Text>
@@ -230,26 +272,30 @@ export default function RideTrackingScreen({ navigation }) {
         </View>
 
         {/* Driver Info */}
-        {booking.driver && booking.status !== BOOKING_STATUS.PENDING && (
+        {booking.driver && booking.status !== BOOKING_STATUS.PENDING ? (
           <View style={styles.driverSection}>
             <View style={styles.driverAvatar}>
-              <Text style={styles.driverAvatarText}>{booking.driver.name[0]}</Text>
+              <Text style={styles.driverAvatarText}>{(booking.driver.name || "D")[0]}</Text>
             </View>
             <View style={styles.driverInfo}>
-              <Text style={styles.driverName}>{booking.driver.name}</Text>
+              <Text style={styles.driverName}>{booking.driver.name || "Driver"}</Text>
               <View style={styles.ratingRow}>
                 <Ionicons name="star" size={14} color={COLORS.warning} />
-                <Text style={styles.ratingText}>{booking.driver.rating} • {booking.driver.vehicleType}</Text>
+                <Text style={styles.ratingText}>{booking.driver.rating || "5.0"} • {booking.driver.vehicleType || "Ride"}</Text>
               </View>
             </View>
             <View style={styles.vehicleInfo}>
-              <Text style={styles.vehicleNo}>{booking.driver.vehicleNo}</Text>
+              <Text style={styles.vehicleNo}>{booking.driver.vehicleNo || "N/A"}</Text>
             </View>
             {driverPhone && (
               <TouchableOpacity style={styles.callBtn} onPress={handleCallDriver}>
                 <Ionicons name="call" size={20} color={COLORS.primary} />
               </TouchableOpacity>
             )}
+          </View>
+        ) : booking.status !== BOOKING_STATUS.PENDING && (
+          <View style={styles.driverSection}>
+             <Text style={{ ...TYPOGRAPHY.label, color: COLORS.textSecondary }}>Driver details loading...</Text>
           </View>
         )}
 

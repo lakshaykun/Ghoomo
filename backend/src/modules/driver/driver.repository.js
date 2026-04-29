@@ -6,6 +6,8 @@ const DRIVER_PROFILE_SELECT = `
     d.user_id,
     d.status,
     d.is_available,
+    d.availability_status,
+    d.active_ride_id,
     d.rating,
     d.last_seen_at,
     d.created_at,
@@ -58,7 +60,8 @@ async function getAvailableDrivers(db = null) {
       LIMIT 1
     ) vehicle ON TRUE
     WHERE
-      d.is_available = TRUE
+      d.availability_status = 'idle'
+      AND d.is_available = TRUE
       AND d.status = 'approved'
       AND loc.current_latitude IS NOT NULL
       AND loc.current_longitude IS NOT NULL
@@ -77,7 +80,13 @@ async function findDriverByUserId(userId) {
     `,
     [userId]
   );
-
+  if (result.rows[0]) {
+    const logMsg = `[${new Date().toISOString()}] Found profile: userId=${userId}, is_available=${result.rows[0].is_available}, availability_status=${result.rows[0].availability_status}\n`;
+    require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
+  } else {
+    const logMsg = `[${new Date().toISOString()}] Profile NOT found: userId=${userId}\n`;
+    require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
+  }
   return result.rows[0] || null;
 }
 
@@ -160,24 +169,30 @@ async function registerDriver({ userId, vehicleNumber, vehicleType }) {
 }
 
 async function updateAvailabilityByUserId(userId, { isAvailable, status }) {
+  const availabilityStatus = isAvailable ? 'idle' : 'offline';
+  const logMsg = `[${new Date().toISOString()}] Updating availability: userId=${userId}, isAvailable=${isAvailable}, status=${availabilityStatus}\n`;
+  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsg);
   const result = await query(
     `
     UPDATE drivers
     SET
-      is_available = $1,
-      status = COALESCE($2, status),
+      availability_status = $1,
+      is_available = $2,
+      status = COALESCE($3, status),
       updated_at = NOW(),
       last_seen_at = NOW()
-    WHERE user_id = $3
+    WHERE user_id = $4
     RETURNING *
     `,
-    [isAvailable, status || null, userId]
+    [availabilityStatus, Boolean(isAvailable), status || null, userId]
   );
 
   if (!result.rows[0]) {
+    console.log(`[DriverRepo] Update failed: No driver found for userId=${userId}`);
     return null;
   }
 
+  console.log(`[DriverRepo] Update success for driver ID:`, result.rows[0].id);
   return findDriverByUserId(userId);
 }
 
@@ -304,6 +319,8 @@ async function listCandidateRequestsByUserId(userId) {
       rr.drop_latitude,
       rr.drop_longitude,
       rr.is_shared,
+      rr.estimated_fare,
+      rr.estimated_distance_km,
       rr.request_time,
       rr.expires_at,
       rr.status AS request_status
@@ -311,6 +328,9 @@ async function listCandidateRequestsByUserId(userId) {
     INNER JOIN drivers d ON d.id = rrc.driver_id
     INNER JOIN ride_requests rr ON rr.id = rrc.request_id
     WHERE d.user_id = $1
+      AND rr.status = 'searching'
+      AND rrc.status = 'notified'
+      AND (rr.expires_at IS NULL OR rr.expires_at > NOW())
     ORDER BY rrc.offered_at DESC
     `,
     [userId]
@@ -345,7 +365,7 @@ async function findActiveRideByUserId(userId) {
     INNER JOIN drivers d ON d.id = r.driver_id
     WHERE
       d.user_id = $1
-      AND r.status IN ('assigned', 'arriving', 'started')
+      AND r.status IN ('ACCEPTED', 'DRIVER_ARRIVED', 'OTP_VERIFIED', 'ON_TRIP', 'assigned', 'arriving', 'started')
     ORDER BY r.updated_at DESC, r.created_at DESC
     LIMIT 1
     `,

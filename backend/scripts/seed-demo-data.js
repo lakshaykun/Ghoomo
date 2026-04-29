@@ -41,7 +41,7 @@ const demoUsers = [
     role: "driver",
     driver: {
       vehicleNumber: "GHOOMO-DR-002",
-      vehicleType: "auto",
+      vehicleType: "cab",
       licenseNumber: "DRV-002",
       status: "approved",
       isAvailable: true,

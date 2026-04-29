@@ -1,7 +1,10 @@
 export const BUS_WAITLIST_LIMIT = 10;
 
 function parseTimeLabel(timeLabel) {
-  const safeLabel = String(timeLabel || "12:00 PM").trim();
+  const safeLabel = String(timeLabel || "").trim();
+  if (!safeLabel) {
+    return { hour: 0, minute: 0 };
+  }
   const [time, periodText = "AM"] = safeLabel.split(" ");
   const period = periodText.toUpperCase();
   const [hourText, minuteText] = time.split(":");
@@ -63,7 +66,7 @@ export function getRouteOccupancy(route, busBookings = []) {
   const routeId = route?.id;
   const totalSeats = Number.isFinite(Number(route?.totalSeats)) && Number(route?.totalSeats) > 0
     ? Number(route.totalSeats)
-    : 40;
+    : 0;
   const bookedSeats = Array.isArray(route?.bookedSeats) ? route.bookedSeats : [];
 
   const activeBookings = busBookings.filter(
@@ -90,7 +93,7 @@ export function getRouteOccupancy(route, busBookings = []) {
     availableSeats,
     availableSeatCount: availableSeats.length,
     waitlistRemaining: Math.max(0, BUS_WAITLIST_LIMIT - waitingBookings.length),
-    occupancyRatio: (totalSeats - availableSeats.length) / totalSeats,
+    occupancyRatio: totalSeats > 0 ? (totalSeats - availableSeats.length) / totalSeats : 0,
   };
 }
 

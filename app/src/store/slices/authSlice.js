@@ -2,7 +2,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, clearApiAuthToken, setApiAuthToken } from "../../services/api";
-import { registerPushTokenForUser, unregisterPushTokenForUser } from "../../services/notifications";
 
 const AUTH_STORAGE_KEY = "ghoomo.auth.user";
 const APP_ADMIN_ROLE_BLOCK_MESSAGE = "Admin accounts are not supported in the mobile app. Please use the admin website.";
@@ -105,10 +104,6 @@ export const loginUser = (email, password) => async (dispatch) => {
       AUTH_STORAGE_KEY,
       JSON.stringify(persistSessionPayload({ user: normalizedUser, token, authMethod: "password" }))
     );
-
-    registerPushTokenForUser(normalizedUser.id).catch((pushError) => {
-      console.warn("[Auth] Push token registration failed (non-blocking):", pushError?.message || pushError);
-    });
   } catch (error) {
     clearApiAuthToken();
     dispatch(loginFailure(error.message || "Unable to sign in"));
@@ -144,14 +139,23 @@ export const registerUser = (userData) => async (dispatch) => {
       }
 
       const vehicleType = normalizeDriverVehicleType(userData.vehicleType);
-      await api.registerDriverProfile({
+      const driverRes = await api.registerDriverProfile({
         vehicleNumber,
         vehicleType,
       });
 
-      normalizedUser.role = "driver";
-      normalizedUser.vehicleType = vehicleType;
-      normalizedUser.vehicleNo = vehicleNumber.toUpperCase();
+      const finalUser = driverRes.user;
+      const finalToken = driverRes.token;
+
+      setApiAuthToken(finalToken);
+
+      dispatch(loginSuccess({ user: finalUser, token: finalToken, authMethod: "password" }));
+
+      await AsyncStorage.setItem(
+        AUTH_STORAGE_KEY,
+        JSON.stringify(persistSessionPayload({ user: finalUser, token: finalToken, authMethod: "password" }))
+      );
+      return;
     }
 
     dispatch(loginSuccess({ user: normalizedUser, token, authMethod: "password" }));
@@ -160,12 +164,6 @@ export const registerUser = (userData) => async (dispatch) => {
       AUTH_STORAGE_KEY,
       JSON.stringify(persistSessionPayload({ user: normalizedUser, token, authMethod: "password" }))
     );
-
-    try {
-      await registerPushTokenForUser(normalizedUser.id);
-    } catch (tokenError) {
-      console.warn("[Auth] Push token registration failed (non-blocking):", tokenError.message);
-    }
   } catch (error) {
     clearApiAuthToken();
     dispatch(loginFailure(error.message || "Unable to register"));
@@ -182,9 +180,7 @@ export const googleSignIn = (promptAsync, selectedRole = "user") => async (dispa
   dispatch(loginFailure(GOOGLE_LOGIN_NOT_AVAILABLE_MESSAGE));
 };
 
-export const logoutUser = () => async (dispatch, getState) => {
-  const userId = getState().auth.user?.id;
-  await unregisterPushTokenForUser(userId);
+export const logoutUser = () => async (dispatch) => {
   await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
   clearApiAuthToken();
   dispatch(logout());
@@ -211,8 +207,6 @@ export const hydrateAuthSession = () => async (dispatch) => {
           authMethod: parsed.authMethod || "password",
         })
       );
-
-      await registerPushTokenForUser(sessionUser.id);
       return;
     }
 

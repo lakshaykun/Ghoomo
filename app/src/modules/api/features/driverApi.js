@@ -102,11 +102,16 @@ export async function respondToCandidateRequest(requestId, status) {
 }
 
 export async function buildDriverDashboard(driverUserId) {
-  const [driverProfile, candidateRequests, backendActiveRide] = await Promise.all([
+  const [driverProfile, candidateRequests, backendActiveRide, historyRes] = await Promise.all([
     getDriverProfile(),
     getDriverCandidateRequests(),
     getDriverActiveRide(),
+    httpClient.get("/api/rides/history"),
   ]);
+
+  console.log("[DriverApi] Raw Profile:", driverProfile);
+
+  const completedRides = Array.isArray(historyRes) ? historyRes.map(row => normalizeRide(row)) : [];
 
   const runtimeDriverId = driverUserId || driverProfile.userId;
   const runtime = getDriverRuntimeSnapshot(runtimeDriverId);
@@ -138,11 +143,9 @@ export async function buildDriverDashboard(driverUserId) {
   const activeRide =
     hydratedActiveRide ||
     assignedRides.find((ride) =>
-      ride.sourceType === "ride" && ["accepted", "arrived", "in_progress"].includes(ride.status)
+      ride.sourceType === "ride" && ["accepted", "arrived", "in_progress", "ACCEPTED", "ARRIVED", "ON_TRIP"].includes(ride.status)
     ) ||
     null;
-
-  const completedRides = runtime.completedRides || [];
 
   return {
     driver: {
@@ -156,7 +159,7 @@ export async function buildDriverDashboard(driverUserId) {
       vehicleNo: driverProfile.vehicleNo,
       status: driverProfile.status,
     },
-    online: Boolean(driverProfile.isAvailable),
+    online: driverProfile.availabilityStatus !== "offline",
     location:
       driverProfile.latitude !== null && driverProfile.longitude !== null
         ? {

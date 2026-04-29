@@ -14,7 +14,7 @@ export function latLonToWorld({ latitude, longitude }, zoom) {
 
 export function getMapRegion(points = []) {
   if (!points.length) {
-    return { latitude: 30.900965, longitude: 75.857277, zoom: 13 };
+    return { latitude: 30.7333, longitude: 76.7794, zoom: 13 };
   }
 
   const lats = points.map((point) => point.latitude);
@@ -78,4 +78,67 @@ export function projectToGrid(point, region, grid) {
     x: world.x - grid.originX,
     y: world.y - grid.originY,
   };
+}
+
+export async function fetchOSRMRoute(pickup, drop, returnDetails = false) {
+  const fallback = returnDetails ? { points: [], distance: 0, duration: 0 } : [];
+  if (!pickup || !drop) return fallback;
+
+  try {
+    const pLon = Number(pickup.longitude || pickup.lng || 0);
+    const pLat = Number(pickup.latitude || pickup.lat || 0);
+    const dLon = Number(drop.longitude || drop.lng || 0);
+    const dLat = Number(drop.latitude || drop.lat || 0);
+
+    // Basic coordinate validation
+    if (!pLon || !pLat || !dLon || !dLat) return fallback;
+
+    // If locations are practically identical (less than ~10 meters), return empty/direct
+    const distSq = Math.pow(pLon - dLon, 2) + Math.pow(pLat - dLat, 2);
+    if (distSq < 0.0000001) {
+      return returnDetails ? { points: [{ latitude: pLat, longitude: pLon }], distance: 0, duration: 0 } : [{ latitude: pLat, longitude: pLon }];
+    }
+
+    const url = `https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?overview=full&geometries=geojson`;
+    
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+      timeout: 5000 
+    });
+
+    if (!response.ok) {
+      console.warn(`[Map] OSRM status error: ${response.status}`);
+      return fallback;
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await response.text();
+      console.warn(`[Map] OSRM non-JSON response received: ${text.substring(0, 50)}...`);
+      return fallback;
+    }
+
+    const data = await response.json();
+
+    if (data.code === "Ok" && data.routes && data.routes.length > 0) {
+      const route = data.routes[0];
+      const points = route.geometry.coordinates.map(coord => ({
+        latitude: coord[1],
+        longitude: coord[0]
+      }));
+      if (returnDetails) {
+        return {
+          points,
+          distance: route.distance, // in meters
+          duration: route.duration  // in seconds
+        };
+      }
+      return points;
+    } else {
+      console.warn(`[Map] OSRM error code: ${data.code || 'Unknown'}`);
+    }
+  } catch (err) {
+    console.warn("[Map] fetchOSRMRoute catch:", err.message || err);
+  }
+  return fallback;
 }

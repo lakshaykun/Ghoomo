@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -24,7 +24,7 @@ const { height: SCREEN_H } = Dimensions.get("window");
 const DEBOUNCE_MS = 380;
 const MIN_ZOOM = 9;
 const MAX_ZOOM = 18;
-const DEFAULT_REGION = { latitude: 28.6139, longitude: 77.209, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+const DEFAULT_REGION = { latitude: 30.7333, longitude: 76.7794, latitudeDelta: 0.05, longitudeDelta: 0.05 };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,12 +40,46 @@ function useDebounce(fn, delay) {
   );
 }
 
+function toNumber(value, fallback = null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function normalizePlace(p) {
   if (!p) return null;
-  if (p.latitude != null && p.longitude != null) return p;
-  if (p.lat != null && p.lng != null) return { ...p, latitude: Number(p.lat), longitude: Number(p.lng) };
+  const lat = toNumber(p.latitude ?? p.lat, null);
+  const lon = toNumber(p.longitude ?? p.lng ?? p.lon, null);
+  if (lat !== null && lon !== null) {
+    return { 
+      ...p, 
+      latitude: lat, 
+      longitude: lon,
+      name: p.name || p.address || "Unknown Location",
+      address: p.address || p.name || ""
+    };
+  }
   return null;
 }
+
+function normalizePoint(p) {
+  if (!p) return null;
+  let lat, lon;
+  if (Array.isArray(p) && p.length >= 2) {
+    lon = Number(p[0]);
+    lat = Number(p[1]);
+  } else if (p.lat !== undefined && p.lng !== undefined) {
+    lat = Number(p.lat);
+    lon = Number(p.lng);
+  } else if (p.latitude !== undefined && p.longitude !== undefined) {
+    lat = Number(p.latitude);
+    lon = Number(p.longitude);
+  }
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    return { latitude: lat, longitude: lon };
+  }
+  return null;
+}
+
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -127,10 +161,14 @@ function SuggestionList({ items, onSelect, onDismiss }) {
         keyboardShouldPersistTaps="always"
         ItemSeparatorComponent={() => <View style={styles.suggestionSep} />}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.suggestionRow} onPress={() => onSelect(item)}>
+          <TouchableOpacity 
+            style={styles.suggestionRow} 
+            onPress={() => onSelect(item)}
+            key={`suggestion-${item.id}-${item.name}`}
+          >
             <Ionicons name="location-outline" size={16} color={COLORS.primary} style={{ marginRight: 8 }} />
             <Text style={styles.suggestionText} numberOfLines={2}>
-              {item.name}
+              {String(item.name || "Unknown Place")}
             </Text>
           </TouchableOpacity>
         )}
@@ -226,6 +264,7 @@ export default function LocationPicker({
   onPickupChange,
   onDropChange,
   routePoints = [],
+  distance = 0,
   style,
 }) {
   const [activeField, setActiveField] = useState("pickup");
@@ -240,6 +279,7 @@ export default function LocationPicker({
   const [isCalibrating, setIsCalibrating] = useState(false); // user is moving map
   const [showPopular, setShowPopular] = useState(false);
   const [popularFor, setPopularFor] = useState(null);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   // ── Refs ──
   const mapRef = useRef(null);
@@ -255,34 +295,85 @@ export default function LocationPicker({
     Animated.timing(sheetAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, []);
 
+  // ── Auto-zoom to route ──────────────────────────────────────────────────
+  const safeRoutePoints = useMemo(() => {
+    let pts = routePoints || [];
+    if (!Array.isArray(pts)) {
+      pts = pts.coordinates || pts.geometry?.coordinates || pts.geometry || [];
+      if (!Array.isArray(pts)) pts = [];
+    }
+    return pts.map(normalizePoint).filter(Boolean);
+  }, [routePoints]);
+
+  useEffect(() => {
+    if (isMapReady && safeRoutePoints?.length > 1 && mapRef.current) {
+      try {
+        const validPoints = safeRoutePoints.filter(p => p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
+        if (validPoints.length > 1) {
+          mapRef.current.fitToCoordinates(validPoints, {
+            edgePadding: { top: 60, right: 60, bottom: 300, left: 60 },
+            animated: true,
+          });
+        }
+      } catch (err) {
+        console.warn("[LocationPicker] fitToCoordinates crash prevented:", err);
+      }
+    }
+  }, [safeRoutePoints, isMapReady]);
+
 
   // ── Sync callbacks ─────────────────────────────────────────────────────────
-  useEffect(() => { onPickupChange?.(pickup); }, [pickup]);
-  useEffect(() => { onDropChange?.(drop); }, [drop]);
+  const lastPickupRef = useRef(pickup);
+  const lastDropRef = useRef(drop);
+
+  useEffect(() => {
+    if (pickup !== lastPickupRef.current) {
+      lastPickupRef.current = pickup;
+      onPickupChange?.(pickup);
+    }
+  }, [pickup]);
+
+  useEffect(() => {
+    if (drop !== lastDropRef.current) {
+      lastDropRef.current = drop;
+      onDropChange?.(drop);
+    }
+  }, [drop]);
 
   // ── Internal setter that keeps text + place in sync ──────────────────────
   function applyPlace(field, place) {
-    if (field === "pickup") {
-      setPickup(place);
-      setPickupText(place.name || place.address || "");
-    } else {
-      setDrop(place);
-      setDropText(place.name || place.address || "");
+    try {
+      if (!place) return;
+      if (field === "pickup") {
+        setPickup(place);
+        setPickupText(place.name || place.address || "");
+      } else {
+        setDrop(place);
+        setDropText(place.name || place.address || "");
+      }
+      setSuggestions([]);
+      if (isMapReady) {
+        animateTo(place);
+      }
+    } catch (err) {
+      console.error("[LocationPicker] applyPlace error:", err);
     }
-    setSuggestions([]);
-    animateTo(place);
   }
 
   // ── Smooth map animation ──────────────────────────────────────────────────
   function animateTo(place, delta = 0.012) {
     if (!place || !mapRef.current) return;
+    const lat = Number(place.latitude);
+    const lon = Number(place.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
     isProgrammaticRef.current = true;
     mapRef.current.animateToRegion(
       {
-        latitude: place.latitude,
-        longitude: place.longitude,
-        latitudeDelta: delta,
-        longitudeDelta: delta,
+        latitude: Number(lat),
+        longitude: Number(lon),
+        latitudeDelta: Number(delta),
+        longitudeDelta: Number(delta),
       },
       600
     );
@@ -355,6 +446,11 @@ export default function LocationPicker({
   function handleRegionChangeComplete(region) {
     setIsCalibrating(false);
 
+    // Basic validation of region to prevent native crashes
+    if (!region || !Number.isFinite(region.latitude) || !Number.isFinite(region.longitude)) {
+      return;
+    }
+
     // If the region changed because of animateTo() or initial load, skip reverse geocoding
     if (isProgrammaticRef.current) {
       isProgrammaticRef.current = false;
@@ -396,19 +492,28 @@ export default function LocationPicker({
   }
 
   // ── Compute initial region ────────────────────────────────────────────────
-  const mapRegion = (() => {
+  const mapRegion = useMemo(() => {
     const anchor = pickup || drop;
-    if (!anchor) return DEFAULT_REGION;
+    const base = anchor && Number.isFinite(Number(anchor.latitude)) && Number.isFinite(Number(anchor.longitude)) ? anchor : DEFAULT_REGION;
     return {
-      latitude: anchor.latitude,
-      longitude: anchor.longitude,
-      latitudeDelta: 0.04,
-      longitudeDelta: 0.04,
+      latitude: Number(base.latitude) || 30.7333,
+      longitude: Number(base.longitude) || 76.7794,
+      latitudeDelta: Number(base.latitudeDelta) || 0.04,
+      longitudeDelta: Number(base.longitudeDelta) || 0.04,
     };
-  })();
+  }, [pickup === null, drop === null]); // Only re-calc if they go from null to non-null or vice versa
 
   const activeColor = activeField === "pickup" ? COLORS.success : COLORS.error;
   const sheetTranslate = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [200, 0] });
+
+  if (!mapRegion || !mapRegion.latitude || !mapRegion.longitude) {
+    return (
+      <View style={[styles.container, style, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 12, color: COLORS.textSecondary }}>Initializing map...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, style]}>
@@ -417,7 +522,12 @@ export default function LocationPicker({
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          initialRegion={mapRegion}
+          initialRegion={{
+            latitude: Number(mapRegion.latitude),
+            longitude: Number(mapRegion.longitude),
+            latitudeDelta: Number(mapRegion.latitudeDelta),
+            longitudeDelta: Number(mapRegion.longitudeDelta),
+          }}
           mapType="none"
           minZoomLevel={MIN_ZOOM}
           maxZoomLevel={MAX_ZOOM}
@@ -432,6 +542,7 @@ export default function LocationPicker({
           toolbarEnabled={false}
           onRegionChangeComplete={handleRegionChangeComplete}
           onRegionChange={() => setIsCalibrating(true)}
+          onMapReady={() => setIsMapReady(true)}
         >
           <UrlTile
             urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
@@ -439,9 +550,9 @@ export default function LocationPicker({
             flipY={false}
           />
 
-          {routePoints.length > 1 && (
+          {safeRoutePoints.length > 1 && (
             <Polyline
-              coordinates={routePoints}
+              coordinates={safeRoutePoints}
               strokeColor={COLORS.primary}
               strokeWidth={4}
               lineCap="round"
@@ -449,14 +560,22 @@ export default function LocationPicker({
             />
           )}
 
-          {pickup && (
-            <Marker coordinate={pickup} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+          {pickup && Number.isFinite(pickup.latitude) && (
+            <Marker 
+              coordinate={{ latitude: Number(pickup.latitude), longitude: Number(pickup.longitude) }} 
+              anchor={{ x: 0.5, y: 0.5 }} 
+              tracksViewChanges={false}
+            >
               <MarkerDot color={COLORS.success} isActive={activeField === "pickup"} />
             </Marker>
           )}
 
-          {drop && (
-            <Marker coordinate={drop} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+          {drop && Number.isFinite(drop.latitude) && (
+            <Marker 
+              coordinate={{ latitude: Number(drop.latitude), longitude: Number(drop.longitude) }} 
+              anchor={{ x: 0.5, y: 0.5 }} 
+              tracksViewChanges={false}
+            >
               <MarkerDot color={COLORS.error} isActive={activeField === "drop"} />
             </Marker>
           )}
@@ -558,6 +677,7 @@ export default function LocationPicker({
             <Text style={styles.routeSummaryText} numberOfLines={1}>
               {pickup.name || "Pickup"} → {drop.name || "Drop"}
             </Text>
+            {distance ? <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>{distance} km</Text> : null}
           </View>
         )}
       </Animated.View>

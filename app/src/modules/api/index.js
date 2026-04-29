@@ -12,7 +12,9 @@ import {
   createBusBookingRemote,
   createBusRouteRemote,
   fetchBusBookingsRemote,
+  fetchBusRouteTrackingRemote,
   fetchBusRoutesRemote,
+  updateBusRouteLocationRemote,
   verifyBusBookingRemote,
 } from "./features/busApi";
 import {
@@ -23,12 +25,16 @@ import {
 } from "./features/driverApi";
 import { reverseGeocodeCoordinates, searchPlacesByText } from "./features/locationApi";
 import {
+  cancelRideRequestRemote,
   createRideRequest,
   fetchRideQuote,
   getRideByIdOrRequest,
   getRideHistoryForCurrentUser,
   requestRide,
   updateRideStatusRemote,
+  verifyRideOtpRemote,
+  rejectRideRequestRemote,
+  assignDriverRemote,
 } from "./features/rideApi";
 import {
   closeSharedRideById,
@@ -71,6 +77,8 @@ export const api = {
 
   getBusRoutes: () => fetchBusRoutesRemote(),
   createBusRoute: (payload) => createBusRouteRemote(payload),
+  getBusTracking: (routeId) => fetchBusRouteTrackingRemote(routeId),
+  updateBusLocation: (routeId, payload) => updateBusRouteLocationRemote(routeId, payload),
   getBusBookings: (params = {}) => fetchBusBookingsRemote(params),
   createBusBooking: (payload) => createBusBookingRemote(payload),
   cancelBusBooking: (bookingId) => cancelBusBookingRemote(bookingId),
@@ -85,10 +93,14 @@ export const api = {
   getNearbyDrivers: (params) => getNearbyDrivers(params),
   fetchQuote: (payload) => fetchRideQuote(payload),
   createRide: (payload) => createRideRequest(payload),
+  cancelRequest: (requestId) => cancelRideRequestRemote(requestId),
   requestRide: (payload) => requestRide(payload),
   rateRide: (rideId, payload) => rateRideRemote(rideId, payload),
   getRide: (rideId) => getRideByIdOrRequest(rideId),
   updateRideStatus: (rideId, status, extra = {}) => updateRideStatusRemote(rideId, status, extra),
+  assignDriver: (requestId, options = {}) => assignDriverRemote(requestId, options),
+  verifyRideOtp: (rideId, otp) => verifyRideOtpRemote(rideId, otp),
+  rejectRideRequest: (requestId) => rejectRideRequestRemote(requestId),
   getRideHistory: (userId) => getRideHistoryForCurrentUser(userId),
 
   getSharedRides: (userId) => fetchSharedRidesForUser(userId),

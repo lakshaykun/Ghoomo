@@ -2,11 +2,8 @@ const { AppError, calculateDistanceKm, toFiniteNumber } = require("../../common/
 const driverRepository = require("../driver/driver.repository");
 const { findNearestDriver } = require("../driver/driver.service");
 const repository = require("./ride.repository");
-
-const FARE_TABLE = {
-  auto: { base: 30, perKm: 12 },
-  cab: { base: 50, perKm: 18 },
-};
+const { broadcastToDriverUsers, broadcastToUser, updateDriverSocketInfo } = require("../../common/utils/socket");
+const { calculateFare } = require("./rateCard");
 
 function normalizeRideRequestPayload(payload = {}) {
   const pickup = payload.pickup || {};
@@ -38,12 +35,11 @@ async function getQuote(payload) {
     dropLongitude
   );
 
-  const fareRule = FARE_TABLE[payload.vehicleType] || FARE_TABLE.auto;
-  let estimatedFare = fareRule.base + distanceKm * fareRule.perKm;
-
-  if (payload.isShared) {
-    estimatedFare = estimatedFare * 0.7;
-  }
+  const estimatedFare = calculateFare({
+    distanceKm,
+    vehicleType: payload.vehicleType,
+    isShared: Boolean(payload.isShared),
+  });
 
   return {
     distanceKm: Number(distanceKm.toFixed(3)),
@@ -61,7 +57,7 @@ async function createRide(studentId, payload) {
   const normalized = normalizeRideRequestPayload(payload);
   const pickupLatitude = Number(normalized.pickupLatitude);
   const pickupLongitude = Number(normalized.pickupLongitude);
-  const tripQuote = getQuote({
+  const tripQuote = await getQuote({
     pickupLatitude,
     pickupLongitude,
     dropLatitude: normalized.dropLatitude,
@@ -79,26 +75,40 @@ async function createRide(studentId, payload) {
     dropLatitude: Number(normalized.dropLatitude),
     dropLongitude: Number(normalized.dropLongitude),
     isShared: Boolean(normalized.isShared),
+    vehicleType: normalized.vehicleType,
+    estimatedFare: tripQuote.estimatedFare,
+    estimatedDistanceKm: tripQuote.distanceKm,
     expiresAt: normalized.expiresAt,
   });
 
-  const nearestDriver = await findNearestDriver(null, pickupLatitude, pickupLongitude);
-  if (!nearestDriver) {
-    await repository.cancelRideRequest(request.id, studentId).catch(() => null);
-    throw new AppError("No drivers available", 409, "NO_DRIVERS_AVAILABLE");
-  }
+  const logMsgStart = `[${new Date().toISOString()}] [RideService] Dispatching ride request: requestId=${request.id}, vehicleType=${normalized.vehicleType}\n`;
+  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsgStart);
 
-  try {
-    return await repository.createRideFromRequest({
-      requestId: request.id,
-      driverId: nearestDriver.id,
-      fare: tripQuote.estimatedFare,
-      distance: tripQuote.distanceKm,
-    });
-  } catch (error) {
-    await repository.cancelRideRequest(request.id, studentId).catch(() => null);
-    throw error;
-  }
+  // Build candidates from DB-first eligibility so assignment does not depend on socket timing.
+  const candidateDriverUserIds = await repository.listEligibleDriverUserIdsForRequest({
+    pickupLatitude,
+    pickupLongitude,
+    vehicleType: normalized.vehicleType || tripQuote.vehicleType,
+    limit: 25,
+  });
+
+  // Realtime socket delivery is best-effort; candidate records remain the source of truth.
+  const deliveredDriverUserIds = broadcastToDriverUsers(candidateDriverUserIds, "new_ride_request", {
+    request,
+    tripQuote,
+  });
+  const notifiedCount = candidateDriverUserIds.length;
+
+  const logMsgEnd = `[${new Date().toISOString()}] [RideService] Candidates=${notifiedCount}, delivered=${deliveredDriverUserIds.length}\n`;
+  require('fs').appendFileSync('/Users/shivamgoyal/Desktop/Ghoomo/Ghoomo/scratch/backend_logs.txt', logMsgEnd);
+
+  // Record candidates in DB so they appear in driver dashboard
+  await repository.createRideCandidates(request.id, candidateDriverUserIds);
+
+  // Store how many were notified
+  await repository.updateRideRequest(request.id, { notified_driver_count: notifiedCount });
+
+  return { ...request, notified_driver_count: notifiedCount };
 }
 
 async function getRideRequest(requestId) {
@@ -110,11 +120,42 @@ async function getRideRequest(requestId) {
 }
 
 async function cancelRideRequest(requestId, studentId) {
-  const row = await repository.cancelRideRequest(requestId, studentId);
-  if (!row) {
-    throw new AppError("Ride request not found", 404, "RIDE_REQUEST_NOT_FOUND");
+  const request = await repository.getRideRequestById(requestId);
+  
+  // If it is just a request (not yet matched to a ride)
+  if (request) {
+    if (['cancelled', 'matched', 'expired'].includes(request.status)) {
+      if (request.status === 'matched') {
+        // If matched, we should look for the ride record
+      } else {
+        return repository.cancelRideRequest(requestId, studentId);
+      }
+    } else {
+      return repository.cancelRideRequest(requestId, studentId);
+    }
   }
-  return row;
+
+  const ride = await repository.getRideByRequestId(requestId) || await repository.getRideById(requestId);
+  if (!ride) {
+    if (request) return repository.cancelRideRequest(requestId, studentId);
+    throw new AppError("Ride not found", 404, "RIDE_NOT_FOUND");
+  }
+
+  const currentStatus = String(ride.status).toUpperCase();
+  const blockedStatuses = ["ON_TRIP", "COMPLETED", "CANCELLED"];
+  
+  if (blockedStatuses.includes(currentStatus)) {
+    throw new AppError(`Cannot cancel ride in ${currentStatus} state`, 403, "FORBIDDEN");
+  }
+
+  const updatedRide = await repository.updateRideStatus(ride.id, "CANCELLED");
+  
+  // Also cancel the request if it exists
+  if (ride.request_id) {
+    await repository.updateRideRequest(ride.request_id, { status: 'cancelled' });
+  }
+
+  return updatedRide;
 }
 
 async function assignDriver(requestId, payload) {
@@ -123,16 +164,29 @@ async function assignDriver(requestId, payload) {
     throw new AppError("Driver not found", 404, "DRIVER_NOT_FOUND");
   }
 
-  if (!driver.is_available || driver.status !== "approved") {
-    throw new AppError("Driver is not available", 409, "DRIVER_NOT_AVAILABLE");
+  if (driver.availability_status !== 'idle' || driver.status !== "approved") {
+    throw new AppError("Driver is not available for new rides", 409, "DRIVER_NOT_AVAILABLE");
   }
 
-  return repository.createRideFromRequest({
+  const ride = await repository.createRideFromRequest({
     requestId,
     driverId: payload.driverId,
     fare: payload.fare ? Number(payload.fare) : null,
     distance: payload.distance ? Number(payload.distance) : null,
   });
+
+  broadcastToUser(ride.student_id, "ride_accepted", { ride });
+
+  // Sync socket state - driver is now busy
+  const driverUserId = driver.user_id || driver.userId;
+  if (driverUserId) {
+    updateDriverSocketInfo(driverUserId, { 
+      isAvailable: false,
+      vehicleType: driver.vehicle_type || driver.vehicleType
+    });
+  }
+
+  return ride;
 }
 
 async function getRide(rideId) {
@@ -144,15 +198,65 @@ async function getRide(rideId) {
 }
 
 async function updateRideStatus(rideId, status) {
+  console.log(`[RideService] updateRideStatus: rideId=${rideId}, status=${status}`);
   const ride = await repository.updateRideStatus(rideId, status);
   if (!ride) {
     throw new AppError("Ride not found", 404, "RIDE_NOT_FOUND");
   }
+
+  broadcastToUser(ride.student_id, "ride_status_updated", { ride });
+
+  // Sync socket state if ride ended
+  const normalizedStatus = String(status || "").toUpperCase();
+  if (["COMPLETED", "CANCELLED"].includes(normalizedStatus)) {
+    const driverUserId = ride.driver_user_id || ride.driverUserId;
+    console.log(`[RideService] Ride ended (${normalizedStatus}), resetting driver socket: driverUserId=${driverUserId}`);
+    if (driverUserId) {
+      updateDriverSocketInfo(driverUserId, { 
+        isAvailable: true,
+        vehicleType: ride.driver_vehicle_type || ride.vehicle_type
+      });
+    }
+  }
+
   return ride;
 }
 
-async function getRideHistory(userId) {
+async function getRideHistory(userId, role) {
+  if (role === 'driver') {
+    const driver = await driverRepository.findDriverByUserId(userId);
+    if (driver) {
+      return repository.listRideHistoryForDriver(driver.id);
+    }
+  }
   return repository.listRideHistoryForUser(userId);
+}
+
+async function verifyRideOtp(rideId, submittedOtp) {
+  const ride = await repository.getRideById(rideId);
+  if (!ride) {
+    throw new AppError("Ride not found", 404, "RIDE_NOT_FOUND");
+  }
+
+  if (ride.status !== "ACCEPTED" && ride.status !== "DRIVER_ARRIVED") {
+    throw new AppError(
+      `OTP can only be verified when ride is ACCEPTED or DRIVER_ARRIVED (current: ${ride.status})`,
+      409,
+      "INVALID_RIDE_STATE"
+    );
+  }
+
+  const storedOtp = ride.ride_otp || ride.otp;
+  if (!storedOtp || storedOtp !== submittedOtp) {
+    throw new AppError("Invalid OTP", 400, "INVALID_OTP");
+  }
+
+  // Transition: OTP_VERIFIED → then immediately ON_TRIP
+  let updated = await repository.updateRideStatus(rideId, "OTP_VERIFIED");
+  updated = await repository.updateRideStatus(rideId, "ON_TRIP");
+
+  broadcastToUser(updated.student_id, "ride_status_updated", { ride: updated });
+  return updated;
 }
 
 async function rateRide(rideId, studentId, payload) {
@@ -177,6 +281,22 @@ async function rateRide(rideId, studentId, payload) {
   return rating;
 }
 
+async function rejectRideRequest(requestId, driverId) {
+  const request = await repository.getRideRequestById(requestId);
+  if (!request) throw new AppError("Request not found", 404);
+
+  // Atomic increment of rejected_driver_count
+  const updated = await repository.incrementRejections(requestId);
+
+  // If rejections >= notified, and ride is still searching, cancel it
+  if (updated.status === 'searching' && updated.rejected_driver_count >= updated.notified_driver_count) {
+    await repository.updateRideRequest(requestId, { status: 'cancelled' });
+    broadcastToUser(updated.student_id, "ride_status_updated", { rideId: requestId, status: 'cancelled', reason: 'NO_DRIVERS_AVAILABLE' });
+  }
+
+  return updated;
+}
+
 module.exports = {
   normalizeRideRequestPayload,
   getQuote,
@@ -188,5 +308,7 @@ module.exports = {
   getRide,
   updateRideStatus,
   getRideHistory,
+  verifyRideOtp,
   rateRide,
+  rejectRideRequest,
 };

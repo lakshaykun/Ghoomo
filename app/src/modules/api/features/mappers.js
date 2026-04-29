@@ -1,20 +1,26 @@
 const BACKEND_TO_APP_RIDE_STATUS = {
-  searching: "pending",
-  matched: "accepted",
-  assigned: "accepted",
-  arriving: "arrived",
-  started: "in_progress",
-  completed: "completed",
-  cancelled: "cancelled",
-  expired: "cancelled",
+  searching: "searching",
+  accepted: "ACCEPTED",
+  driver_arrived: "DRIVER_ARRIVED",
+  otp_verified: "OTP_VERIFIED",
+  on_trip: "ON_TRIP",
+  completed: "COMPLETED",
+  cancelled: "CANCELLED",
+  matched: "ACCEPTED",
+  assigned: "ACCEPTED",
+  arriving: "DRIVER_ARRIVED",
+  started: "ON_TRIP",
+  expired: "CANCELLED",
 };
 
 const APP_TO_BACKEND_RIDE_STATUS = {
-  accepted: "assigned",
-  arrived: "arriving",
-  in_progress: "started",
-  completed: "completed",
-  cancelled: "cancelled",
+  searching: "SEARCHING",
+  accepted: "ACCEPTED",
+  driver_arrived: "DRIVER_ARRIVED",
+  otp_verified: "OTP_VERIFIED",
+  on_trip: "ON_TRIP",
+  completed: "COMPLETED",
+  cancelled: "CANCELLED",
 };
 
 export function toNumber(value, fallback = 0) {
@@ -147,6 +153,7 @@ export function normalizeDriverProfile(row = {}) {
     id: row.id || null,
     userId: row.user_id || row.userId || null,
     status: row.status || "pending",
+    availabilityStatus: row.availability_status || row.availabilityStatus || (Boolean(row.is_available ?? row.isAvailable) ? "idle" : "offline"),
     isAvailable: Boolean(row.is_available ?? row.isAvailable),
     rating: toNumber(row.rating, 0),
     name: row.name || "Driver",
@@ -195,7 +202,11 @@ export function normalizeDriverCandidateRequest(row = {}) {
     longitude: row.drop_longitude,
   });
 
-  const distanceKm = toNumber(row.distance_km, haversineDistanceKm(pickup, drop));
+  const distanceKm = toNumber(
+    row.estimated_distance_km ?? row.distance_km,
+    haversineDistanceKm(pickup, drop)
+  );
+  const fare = toNumber(row.estimated_fare, 0);
 
   return {
     id: row.request_id || row.id,
@@ -205,7 +216,7 @@ export function normalizeDriverCandidateRequest(row = {}) {
     pickup,
     drop,
     route: { geometry: [] },
-    fare: 0,
+    fare,
     distance: distanceKm,
     durationMinutes: estimateDurationMinutes(distanceKm),
     isShare: Boolean(row.is_shared),
@@ -234,11 +245,11 @@ export function normalizeRideRequest(row = {}, overrides = {}) {
   });
 
   const distanceKm = toNumber(
-    row.distance,
+    row.estimated_distance_km ?? row.distance,
     overrides.distance ?? haversineDistanceKm(pickup, drop)
   );
 
-  const fare = toNumber(row.fare, overrides.fare ?? 0);
+  const fare = toNumber(row.estimated_fare ?? row.fare, overrides.fare ?? 0);
 
   return {
     id: row.id,
@@ -376,7 +387,8 @@ export function normalizeBusRoute(row = {}) {
     arrivalTime: formatTimeLabel(row.arrival_time || row.arrivalTime),
     stops: stopNames,
     stopsDetailed,
-    totalSeats: toNumber(row.total_seats || row.totalSeats, 40),
+    totalSeats: toNumber(row.total_seats || row.totalSeats, null),
+    farePerSeat: toNumber(row.fare_per_seat || row.farePerSeat, 0),
     bookedSeats: Array.isArray(row.bookedSeats) ? row.bookedSeats : [],
     createdAt: row.created_at || row.createdAt || null,
     updatedAt: row.updated_at || row.updatedAt || null,
@@ -416,6 +428,7 @@ export function normalizeBusBooking(row = {}, options = {}) {
     verifiedAt: row.verified_at || row.verifiedAt || null,
     verifiedBy: row.verified_by || row.verifiedBy || null,
     qrCode: row.qr_code || row.qrCode || null,
+    fareAmount: toNumber(row.fare_amount ?? row.fareAmount, 0),
     createdAt: row.created_at || row.createdAt || null,
     updatedAt: row.updated_at || row.updatedAt || null,
   };

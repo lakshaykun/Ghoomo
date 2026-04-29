@@ -1,8 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { api } from "../../services/api";
 
-const FALLBACK_DEPARTURE_TIME = "12:00 PM";
-
 function normalizeBusRoute(route = {}) {
   const bookedSeats = Array.isArray(route.bookedSeats)
     ? route.bookedSeats.filter((seat) => Number.isFinite(Number(seat))).map((seat) => Number(seat))
@@ -10,18 +8,18 @@ function normalizeBusRoute(route = {}) {
 
   return {
     ...route,
-    id: route.id || `route_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: route.id || null,
     name: typeof route.name === "string" && route.name.trim() ? route.name : "Unnamed Route",
     from: typeof route.from === "string" ? route.from : "",
     to: typeof route.to === "string" ? route.to : "",
     departureTime:
       typeof route.departureTime === "string" && route.departureTime.trim()
         ? route.departureTime
-        : FALLBACK_DEPARTURE_TIME,
+        : null,
     stops: Array.isArray(route.stops) ? route.stops.filter((stop) => typeof stop === "string" && stop.trim()) : [],
     totalSeats: Number.isFinite(Number(route.totalSeats)) && Number(route.totalSeats) > 0
       ? Number(route.totalSeats)
-      : 40,
+      : null,
     bookedSeats,
   };
 }
