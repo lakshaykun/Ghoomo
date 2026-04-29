@@ -79,6 +79,40 @@ const getRides = asyncHandler(async (req, res) => {
   });
 });
 
+const getCampusBoundary = asyncHandler(async (req, res) => {
+  const boundary = await service.getCampusBoundary();
+  res.status(200).json({
+    success: true,
+    data: boundary,
+  });
+});
+
+const createCampusBoundary = asyncHandler(async (req, res) => {
+  const boundary = await service.saveCampusBoundary(req.body);
+  res.status(201).json({
+    success: true,
+    message: "Campus boundary saved",
+    data: boundary,
+  });
+});
+
+const updateCampusBoundary = asyncHandler(async (req, res) => {
+  const boundary = await service.saveCampusBoundary(req.body);
+  res.status(200).json({
+    success: true,
+    message: "Campus boundary updated",
+    data: boundary,
+  });
+});
+
+const getLiveDrivers = asyncHandler(async (req, res) => {
+  const drivers = await service.getLiveDrivers();
+  res.status(200).json({
+    success: true,
+    data: drivers,
+  });
+});
+
 const updateDriverStatus = asyncHandler(async (req, res) => {
   const validation = validateDriverStatusPayload(req.body);
   if (!validation.isValid) {
@@ -108,6 +142,10 @@ module.exports = {
   getHealth,
   getUsers,
   getRides,
+  getCampusBoundary,
+  createCampusBoundary,
+  updateCampusBoundary,
+  getLiveDrivers,
   updateDriverStatus,
   suspendUser,
 };

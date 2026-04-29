@@ -12,6 +12,8 @@ import { subscribeGlobalRealtime, subscribeRideRealtime } from "../../services/r
 import { fetchOSRMRoute } from "../../utils/map";
 import { api } from "../../services/api";
 
+const EMPTY_ROUTE_POINTS = [];
+
 const STATUS_STEPS = [
   { key: BOOKING_STATUS.PENDING, label: "Finding Driver", icon: "search", color: COLORS.warning },
   { key: BOOKING_STATUS.ACCEPTED, label: "Driver Assigned", icon: "person", color: COLORS.primary },

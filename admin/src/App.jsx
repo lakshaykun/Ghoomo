@@ -7,7 +7,9 @@ import Dashboard from './pages/Dashboard';
 import Drivers from './pages/Drivers';
 import Students from './pages/Students';
 import Rides from './pages/Rides';
+import RoutesPage from './components/Routes';
 import LiveMonitoring from './pages/LiveMonitoring';
+import CampusBoundary from './pages/CampusBoundary';
 import PopularPlaces from './pages/PopularPlaces';
 import 'leaflet/dist/leaflet.css';
 
@@ -33,7 +35,9 @@ export default function App() {
             <Route path="drivers" element={<Drivers />} />
             <Route path="students" element={<Students />} />
             <Route path="rides" element={<Rides />} />
+            <Route path="routes" element={<RoutesPage />} />
             <Route path="live-monitoring" element={<LiveMonitoring />} />
+            <Route path="campus-boundary" element={<CampusBoundary />} />
             <Route path="popular-places" element={<PopularPlaces />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Route>

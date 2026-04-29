@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Activity, RefreshCcw, Radar, Route, ShieldCheck, UsersRound } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import dashboardAPI from '../services/dashboardAPI';
 import PageHeader from '../components/common/PageHeader';
 import StatCard from '../components/common/StatCard';
@@ -7,6 +8,7 @@ import StatusBadge from '../components/common/StatusBadge';
 import LoadingState from '../components/common/LoadingState';
 import EmptyState from '../components/common/EmptyState';
 import DataTable from '../components/tables/DataTable';
+import MonitoringMap from '../components/MonitoringMap';
 import useInterval from '../hooks/useInterval';
 import { buildOperationalAlerts, formatDateTime, formatDuration, formatNumber, getDriverStatusInfo, getRideStatusInfo } from '../utils/dashboard';
 
@@ -43,7 +45,7 @@ export default function LiveMonitoring() {
     if (!error) {
       void loadSnapshot(true);
     }
-  }, 10000);
+  }, 5000);
 
   const stats = snapshot?.stats || {};
   const live = snapshot?.live || {};
@@ -54,6 +56,13 @@ export default function LiveMonitoring() {
   const recentRides = snapshot?.recentRides || snapshot?.recent?.rides || [];
   const topDrivers = snapshot?.topDrivers || [];
   const topRoutes = snapshot?.topRoutes || [];
+  const campusBoundary = snapshot?.campusBoundary || [];
+  const liveDrivers = snapshot?.liveDrivers || [];
+  const trackedDrivers = liveDrivers.filter((driver) => driver.lat != null && driver.lng != null);
+  const hasCampusBoundary = campusBoundary.length >= 3;
+  const driversInsideCampus = hasCampusBoundary ? trackedDrivers.filter((driver) => driver.isInsideCampus).length : 0;
+  const driversOutsideCampus = hasCampusBoundary ? trackedDrivers.filter((driver) => !driver.isInsideCampus).length : 0;
+  const totalDrivers = Number(stats.totalDrivers || live.availableDrivers || trackedDrivers.length || 0);
 
   const alerts = useMemo(() => buildOperationalAlerts({ stats: { ...stats, availableDrivers: live.availableDrivers, activeRides: live.activeRides, searchingRideRequests: live.pendingRideRequests }, health }), [stats, live, health]);
   const updatedLabel = lastUpdated ? formatDateTime(lastUpdated) : '—';
@@ -108,6 +117,79 @@ export default function LiveMonitoring() {
           <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">Window {snapshot?.windowDays || 7} days</span>
         </div>
       </PageHeader>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.9fr)]">
+        <MonitoringMap boundary={campusBoundary} drivers={liveDrivers} loading={loading} />
+
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Campus metrics</p>
+                <h3 className="mt-2 font-display text-lg font-semibold text-slate-900">Geofence coverage</h3>
+              </div>
+              <StatusBadge tone={hasCampusBoundary ? 'success' : 'warning'}>
+                {hasCampusBoundary ? 'ready' : 'missing'}
+              </StatusBadge>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-slate-500">Total drivers</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-slate-900">{formatNumber(totalDrivers)}</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 px-4 py-3">
+                <p className="text-slate-500">Inside campus</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-emerald-700">{formatNumber(driversInsideCampus)}</p>
+              </div>
+              <div className="rounded-2xl bg-rose-50 px-4 py-3">
+                <p className="text-slate-500">Outside campus</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-rose-700">{formatNumber(driversOutsideCampus)}</p>
+              </div>
+              <div className="rounded-2xl bg-blue-50 px-4 py-3">
+                <p className="text-slate-500">Active rides</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-blue-700">{formatNumber(live.activeRides)}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+                Tracked {formatNumber(trackedDrivers.length)} drivers with live coordinates
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
+                Boundary points {formatNumber(campusBoundary.length)}
+              </span>
+            </div>
+
+            {!hasCampusBoundary ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                No campus boundary is defined yet.{' '}
+                <Link className="font-semibold underline underline-offset-2" to="/campus-boundary">
+                  Add one now.
+                </Link>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Live legend</p>
+            <div className="mt-4 space-y-3 text-sm text-slate-600">
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-emerald-500" />
+                Drivers inside campus
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-rose-500" />
+                Drivers outside campus
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rounded-full bg-blue-500" />
+                Campus boundary polygon
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {alerts.length > 0 ? (
         <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">

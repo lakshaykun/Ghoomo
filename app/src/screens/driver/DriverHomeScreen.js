@@ -32,6 +32,8 @@ import { api } from "../../services/api";
 import { subscribeGlobalRealtime } from "../../services/realtime";
 import { fetchOSRMRoute } from "../../utils/map";
 
+const EMPTY_ROUTE_POINTS = [];
+
 export default function DriverHomeScreen({ navigation }) {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.auth.user);

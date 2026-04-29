@@ -216,10 +216,11 @@ export async function updateRideStatusRemote(rideId, status, extra = {}) {
 
   if (normalizedStatus === "cancelled") {
     const runtimeDriverId = extra.driverId || extra.driverUserId;
+    const sourceType = String(extra.sourceType || "").trim().toLowerCase();
 
     if (extra?.actor !== "driver" && extra?.actor !== "admin") {
       const isRequest = extra.sourceType === "ride_request";
-      
+
       if (!isRequest) {
         try {
           const row = await httpClient.patch(`/api/rides/${rideId}/status`, {

@@ -14,7 +14,7 @@ export function latLonToWorld({ latitude, longitude }, zoom) {
 
 export function getMapRegion(points = []) {
   if (!points.length) {
-    return { latitude: 30.7333, longitude: 76.7794, zoom: 13 };
+    return { latitude: 30.9712921, longitude: 76.4731677, zoom: 13 };
   }
 
   const lats = points.map((point) => point.latitude);

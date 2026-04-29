@@ -1,4 +1,6 @@
 const { query } = require("../../config/db");
+const { getCampusBoundaryPoints } = require("../campusBoundary/campusBoundary.repository");
+const { isPointInPolygon } = require("../../common/utils/geofence");
 
 const DEFAULT_DAYS = 7;
 const MAX_DAYS = 30;
@@ -525,6 +527,47 @@ async function updateDriverStatusByUserId(userId, status) {
   return result.rows[0] || null;
 }
 
+async function getLiveDrivers() {
+  const boundaryPoints = await getCampusBoundaryPoints();
+  const campusPolygon = boundaryPoints.map((point) => ({ lat: point.latitude, lng: point.longitude }));
+
+  const result = await query(
+    `
+    SELECT
+      d.id,
+      u.name,
+      loc.current_latitude,
+      loc.current_longitude,
+      loc.is_inside_campus,
+      loc.updated_at AS location_updated_at,
+      d.is_available,
+      d.status
+    FROM drivers d
+    JOIN users u ON u.id = d.user_id
+    LEFT JOIN driver_locations loc ON loc.driver_id = d.id
+    ORDER BY u.name ASC
+    `
+  );
+
+  return result.rows.map((row) => {
+    const latitude = row.current_latitude === null || row.current_latitude === undefined ? null : Number(row.current_latitude);
+    const longitude = row.current_longitude === null || row.current_longitude === undefined ? null : Number(row.current_longitude);
+    const hasLocation = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+    return {
+      id: row.id,
+      name: row.name || "Driver",
+      lat: hasLocation ? latitude : null,
+      lng: hasLocation ? longitude : null,
+      isInsideCampus: hasLocation ? isPointInPolygon({ lat: latitude, lng: longitude }, campusPolygon) : false,
+      hasLocation,
+      isAvailable: Boolean(row.is_available),
+      status: row.status || "pending",
+      locationUpdatedAt: row.location_updated_at || null,
+    };
+  });
+}
+
 module.exports = {
   getDashboardStats,
   getAnalytics,
@@ -533,4 +576,5 @@ module.exports = {
   listRides,
   updateDriverStatusByDriverId,
   updateDriverStatusByUserId,
+  getLiveDrivers,
 };

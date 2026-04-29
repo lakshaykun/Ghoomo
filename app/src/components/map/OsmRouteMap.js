@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect, useState } from "react";
 import { View, StyleSheet, Text, Platform } from "react-native";
 import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
 import { COLORS } from "../../constants";
@@ -6,8 +6,10 @@ import { getMapRegion } from "../../utils/map";
 
 const MIN_ZOOM = 9;
 const MAX_ZOOM = 18;
+const EMPTY_ROUTE_POINTS = [];
 
-export default function OsmRouteMap({ pickup, drop, driver, routePoints = [], style, children, onRegionChangeComplete, mapRef }) {
+export default function OsmRouteMap({ pickup, drop, driver, routePoints = EMPTY_ROUTE_POINTS, style, children, onRegionChangeComplete, mapRef }) {
+  const [routeLine, setRouteLine] = useState([]);
   const normalizePoint = (p) => {
     if (!p) return null;
     let lat, lon;
@@ -39,7 +41,59 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [], st
     return pts.map(normalizePoint).filter(Boolean);
   }, [routePoints]);
 
-  const allPoints = [normPickup, normDrop, normDriver, ...normRoutePoints].filter(Boolean);
+  const hasExternalRoute = normRoutePoints.length > 1;
+
+  useEffect(() => {
+    if (hasExternalRoute) {
+      setRouteLine(normRoutePoints);
+      return;
+    }
+
+    if (!normPickup || !normDrop) {
+      setRouteLine([]);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadRoute() {
+      try {
+        const url = new URL("https://router.project-osrm.org/route/v1/driving");
+        url.pathname = "/route/v1/driving";
+        url.searchParams.set(
+          "coordinates",
+          `${normPickup.longitude},${normPickup.latitude};${normDrop.longitude},${normDrop.latitude}`
+        );
+        url.searchParams.set("overview", "full");
+        url.searchParams.set("geometries", "geojson");
+        url.searchParams.set("steps", "false");
+
+        const response = await fetch(url.toString(), { signal: controller.signal });
+        if (!response.ok) throw new Error(`Route request failed with HTTP ${response.status}`);
+
+        const payload = await response.json();
+        const coordinates = payload?.routes?.[0]?.geometry?.coordinates || [];
+        if (!Array.isArray(coordinates) || coordinates.length < 2) {
+          setRouteLine([]);
+          return;
+        }
+
+        setRouteLine(coordinates.map(normalizePoint).filter(Boolean));
+      } catch {
+        setRouteLine([]);
+      }
+    }
+
+    loadRoute();
+
+    return () => controller.abort();
+  }, [hasExternalRoute, normPickup, normDrop, normRoutePoints]);
+
+  const allPoints = useMemo(
+    () => [normPickup, normDrop, normDriver, ...(routeLine.length > 1 ? routeLine : normRoutePoints)].filter(Boolean),
+    [normPickup, normDrop, normDriver, routeLine, normRoutePoints]
+  );
+
   const autoRegion = useMemo(() => {
     const res = getMapRegion(allPoints);
     return {
@@ -109,9 +163,19 @@ export default function OsmRouteMap({ pickup, drop, driver, routePoints = [], st
           flipY={false}
         />
         
-        {normRoutePoints.length > 0 && (
+        {(routeLine.length > 1 || normRoutePoints.length > 1) && (
           <Polyline
-            coordinates={normRoutePoints}
+            coordinates={routeLine.length > 1 ? routeLine : normRoutePoints}
+            strokeColor="rgba(255,255,255,0.95)"
+            strokeWidth={8}
+            lineCap="round"
+            lineJoin="round"
+          />
+        )}
+
+        {(routeLine.length > 1 || normRoutePoints.length > 1) && (
+          <Polyline
+            coordinates={routeLine.length > 1 ? routeLine : normRoutePoints}
             strokeColor={COLORS.primary}
             strokeWidth={4}
             lineCap="round"

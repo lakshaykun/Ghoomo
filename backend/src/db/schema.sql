@@ -62,7 +62,16 @@ CREATE TABLE IF NOT EXISTS driver_locations (
   driver_id         UUID PRIMARY KEY REFERENCES drivers(id) ON DELETE CASCADE,
   current_latitude  DECIMAL(10,8),
   current_longitude DECIMAL(11,8),
+  is_inside_campus  BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS campus_boundary (
+  id           SERIAL PRIMARY KEY,
+  latitude     DECIMAL(10,8) NOT NULL,
+  longitude    DECIMAL(11,8) NOT NULL,
+  sort_order   INTEGER NOT NULL,
+  created_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
@@ -322,6 +331,8 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 CREATE INDEX IF NOT EXISTS idx_drivers_available ON drivers(is_available, status);
 CREATE INDEX IF NOT EXISTS idx_driver_locations_coords ON driver_locations(current_latitude, current_longitude);
+CREATE INDEX IF NOT EXISTS idx_driver_locations_inside_campus ON driver_locations(is_inside_campus);
+CREATE INDEX IF NOT EXISTS idx_campus_boundary_sort_order ON campus_boundary(sort_order);
 
 CREATE INDEX IF NOT EXISTS idx_ride_requests_status ON ride_requests(status);
 CREATE INDEX IF NOT EXISTS idx_ride_requests_created_at ON ride_requests(created_at DESC);

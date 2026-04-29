@@ -12,6 +12,10 @@ router.get("/analytics", controller.getAnalytics);
 router.get("/health", controller.getHealth);
 router.get("/users", controller.getUsers);
 router.get("/rides", controller.getRides);
+router.get("/campus-boundary", controller.getCampusBoundary);
+router.post("/campus-boundary", controller.createCampusBoundary);
+router.put("/campus-boundary", controller.updateCampusBoundary);
+router.get("/drivers/live", controller.getLiveDrivers);
 
 router.patch("/drivers/:driverId/status", controller.updateDriverStatus);
 router.patch("/drivers/:driverId/suspend", (req, res, next) => {
