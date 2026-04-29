@@ -13,11 +13,13 @@ import { formatDateTime, formatNumber, getRideStatusInfo } from '../utils/dashbo
 
 const FILTERS = [
   { value: 'all', label: 'All' },
-  { value: 'assigned', label: 'Assigned' },
-  { value: 'arriving', label: 'Arriving' },
-  { value: 'started', label: 'Started' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'ACCEPTED', label: 'Accepted' },
+  { value: 'ONGOING', label: 'Ongoing' },
+  { value: 'ON_TRIP', label: 'On Trip' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'SCHEDULED', label: 'Scheduled' },
+  { value: 'OPEN', label: 'Open (Shared)' },
 ];
 
 export default function Rides() {
@@ -72,15 +74,20 @@ export default function Rides() {
   }, [rides, search, filter]);
 
   const stats = useMemo(() => {
-    const active = rides.filter((ride) => ['assigned', 'arriving', 'started'].includes(String(ride.status || '').toLowerCase())).length;
-    const completed = rides.filter((ride) => String(ride.status || '').toLowerCase() === 'completed').length;
-    const cancelled = rides.filter((ride) => String(ride.status || '').toLowerCase() === 'cancelled').length;
+    const statusNorm = (s) => String(s || '').toUpperCase();
+    const active = rides.filter((ride) => ['ACCEPTED', 'ONGOING', 'OTP_VERIFIED', 'ON_TRIP'].includes(statusNorm(ride.status))).length;
+    const completed = rides.filter((ride) => statusNorm(ride.status) === 'COMPLETED').length;
+    const cancelled = rides.filter((ride) => statusNorm(ride.status) === 'CANCELLED').length;
+    const shared = rides.filter((ride) => ride.isShared).length;
+    const scheduled = rides.filter((ride) => ride.isScheduled).length;
 
     return {
       total: pagination.total || rides.length,
       active,
       completed,
       cancelled,
+      shared,
+      scheduled,
     };
   }, [rides, pagination.total]);
 
@@ -144,11 +151,13 @@ export default function Rides() {
         </div>
       </PageHeader>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total rides" value={formatNumber(stats.total)} icon={Ticket} tone="blue" detail="All ride records returned by the backend" />
-        <StatCard title="Active rides" value={formatNumber(stats.active)} icon={Route} tone="green" detail="Assigned, arriving, or started rides" />
-        <StatCard title="Completed" value={formatNumber(stats.completed)} icon={Clock3} tone="amber" detail="Trips already finished" />
-        <StatCard title="Cancelled" value={formatNumber(stats.cancelled)} icon={Filter} tone="red" detail="Trips that did not complete" />
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <StatCard title="Total rides" value={formatNumber(stats.total)} icon={Ticket} tone="blue" detail="All ride records" />
+        <StatCard title="Active rides" value={formatNumber(stats.active)} icon={Route} tone="green" detail="Accepted, ongoing, or on-trip" />
+        <StatCard title="Completed" value={formatNumber(stats.completed)} icon={Clock3} tone="amber" detail="Finished trips" />
+        <StatCard title="Cancelled" value={formatNumber(stats.cancelled)} icon={Filter} tone="red" detail="Did not complete" />
+        <StatCard title="Shared" value={formatNumber(stats.shared)} icon={Route} tone="amber" detail="Shared ride type" />
+        <StatCard title="Scheduled" value={formatNumber(stats.scheduled)} icon={Clock3} tone="blue" detail="Scheduled rides" />
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -186,8 +195,9 @@ export default function Rides() {
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Student</th>
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Driver</th>
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Route</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Type</th>
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Distance</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fare / Dist</th>
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Created</th>
             </tr>
           </thead>
@@ -226,10 +236,27 @@ export default function Rides() {
                         <p className="text-xs text-slate-500">{ride.dropLocation || '—'}</p>
                       </div>
                     </td>
+                    {/* Type column */}
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {ride.isShared && (
+                          <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">Shared</span>
+                        )}
+                        {ride.isScheduled && (
+                          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">Sched</span>
+                        )}
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{(ride.rideType || 'solo').toUpperCase()}</span>
+                      </div>
+                    </td>
                     <td className="px-5 py-4">
                       <StatusBadge tone={statusInfo.tone}>{statusInfo.label}</StatusBadge>
                     </td>
-                    <td className="px-5 py-4 text-sm text-slate-700">{ride.distance != null ? `${Number(ride.distance).toFixed(1)} km` : '—'}</td>
+                    <td className="px-5 py-4 text-sm text-slate-700">
+                      <div>
+                        <p className="font-semibold">{ride.fare != null ? `₹${Number(ride.fare).toFixed(0)}` : '—'}</p>
+                        <p className="text-xs text-slate-500">{ride.distance != null ? `${Number(ride.distance).toFixed(1)} km` : ''}</p>
+                      </div>
+                    </td>
                     <td className="px-5 py-4 text-sm text-slate-600">{formatDateTime(ride.createdAt)}</td>
                   </tr>
                 );

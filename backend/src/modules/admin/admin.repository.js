@@ -87,31 +87,33 @@ async function getDashboardStats() {
       (SELECT COUNT(*)::int FROM ride_requests WHERE status = 'cancelled') AS cancelled_ride_requests,
       (SELECT COUNT(*)::int FROM ride_requests WHERE status = 'expired') AS expired_ride_requests,
       (SELECT COUNT(*)::int FROM rides) AS total_rides,
-      (SELECT COUNT(*)::int FROM rides WHERE status = 'assigned') AS assigned_rides,
-      (SELECT COUNT(*)::int FROM rides WHERE status = 'arriving') AS arriving_rides,
-      (SELECT COUNT(*)::int FROM rides WHERE status = 'started') AS started_rides,
-      (SELECT COUNT(*)::int FROM rides WHERE status = 'completed') AS completed_rides,
-      (SELECT COUNT(*)::int FROM rides WHERE status = 'cancelled') AS cancelled_rides,
-      (SELECT COUNT(*)::int FROM rides WHERE status IN ('assigned', 'arriving', 'started')) AS active_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE status = 'ACCEPTED') AS assigned_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE status = 'ONGOING') AS arriving_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE status IN ('OTP_VERIFIED','ON_TRIP')) AS started_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE status IN ('COMPLETED','completed')) AS completed_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE status IN ('CANCELLED','cancelled')) AS cancelled_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE status IN ('ACCEPTED','ONGOING','OTP_VERIFIED','ON_TRIP')) AS active_rides,
       (SELECT COUNT(*)::int FROM bus_routes) AS total_bus_routes,
       (SELECT COUNT(*)::int FROM bus_bookings) AS total_bus_bookings,
       (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'pending') AS pending_bus_bookings,
       (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'verified') AS verified_bus_bookings,
       (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'cancelled') AS cancelled_bus_bookings,
       (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'missing') AS missing_bus_bookings,
-      (SELECT COUNT(*)::int FROM shared_rides) AS total_shared_rides,
-      (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'open') AS open_shared_rides,
-      (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'full') AS full_shared_rides,
-      (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'completed') AS completed_shared_rides,
-      (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'cancelled') AS cancelled_shared_rides,
+      -- shared rides: rides with ride_type = 'shared' (new schema)
+      (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared') AS total_shared_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status IN ('OPEN','SCHEDULED')) AS open_shared_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status = 'FULL') AS full_shared_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status IN ('COMPLETED','completed')) AS completed_shared_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status IN ('CANCELLED','cancelled')) AS cancelled_shared_rides,
+      (SELECT COUNT(*)::int FROM rides WHERE is_scheduled = TRUE AND status IN ('SCHEDULED','OPEN')) AS scheduled_rides,
       (SELECT COUNT(*)::int FROM ride_request_candidates) AS total_candidate_offers,
       (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status IN ('pending', 'notified')) AS pending_candidate_offers,
       (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status = 'accepted') AS accepted_candidate_offers,
       (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status = 'rejected') AS rejected_candidate_offers,
       (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status = 'timeout') AS timed_out_candidate_offers,
-      (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status = 'completed') AS total_revenue,
-      (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status = 'completed' AND COALESCE(end_time, updated_at) >= CURRENT_DATE) AS revenue_today,
-      (SELECT COUNT(*)::int FROM rides WHERE status = 'completed' AND COALESCE(end_time, updated_at) >= CURRENT_DATE) AS completed_rides_today,
+      (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status IN ('COMPLETED','completed')) AS total_revenue,
+      (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status IN ('COMPLETED','completed') AND COALESCE(updated_at, created_at) >= CURRENT_DATE) AS revenue_today,
+      (SELECT COUNT(*)::int FROM rides WHERE status IN ('COMPLETED','completed') AND COALESCE(updated_at, created_at) >= CURRENT_DATE) AS completed_rides_today,
       (SELECT COUNT(*)::int FROM ride_requests WHERE created_at >= CURRENT_DATE) AS ride_requests_today,
       (SELECT COUNT(*)::int FROM users WHERE created_at >= CURRENT_DATE) AS new_users_today
     `
@@ -170,31 +172,32 @@ async function getAnalytics({ days, limit }) {
         (SELECT COUNT(*)::int FROM ride_requests WHERE status = 'cancelled') AS cancelled_ride_requests,
         (SELECT COUNT(*)::int FROM ride_requests WHERE status = 'expired') AS expired_ride_requests,
         (SELECT COUNT(*)::int FROM rides) AS total_rides,
-        (SELECT COUNT(*)::int FROM rides WHERE status = 'assigned') AS assigned_rides,
-        (SELECT COUNT(*)::int FROM rides WHERE status = 'arriving') AS arriving_rides,
-        (SELECT COUNT(*)::int FROM rides WHERE status = 'started') AS started_rides,
-        (SELECT COUNT(*)::int FROM rides WHERE status = 'completed') AS completed_rides,
-        (SELECT COUNT(*)::int FROM rides WHERE status = 'cancelled') AS cancelled_rides,
-        (SELECT COUNT(*)::int FROM rides WHERE status IN ('assigned', 'arriving', 'started')) AS active_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE status = 'ACCEPTED') AS assigned_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE status = 'ONGOING') AS arriving_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE status IN ('OTP_VERIFIED','ON_TRIP')) AS started_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE status IN ('COMPLETED','completed')) AS completed_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE status IN ('CANCELLED','cancelled')) AS cancelled_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE status IN ('ACCEPTED','ONGOING','OTP_VERIFIED','ON_TRIP')) AS active_rides,
         (SELECT COUNT(*)::int FROM bus_routes) AS total_bus_routes,
         (SELECT COUNT(*)::int FROM bus_bookings) AS total_bus_bookings,
         (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'pending') AS pending_bus_bookings,
         (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'verified') AS verified_bus_bookings,
         (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'cancelled') AS cancelled_bus_bookings,
         (SELECT COUNT(*)::int FROM bus_bookings WHERE status = 'missing') AS missing_bus_bookings,
-        (SELECT COUNT(*)::int FROM shared_rides) AS total_shared_rides,
-        (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'open') AS open_shared_rides,
-        (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'full') AS full_shared_rides,
-        (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'completed') AS completed_shared_rides,
-        (SELECT COUNT(*)::int FROM shared_rides WHERE status = 'cancelled') AS cancelled_shared_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared') AS total_shared_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status IN ('OPEN','SCHEDULED')) AS open_shared_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status = 'FULL') AS full_shared_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status IN ('COMPLETED','completed')) AS completed_shared_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE ride_type = 'shared' AND status IN ('CANCELLED','cancelled')) AS cancelled_shared_rides,
+        (SELECT COUNT(*)::int FROM rides WHERE is_scheduled = TRUE AND status IN ('SCHEDULED','OPEN')) AS scheduled_rides,
         (SELECT COUNT(*)::int FROM ride_request_candidates) AS total_candidate_offers,
         (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status IN ('pending', 'notified')) AS pending_candidate_offers,
         (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status = 'accepted') AS accepted_candidate_offers,
         (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status = 'rejected') AS rejected_candidate_offers,
         (SELECT COUNT(*)::int FROM ride_request_candidates WHERE status = 'timeout') AS timed_out_candidate_offers,
-        (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status = 'completed') AS total_revenue,
-        (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status = 'completed' AND COALESCE(end_time, updated_at) >= CURRENT_DATE) AS revenue_today,
-        (SELECT COUNT(*)::int FROM rides WHERE status = 'completed' AND COALESCE(end_time, updated_at) >= CURRENT_DATE) AS completed_rides_today,
+        (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status IN ('COMPLETED','completed')) AS total_revenue,
+        (SELECT COALESCE(SUM(fare), 0)::numeric(12,2) FROM rides WHERE status IN ('COMPLETED','completed') AND COALESCE(updated_at, created_at) >= CURRENT_DATE) AS revenue_today,
+        (SELECT COUNT(*)::int FROM rides WHERE status IN ('COMPLETED','completed') AND COALESCE(updated_at, created_at) >= CURRENT_DATE) AS completed_rides_today,
         (SELECT COUNT(*)::int FROM ride_requests WHERE created_at >= CURRENT_DATE) AS ride_requests_today,
         (SELECT COUNT(*)::int FROM users WHERE created_at >= CURRENT_DATE) AS new_users_today
       `
@@ -203,8 +206,7 @@ async function getAnalytics({ days, limit }) {
     getGroupedCounts({ table: "drivers", field: "status" }),
     getGroupedCounts({ table: "rides", field: "status" }),
     getGroupedCounts({ table: "ride_requests", field: "status" }),
-    getGroupedCounts({ table: "bus_bookings", field: "status" }),
-    getGroupedCounts({ table: "shared_rides", field: "status" }),
+    getGroupedCounts({ table: "buses", field: "status", whereClause: "1=0" }).catch(() => ({ rows: [] })),
     getGroupedCounts({ table: "ride_request_candidates", field: "status" }),
     getDailyCountSeries({ table: "users", dateExpression: "created_at", days: windowDays }),
     getDailyCountSeries({ table: "ride_requests", dateExpression: "created_at", days: windowDays }),
@@ -405,6 +407,7 @@ async function getAnalytics({ days, limit }) {
       available_drivers: stats.available_drivers || 0,
       pending_candidate_offers: stats.pending_candidate_offers || 0,
       open_shared_rides: stats.open_shared_rides || 0,
+      scheduled_rides: stats.scheduled_rides || 0,
       completed_rides_today: stats.completed_rides_today || 0,
       ride_requests_today: stats.ride_requests_today || 0,
       new_users_today: stats.new_users_today || 0,
@@ -416,7 +419,7 @@ async function getAnalytics({ days, limit }) {
       rides: rideStatusesResult.rows,
       ride_requests: requestStatusesResult.rows,
       bus_bookings: bookingStatusesResult.rows,
-      shared_rides: sharedRideStatusesResult.rows,
+      shared_rides: (sharedRideStatusesResult?.rows || []),
       candidate_offers: candidateStatusesResult.rows,
     },
     trends: {
@@ -436,6 +439,7 @@ async function getAnalytics({ days, limit }) {
     },
   };
 }
+
 
 async function getHealthSnapshot() {
   await query("SELECT 1 AS ok");
@@ -484,13 +488,20 @@ async function listRides({ limit, offset, status }) {
       r.status,
       r.fare,
       r.distance,
+      r.ride_type,
+      r.is_scheduled,
+      r.scheduled_at,
+      COALESCE(
+        (SELECT SUM(passengers_count) FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.status != 'cancelled'),
+        0
+      )::int AS total_passengers,
       r.created_at,
       r.updated_at
     FROM rides r
     LEFT JOIN users student ON student.id = r.student_id
     LEFT JOIN drivers driver_profile ON driver_profile.id = r.driver_id
     LEFT JOIN users driver_user ON driver_user.id = driver_profile.user_id
-    WHERE ($1::text IS NULL OR r.status = $1)
+    WHERE ($1::text IS NULL OR LOWER(r.status) = LOWER($1))
     ORDER BY r.created_at DESC
     LIMIT $2
     OFFSET $3

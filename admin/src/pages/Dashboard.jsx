@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, AlertTriangle, ArrowRight, CarFront, RefreshCcw, ShieldCheck, TimerReset, UsersRound } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowRight, CalendarClock, CarFront, RefreshCcw, ShieldCheck, TimerReset, UsersRound, Wallet } from 'lucide-react';
 import dashboardAPI from '../services/dashboardAPI';
 import PageHeader from '../components/common/PageHeader';
 import StatCard from '../components/common/StatCard';
@@ -142,9 +142,15 @@ export default function Dashboard() {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total active drivers" value={activeDrivers} icon={CarFront} tone="green" detail="Drivers currently available for dispatch" />
-        <StatCard title="Active rides" value={activeRides} icon={UsersRound} tone="blue" detail="Trips in progress or awaiting completion" />
-        <StatCard title="Idle drivers" value={idleDrivers} icon={ArrowRight} tone="amber" detail="Available drivers not tied to a live ride" />
+        <StatCard title="Available drivers" value={activeDrivers} icon={CarFront} tone="green" detail="Drivers currently available for dispatch" />
+        <StatCard title="Active rides" value={activeRides} icon={UsersRound} tone="blue" detail="Trips accepted or in progress" />
+        <StatCard title="Open shared rides" value={Number(stats.openSharedRides || 0)} icon={ArrowRight} tone="amber" detail="Shared rides waiting for a driver" />
+        <StatCard title="Scheduled rides" value={Number(stats.scheduledRides || overview?.live?.scheduledRides || 0)} icon={CalendarClock} tone="amber" detail="Upcoming rides awaiting driver acceptance" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard title="Revenue today" value={`₹${Number(stats.revenueToday || 0).toFixed(0)}`} icon={Wallet} tone="green" detail="Fare revenue from completed rides today" />
+        <StatCard title="Ride requests today" value={Number(stats.rideRequestsToday || 0)} icon={ArrowRight} tone="blue" detail="New ride requests created today" />
         <StatCard title="Alerts" value={alertCount} icon={AlertCircle} tone={alertCount > 0 ? 'red' : 'slate'} detail="Health or coverage issues needing attention" />
       </div>
 
@@ -156,6 +162,7 @@ export default function Dashboard() {
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Student</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Driver</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pickup</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Type</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Time</th>
               </tr>
@@ -180,6 +187,19 @@ export default function Dashboard() {
                       <td className="px-5 py-4 text-sm font-medium text-slate-900">{ride.studentName || ride.studentId || '—'}</td>
                       <td className="px-5 py-4 text-sm text-slate-700">{ride.driverName || ride.driverId || 'Unassigned'}</td>
                       <td className="px-5 py-4 text-sm text-slate-700">{ride.pickupLocation || '—'}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {ride.isShared && (
+                            <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">Shared</span>
+                          )}
+                          {ride.isScheduled && (
+                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">Scheduled</span>
+                          )}
+                          {!ride.isShared && !ride.isScheduled && (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{(ride.rideType || 'solo').toUpperCase()}</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-5 py-4"><StatusBadge tone={statusInfo.tone}>{statusInfo.label}</StatusBadge></td>
                       <td className="px-5 py-4 text-sm text-slate-600">{formatDateTime(ride.createdAt)}</td>
                     </tr>
