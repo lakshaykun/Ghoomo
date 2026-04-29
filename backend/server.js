@@ -7,8 +7,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = {
-  app,
-  startServer,
-  vercelHandler,
-};
+module.exports = vercelHandler;
+module.exports.app = app;
+module.exports.startServer = startServer;
+module.exports.vercelHandler = vercelHandler;
